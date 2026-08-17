@@ -1,21 +1,39 @@
-import { Layers } from 'lucide-react';
+'use client';
+
+import { SidebarContent } from '@/components/dashboard/SidebarContent';
+import { useSidebar } from '@/components/dashboard/SidebarProvider';
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
+import { cn } from '@/lib/utils';
 
 /**
- * Sidebar shell. Contents (types, collections, user area) land in phase 2.
+ * Collapsible sidebar: a fixed column from `md` up, a drawer below it.
  */
 export function Sidebar() {
-  return (
-    <aside className="hidden w-64 shrink-0 flex-col border-r md:flex">
-      <div className="flex h-16 shrink-0 items-center gap-2.5 px-4">
-        <span className="flex size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-          <Layers className="size-4.5" />
-        </span>
-        <span className="text-lg font-semibold tracking-tight">DevFetch</span>
-      </div>
+  const { isOpen, isMobileOpen, setMobileOpen } = useSidebar();
 
-      <div className="flex-1 px-4 py-6">
-        <h2 className="text-lg font-semibold">Sidebar</h2>
-      </div>
-    </aside>
+  return (
+    <>
+      <aside
+        inert={!isOpen}
+        className={cn(
+          'hidden shrink-0 overflow-hidden border-r transition-[width] duration-200 ease-in-out md:block',
+          isOpen ? 'w-64' : 'w-0 border-r-0'
+        )}
+      >
+        <div className="h-full w-64">
+          <SidebarContent />
+        </div>
+      </aside>
+
+      <Sheet open={isMobileOpen} onOpenChange={setMobileOpen}>
+        <SheetContent side="left" showCloseButton={false} className="w-72 gap-0 p-0">
+          <SheetTitle className="sr-only">Navigation</SheetTitle>
+          <SheetDescription className="sr-only">
+            Item types, collections and account
+          </SheetDescription>
+          <SidebarContent />
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }
