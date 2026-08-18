@@ -14,6 +14,9 @@ export default defineConfig({
   schema: 'prisma/schema.prisma',
   migrations: {
     path: 'prisma/migrations',
+    // Prisma 7 removed automatic seeding after migrate dev/reset — this only
+    // runs when `prisma db seed` is invoked explicitly.
+    seed: 'tsx prisma/seed.ts',
   },
   datasource: {
     // Migrations need a direct connection — Neon's pooled endpoint runs
