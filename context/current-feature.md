@@ -8,7 +8,7 @@ Prisma + Neon PostgreSQL Setup
 
 <!-- Not Started|In Progress|Completed -->
 
-In Progress
+Completed
 
 ## Goals
 
@@ -44,3 +44,4 @@ Set up Prisma ORM (v7) against a Neon PostgreSQL serverless database. Requiremen
 - Dashboard UI Phase 1 — ShadCN init, `/dashboard` route, dashboard layout shell, dark mode by default, display-only top bar, sidebar/main placeholders
 - Dashboard UI Phase 2 — collapsible sidebar built from mock data: item types linking to `/items/[slug]`, favorite and recent collections, user area, and a "Navigation" row holding the collapse toggle on desktop / the close X in the mobile drawer. Sidebar state lives in `SidebarProvider`; the top bar shows a hamburger below `md` and only shows the panel toggle while the sidebar is collapsed. The DevFetch brand moves to the top bar below `md`
 - Dashboard UI Phase 3 — dashboard main area built from mock data: 4 stat tiles (items, collections, favorite items, favorite collections) counted from the mock arrays, a Collections grid of the 6 most recently updated collections linking to `/collections/[id]` with a "View all" link, a Pinned list, and the 10 most recent items. Pinned and Recent rows share `ItemRow`; type/collection hex colors map to Tailwind classes in `lib/colors.ts` (`borderColorClass`, `softBgColorClass`) and dates format in UTC via `lib/format.ts`. Item rows are not links yet — no item detail route exists — and collection cards omit the screenshot's "…" menu until collection actions exist
+- Prisma + Neon PostgreSQL — Prisma 7 wired to a Neon dev branch. Schema covers the DevFetch domain (User, Item, ItemType, Collection, Tag, ItemTag) plus Auth.js models (Account, Session, VerificationToken), with indexes on the dashboard query paths and explicit delete rules (Cascade from `User`, `SetNull` on `Collection`, `Restrict` on `ItemType`). Prisma 7 moves connection settings into `prisma.config.ts`, requires an explicit generator `output` (`src/generated/prisma`, gitignored), no longer loads `.env` itself, and requires a driver adapter — `PrismaNeon` over `@neondatabase/serverless`. Migrations use `DIRECT_DATABASE_URL` (Neon's unpooled endpoint) because PgBouncer breaks Prisma Migrate's advisory locks; the app uses the pooled `DATABASE_URL`. Initial migration `20260818212450_init` applied and verified with a live round-trip covering relations and both delete rules. Dashboard still renders from mock data
