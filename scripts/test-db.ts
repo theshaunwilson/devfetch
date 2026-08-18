@@ -2,8 +2,8 @@
  * Database health check.
  *
  * Verifies that the app's Prisma client can reach the Neon branch configured
- * in .env.local and that every model in the schema is queryable. Read-only —
- * it never writes, so it is safe to point at any branch.
+ * in .env.local, that every model is queryable, and prints the seeded demo
+ * data. Read-only — it never writes, so it is safe to point at any branch.
  *
  * Run with: npm run db:test
  */
@@ -14,6 +14,11 @@ import { config as loadEnv } from 'dotenv';
 loadEnv({ path: '.env.local', quiet: true });
 loadEnv({ quiet: true });
 
+// Kept local rather than imported from prisma/seed.ts, which runs on import.
+const DEMO_EMAIL = 'demo@devfetch.io';
+
+type Prisma = Awaited<typeof import('../src/lib/prisma')>['prisma'];
+
 function hostOf(connectionString: string | undefined): string {
   if (!connectionString) return 'not set';
   try {
@@ -23,8 +28,108 @@ function hostOf(connectionString: string | undefined): string {
   }
 }
 
-async function main() {
-  console.log(`Target: ${hostOf(process.env.DATABASE_URL)}\n`);
+function heading(text: string): void {
+  console.log(`\n${text}\n${'─'.repeat(text.length)}`);
+}
+
+/** Marks favorited and pinned records so the dashboard's sections are easy to spot. */
+function flags(record: { isFavorite?: boolean; isPinned?: boolean }): string {
+  return [record.isFavorite ? '★' : '', record.isPinned ? '📌' : ''].join('');
+}
+
+async function printCounts(prisma: Prisma): Promise<void> {
+  // A count per model doubles as a schema check: a table the client expects
+  // but the database lacks surfaces here as an error.
+  const counts = {
+    users: await prisma.user.count(),
+    accounts: await prisma.account.count(),
+    sessions: await prisma.session.count(),
+    verificationTokens: await prisma.verificationToken.count(),
+    items: await prisma.item.count(),
+    itemTypes: await prisma.itemType.count(),
+    collections: await prisma.collection.count(),
+    tags: await prisma.tag.count(),
+    itemTags: await prisma.itemTag.count(),
+  };
+
+  heading('Row counts');
+  const width = Math.max(...Object.keys(counts).map((key) => key.length));
+  for (const [model, count] of Object.entries(counts)) {
+    console.log(`  ${model.padEnd(width)}  ${count}`);
+  }
+}
+
+async function printItemTypes(prisma: Prisma): Promise<void> {
+  const types = await prisma.itemType.findMany({
+    include: { _count: { select: { items: true } } },
+    orderBy: { name: 'asc' },
+  });
+
+  heading(`Item types (${types.length})`);
+  const width = Math.max(...types.map((type) => type.name.length));
+  for (const type of types) {
+    const scope = type.isSystem ? 'system' : 'custom';
+    console.log(
+      `  ${type.name.padEnd(width)}  ${(type.icon ?? '—').padEnd(11)}` +
+        `${(type.color ?? '—').padEnd(9)}${scope.padEnd(8)}${type._count.items} items`,
+    );
+  }
+}
+
+/** Returns false when the demo user is missing, so the caller can hint at seeding. */
+async function printDemoUser(prisma: Prisma): Promise<boolean> {
+  const user = await prisma.user.findUnique({ where: { email: DEMO_EMAIL } });
+
+  heading('Demo user');
+  if (!user) {
+    console.log(`  ${DEMO_EMAIL} not found`);
+    return false;
+  }
+
+  // bcrypt hashes are $2<variant>$<cost>$<salt+digest> — surface the cost only.
+  const cost = user.password?.split('$')[2] ?? null;
+  console.log(`  ${user.email} — ${user.name ?? 'no name'}`);
+  console.log(
+    `  isPro: ${user.isPro}  ·  emailVerified: ${user.emailVerified?.toISOString().slice(0, 10) ?? 'no'}` +
+      `  ·  password: ${cost ? `bcrypt, ${cost} rounds` : 'not set'}`,
+  );
+  return true;
+}
+
+async function printCollections(prisma: Prisma, userId: string): Promise<void> {
+  const collections = await prisma.collection.findMany({
+    where: { userId },
+    include: {
+      items: {
+        include: { type: true, tags: { include: { tag: true } } },
+        orderBy: { title: 'asc' },
+      },
+    },
+    orderBy: { name: 'asc' },
+  });
+
+  heading(`Collections (${collections.length})`);
+  for (const collection of collections) {
+    const label = `${collection.name} ${flags(collection)}`.trimEnd();
+    console.log(
+      `\n  ${label} — ${collection.description ?? 'no description'}` +
+        `  [${collection.color ?? 'no color'}]`,
+    );
+
+    const width = Math.max(...collection.items.map((item) => item.type.name.length));
+    for (const item of collection.items) {
+      const tags = item.tags.map((link) => link.tag.name).join(', ');
+      const title = `    ${item.type.name.padEnd(width)}  ${item.title} ${flags(item)}`.trimEnd();
+      console.log(title + (tags ? `\n    ${' '.repeat(width)}  ↳ ${tags}` : ''));
+    }
+  }
+
+  const uncollected = await prisma.item.count({ where: { userId, collectionId: null } });
+  if (uncollected > 0) console.log(`\n  (${uncollected} items are not in a collection)`);
+}
+
+async function main(): Promise<void> {
+  console.log(`Target: ${hostOf(process.env.DATABASE_URL)}`);
 
   // Imported dynamically because src/lib/prisma reads DATABASE_URL at import
   // time, which has to happen after the dotenv calls above.
@@ -33,28 +138,18 @@ async function main() {
   try {
     const start = Date.now();
     await prisma.$queryRaw`SELECT 1`;
-    console.log(`Connected in ${Date.now() - start}ms\n`);
+    console.log(`Connected in ${Date.now() - start}ms`);
 
-    // A count per model doubles as a schema check: a table the client expects
-    // but the database lacks surfaces here as an error.
-    const counts = {
-      users: await prisma.user.count(),
-      accounts: await prisma.account.count(),
-      sessions: await prisma.session.count(),
-      verificationTokens: await prisma.verificationToken.count(),
-      items: await prisma.item.count(),
-      itemTypes: await prisma.itemType.count(),
-      collections: await prisma.collection.count(),
-      tags: await prisma.tag.count(),
-      itemTags: await prisma.itemTag.count(),
-    };
+    await printCounts(prisma);
+    await printItemTypes(prisma);
 
-    const width = Math.max(...Object.keys(counts).map((key) => key.length));
-    for (const [model, count] of Object.entries(counts)) {
-      console.log(`  ${model.padEnd(width)}  ${count}`);
+    if (await printDemoUser(prisma)) {
+      const user = await prisma.user.findUniqueOrThrow({ where: { email: DEMO_EMAIL } });
+      await printCollections(prisma, user.id);
+      console.log('\nAll models queryable, demo data present.');
+    } else {
+      console.log('\nAll models queryable. Run `npm run db:seed` to load the demo data.');
     }
-
-    console.log('\nAll models queryable.');
   } finally {
     await prisma.$disconnect();
   }
