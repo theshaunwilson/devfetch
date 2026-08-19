@@ -13,6 +13,10 @@ const TEXT_COLORS: Record<string, string> = {
   '#eab308': 'text-yellow-500',
   '#94a3b8': 'text-slate-400',
   '#e2e8f0': 'text-slate-200',
+  '#8b5cf6': 'text-violet-500',
+  '#10b981': 'text-emerald-500',
+  '#fde047': 'text-yellow-300',
+  '#6b7280': 'text-gray-500',
 };
 
 const BORDER_COLORS: Record<string, string> = {
@@ -25,6 +29,10 @@ const BORDER_COLORS: Record<string, string> = {
   '#eab308': 'border-l-yellow-500',
   '#94a3b8': 'border-l-slate-400',
   '#e2e8f0': 'border-l-slate-200',
+  '#8b5cf6': 'border-l-violet-500',
+  '#10b981': 'border-l-emerald-500',
+  '#fde047': 'border-l-yellow-300',
+  '#6b7280': 'border-l-gray-500',
 };
 
 const SOFT_BG_COLORS: Record<string, string> = {
@@ -37,18 +45,22 @@ const SOFT_BG_COLORS: Record<string, string> = {
   '#eab308': 'bg-yellow-500/10',
   '#94a3b8': 'bg-slate-400/10',
   '#e2e8f0': 'bg-slate-200/10',
+  '#8b5cf6': 'bg-violet-500/10',
+  '#10b981': 'bg-emerald-500/10',
+  '#fde047': 'bg-yellow-300/10',
+  '#6b7280': 'bg-gray-500/10',
 };
 
-export function textColorClass(hex: string): string {
-  return TEXT_COLORS[hex] ?? 'text-muted-foreground';
+export function textColorClass(hex: string | null | undefined): string {
+  return (hex && TEXT_COLORS[hex]) || 'text-muted-foreground';
 }
 
 /** Left accent border used on collection and item cards. */
-export function borderColorClass(hex: string): string {
-  return BORDER_COLORS[hex] ?? 'border-l-border';
+export function borderColorClass(hex: string | null | undefined): string {
+  return (hex && BORDER_COLORS[hex]) || 'border-l-border';
 }
 
 /** Tinted background used behind item type icons. */
-export function softBgColorClass(hex: string): string {
-  return SOFT_BG_COLORS[hex] ?? 'bg-muted';
+export function softBgColorClass(hex: string | null | undefined): string {
+  return (hex && SOFT_BG_COLORS[hex]) || 'bg-muted';
 }
