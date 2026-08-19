@@ -25,3 +25,14 @@ export interface ItemStats {
   total: number;
   favorites: number;
 }
+
+/** Item type as rendered in the sidebar's Types list. */
+export interface SidebarItemType {
+  id: string;
+  name: string;
+  /** Used for the /items/[slug] link */
+  slug: string;
+  icon: string | null;
+  color: string | null;
+  itemCount: number;
+}

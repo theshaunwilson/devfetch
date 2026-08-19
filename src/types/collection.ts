@@ -24,3 +24,18 @@ export interface CollectionStats {
   total: number;
   favorites: number;
 }
+
+/** A collection as rendered in the sidebar's Collections list. */
+export interface SidebarCollection {
+  id: string;
+  name: string;
+  itemCount: number;
+  /** Color of the most used type, drawn as the row's dot */
+  accentColor: string | null;
+}
+
+/** Sidebar collections, split into the two groups the list renders. */
+export interface SidebarCollections {
+  favorites: SidebarCollection[];
+  recent: SidebarCollection[];
+}
