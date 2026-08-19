@@ -6,16 +6,18 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/
 import { cn } from '@/lib/utils';
 import type { SidebarCollections } from '@/types/collection';
 import type { SidebarItemType } from '@/types/item';
+import type { CurrentUser } from '@/types/user';
 
 interface SidebarProps {
   itemTypes: SidebarItemType[];
   collections: SidebarCollections;
+  user: CurrentUser | null;
 }
 
 /**
  * Collapsible sidebar: a fixed column from `md` up, a drawer below it.
  */
-export function Sidebar({ itemTypes, collections }: SidebarProps) {
+export function Sidebar({ itemTypes, collections, user }: SidebarProps) {
   const { isOpen, isMobileOpen, setMobileOpen } = useSidebar();
 
   return (
@@ -28,7 +30,7 @@ export function Sidebar({ itemTypes, collections }: SidebarProps) {
         )}
       >
         <div className="h-full w-64">
-          <SidebarContent itemTypes={itemTypes} collections={collections} />
+          <SidebarContent itemTypes={itemTypes} collections={collections} user={user} />
         </div>
       </aside>
 
@@ -38,7 +40,7 @@ export function Sidebar({ itemTypes, collections }: SidebarProps) {
           <SheetDescription className="sr-only">
             Item types, collections and account
           </SheetDescription>
-          <SidebarContent itemTypes={itemTypes} collections={collections} />
+          <SidebarContent itemTypes={itemTypes} collections={collections} user={user} />
         </SheetContent>
       </Sheet>
     </>

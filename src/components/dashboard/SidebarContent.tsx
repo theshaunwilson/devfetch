@@ -13,10 +13,13 @@ import { getIcon } from '@/lib/icons';
 import { cn } from '@/lib/utils';
 import type { SidebarCollections } from '@/types/collection';
 import type { SidebarItemType } from '@/types/item';
+import type { CurrentUser } from '@/types/user';
 
 interface SidebarContentProps {
   itemTypes: SidebarItemType[];
   collections: SidebarCollections;
+  /** Null when the seeded demo user is missing; the user area is then hidden. */
+  user: CurrentUser | null;
 }
 
 /** Type names are stored lowercase ("snippet"); the sidebar shows them capitalized. */
@@ -33,7 +36,7 @@ function GroupLabel({ children }: { children: React.ReactNode }) {
 }
 
 /** Sidebar body shared by the desktop sidebar and the mobile drawer. */
-export function SidebarContent({ itemTypes, collections }: SidebarContentProps) {
+export function SidebarContent({ itemTypes, collections, user }: SidebarContentProps) {
   return (
     <div className="flex h-full min-h-0 w-full flex-col">
       <Brand className="hidden h-16 shrink-0 px-4 md:flex" />
@@ -101,7 +104,7 @@ export function SidebarContent({ itemTypes, collections }: SidebarContentProps) 
         </nav>
       </ScrollArea>
 
-      <SidebarUser />
+      {user && <SidebarUser user={user} />}
     </div>
   );
 }
