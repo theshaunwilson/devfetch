@@ -1,24 +1,28 @@
-import { Folder, Star } from 'lucide-react';
+import { Circle, Folder, Star } from 'lucide-react';
 import { Brand } from '@/components/dashboard/Brand';
 import { SidebarCloseButton } from '@/components/dashboard/SidebarCloseButton';
 import { SidebarItem } from '@/components/dashboard/SidebarItem';
 import { SidebarSection } from '@/components/dashboard/SidebarSection';
 import { SidebarToggle } from '@/components/dashboard/SidebarToggle';
 import { SidebarUser } from '@/components/dashboard/SidebarUser';
+import { SidebarViewAll } from '@/components/dashboard/SidebarViewAll';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { textColorClass } from '@/lib/colors';
 import { getIcon } from '@/lib/icons';
-import { collections, itemTypes } from '@/lib/mock-data';
+import { cn } from '@/lib/utils';
+import type { SidebarCollections } from '@/types/collection';
+import type { SidebarItemType } from '@/types/item';
 
-const RECENT_COLLECTION_LIMIT = 5;
+interface SidebarContentProps {
+  itemTypes: SidebarItemType[];
+  collections: SidebarCollections;
+}
 
-const favoriteCollections = collections.filter((collection) => collection.isFavorite);
-
-const recentCollections = collections
-  .filter((collection) => !collection.isFavorite)
-  .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-  .slice(0, RECENT_COLLECTION_LIMIT);
+/** Type names are stored lowercase ("snippet"); the sidebar shows them capitalized. */
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
 
 function GroupLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -29,7 +33,7 @@ function GroupLabel({ children }: { children: React.ReactNode }) {
 }
 
 /** Sidebar body shared by the desktop sidebar and the mobile drawer. */
-export function SidebarContent() {
+export function SidebarContent({ itemTypes, collections }: SidebarContentProps) {
   return (
     <div className="flex h-full min-h-0 w-full flex-col">
       <Brand className="hidden h-16 shrink-0 px-4 md:flex" />
@@ -49,7 +53,7 @@ export function SidebarContent() {
               <SidebarItem
                 key={type.id}
                 href={`/items/${type.slug}`}
-                label={type.name}
+                label={capitalize(type.name)}
                 icon={getIcon(type.icon)}
                 iconClassName={textColorClass(type.color)}
                 count={type.itemCount}
@@ -60,27 +64,39 @@ export function SidebarContent() {
           <Separator className="my-4" />
 
           <SidebarSection title="Collections">
-            <GroupLabel>Favorites</GroupLabel>
-            {favoriteCollections.map((collection) => (
-              <SidebarItem
-                key={collection.id}
-                href={`/collections/${collection.id}`}
-                label={collection.name}
-                icon={Folder}
-                trailing={<Star className="size-3.5 fill-yellow-500 text-yellow-500" />}
-              />
-            ))}
+            {collections.favorites.length > 0 && (
+              <>
+                <GroupLabel>Favorites</GroupLabel>
+                {collections.favorites.map((collection) => (
+                  <SidebarItem
+                    key={collection.id}
+                    href={`/collections/${collection.id}`}
+                    label={collection.name}
+                    icon={Folder}
+                    trailing={<Star className="size-3.5 fill-yellow-500 text-yellow-500" />}
+                  />
+                ))}
+              </>
+            )}
 
-            <GroupLabel>Recent</GroupLabel>
-            {recentCollections.map((collection) => (
-              <SidebarItem
-                key={collection.id}
-                href={`/collections/${collection.id}`}
-                label={collection.name}
-                icon={Folder}
-                count={collection.itemCount}
-              />
-            ))}
+            {collections.recent.length > 0 && (
+              <>
+                <GroupLabel>Recent</GroupLabel>
+                {collections.recent.map((collection) => (
+                  <SidebarItem
+                    key={collection.id}
+                    href={`/collections/${collection.id}`}
+                    label={collection.name}
+                    icon={Circle}
+                    // Dot colored by the collection's most used item type.
+                    iconClassName={cn('fill-current', textColorClass(collection.accentColor))}
+                    count={collection.itemCount}
+                  />
+                ))}
+              </>
+            )}
+
+            <SidebarViewAll href="/collections" label="View all collections" />
           </SidebarSection>
         </nav>
       </ScrollArea>

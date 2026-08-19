@@ -4,11 +4,18 @@ import { SidebarContent } from '@/components/dashboard/SidebarContent';
 import { useSidebar } from '@/components/dashboard/SidebarProvider';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
+import type { SidebarCollections } from '@/types/collection';
+import type { SidebarItemType } from '@/types/item';
+
+interface SidebarProps {
+  itemTypes: SidebarItemType[];
+  collections: SidebarCollections;
+}
 
 /**
  * Collapsible sidebar: a fixed column from `md` up, a drawer below it.
  */
-export function Sidebar() {
+export function Sidebar({ itemTypes, collections }: SidebarProps) {
   const { isOpen, isMobileOpen, setMobileOpen } = useSidebar();
 
   return (
@@ -21,7 +28,7 @@ export function Sidebar() {
         )}
       >
         <div className="h-full w-64">
-          <SidebarContent />
+          <SidebarContent itemTypes={itemTypes} collections={collections} />
         </div>
       </aside>
 
@@ -31,7 +38,7 @@ export function Sidebar() {
           <SheetDescription className="sr-only">
             Item types, collections and account
           </SheetDescription>
-          <SidebarContent />
+          <SidebarContent itemTypes={itemTypes} collections={collections} />
         </SheetContent>
       </Sheet>
     </>
