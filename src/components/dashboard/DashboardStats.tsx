@@ -1,19 +1,19 @@
 import { Folder, FolderHeart, Layers, Star } from 'lucide-react';
 import { StatCard } from '@/components/dashboard/StatCard';
 import type { CollectionStats } from '@/types/collection';
-import { items } from '@/lib/mock-data';
+import type { ItemStats } from '@/types/item';
 
 interface DashboardStatsProps {
+  items: ItemStats;
   collections: CollectionStats;
 }
 
 /** Four count tiles at the top of the dashboard. */
-export function DashboardStats({ collections }: DashboardStatsProps) {
-  // Item counts still come from mock data — items move to the database next.
+export function DashboardStats({ items, collections }: DashboardStatsProps) {
   const stats = [
     {
       label: 'Items',
-      value: items.length,
+      value: items.total,
       icon: Layers,
       iconClassName: 'text-blue-500',
     },
@@ -25,7 +25,7 @@ export function DashboardStats({ collections }: DashboardStatsProps) {
     },
     {
       label: 'Favorite Items',
-      value: items.filter((item) => item.isFavorite).length,
+      value: items.favorites,
       icon: Star,
       iconClassName: 'text-yellow-500',
     },

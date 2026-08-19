@@ -1,21 +1,6 @@
-import { cache } from 'react';
-
+import { getCurrentUserId } from '@/lib/db/user';
 import { prisma } from '@/lib/prisma';
 import type { CollectionItemType, CollectionStats, DashboardCollection } from '@/types/collection';
-
-// No auth yet, so the dashboard reads the seeded demo user. Replaced by the
-// session user once NextAuth is wired up.
-const DEMO_USER_EMAIL = 'demo@devfetch.io';
-
-/** Cached per request so parallel dashboard queries share one lookup. */
-const getCurrentUserId = cache(async (): Promise<string | null> => {
-  const user = await prisma.user.findUnique({
-    where: { email: DEMO_USER_EMAIL },
-    select: { id: true },
-  });
-
-  return user?.id ?? null;
-});
 
 interface TypeUsage {
   type: CollectionItemType;
