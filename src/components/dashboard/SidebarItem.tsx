@@ -14,7 +14,7 @@ interface SidebarItemProps {
   iconClassName?: string;
   /** Right aligned item count */
   count?: number;
-  /** Right aligned adornment, used for the favorite star */
+  /** Right aligned adornment, used for the favorite star and the Pro badge */
   trailing?: React.ReactNode;
 }
 
@@ -44,10 +44,9 @@ export function SidebarItem({
       <Icon className={cn('size-4 shrink-0', iconClassName ?? 'text-muted-foreground')} />
       <span className="truncate">{label}</span>
 
-      <span className="ml-auto flex shrink-0 items-center">
-        {trailing ?? (
-          count !== undefined && <span className="text-xs text-muted-foreground">{count}</span>
-        )}
+      <span className="ml-auto flex shrink-0 items-center gap-1.5">
+        {trailing}
+        {count !== undefined && <span className="text-xs text-muted-foreground">{count}</span>}
       </span>
     </Link>
   );

@@ -2,7 +2,7 @@
 
 <!-- Feature Name -->
 
-Sidebar User — Real Data
+Add Pro Badge to Sidebar
 
 ## Status
 
@@ -14,26 +14,27 @@ Completed
 
 <!-- Goals & requirements -->
 
-Replace the last mock-data consumer. `SidebarUser` still imports `currentUser` from `@src/lib/mock-data.ts`; it should read the current user from the Neon database via Prisma, keeping the design exactly as it is.
+Mark the Pro-only item types in the sidebar "Types" list with a small PRO badge, so the gated types read as gated before a user clicks into them.
 
-- Add a user fetch to `@src/lib/db/user.ts`, alongside the existing `getCurrentUserId()`
-- `SidebarUser` renders the real name, email and avatar image
-- Handle the nullable fields — `User.name` and `User.image` are both optional in the schema
-- Once done, `@src/lib/mock-data.ts` has no consumers left and can be deleted
+- Show the badge on the **File** and **Image** types in `@src/components/dashboard/SidebarContent.tsx`
+- Use the ShadCN `Badge` component (`@src/components/ui/badge.tsx`, already installed)
+- Label is `PRO`, all uppercase
+- Styling stays clean and subtle — it should sit quietly in the row, not compete with the type name or the item count
+- No behaviour change: the rows stay links to `/items/[slug]` and nothing is disabled
 
 ## Notes
 
 <!-- Any extra notes -->
 
-- **`getCurrentUser()` added to `src/lib/db/user.ts`**, `cache`d like `getCurrentUserId()` so the two lookups stay one per request each rather than one per caller. Returns `null` when the demo user is missing, matching every other db module.
-- **`src/types/user.ts` holds `CurrentUser`** (`id`, `name`, `email`, `image`) — the four fields the row renders, with `name` and `image` nullable as the schema has them.
-- **The fetch lives in `src/app/dashboard/layout.tsx`**, joining the existing `Promise.all`, and the user is threaded down through `Sidebar` → `SidebarContent` → `SidebarUser` as a prop. `SidebarUser` sits inside the client bundle, so it cannot query for itself — the same constraint as the types and collections.
-- **`SidebarContent` hides the whole user area when the user is null** rather than rendering a placeholder row, matching how the dashboard drops the Pinned section when it is empty.
-- **`getInitials()` now takes the user, not a name string.** An unnamed user gets the first letter of their email instead of crashing on `.split(' ')`, and a `.filter(Boolean)` keeps stray double spaces in a name from producing an `undefined` initial.
-- **The email line is skipped when the name is null**, since `displayName` already falls back to the email and the row would otherwise print it twice.
-- **`isPro` was left out.** Nothing in the design renders it, so `CurrentUser` stays limited to what the row actually shows.
-- **`src/lib/mock-data.ts` is left in place as requested.** It now has no consumers anywhere in `src/`.
-- Verified against the seeded Neon branch through the running dev server: the row renders "Demo User" / "demo@devfetch.io" with a `DU` initials fallback and no `<img>`, matching a direct query of the user row (`image` is null). Both null paths were checked by temporarily patching `getCurrentUser()` and reverting — a null name renders a single email line with a `D` initial, and a null user removes the user area entirely while the types, collections and "View all collections" link keep rendering. `npm run lint` and `npm run build` both clean.
+- Spec file: `@context/features/add-pro-badge-sidebar.md`
+- **`src/lib/pro.ts` holds the Pro type list**, not the schema. `ItemType` has no `isPro` column and did not gain one: which built-ins are Pro is a pricing decision that can change without a migration, and custom types are Pro by definition anyway. `isProType(slug)` reads a module-level `Set`, so the sidebar does a hash lookup per row rather than scanning an array.
+- **`SidebarItem` now renders `trailing` *and* `count`**, where it previously rendered `trailing ?? count`. The badge would otherwise have swallowed the item count on exactly the two rows it lands on. No existing caller passed both, so favorites (star, no count) and recents (count, no star) are unchanged; a `gap-1.5` separates the two when both are present.
+- **`ProBadge` is a local component in `SidebarContent`**, alongside the existing `GroupLabel`, rather than a shared component — nothing else renders it yet.
+- **The badge is ShadCN `Badge` with `variant="outline"`, shrunk.** The default variant is a solid `bg-primary` pill at `h-5`, far too loud beside a 14px row label; outline plus `h-4 px-1.5 text-[10px] tracking-wider text-muted-foreground` keeps it quiet and echoes the uppercase tracking already used on the sidebar group labels. `PRO` is a literal, not a CSS transform.
+- **Rows are untouched otherwise** — File and Image stay live links to `/items/[slug]`, nothing is disabled, and no gating is enforced. This is a marker only, ahead of billing.
+- **Image is badged per the spec, which contradicts `@context/project-overview.md`** — that puts image uploads on the Free tier and only file uploads on Pro. Flagged and implemented as written; removing it is one word in `src/lib/pro.ts`.
+- **File and Image both show `PRO` next to a `0` count**, which reads slightly redundant. Left as-is since the count is real data; worth revisiting if Pro rows should hide their count.
+- Verified against the seeded Neon branch through the running dev server, reading the rendered HTML: `PRO` appears on exactly two rows, File and Image, badge before the count; all seven type counts unchanged (snippet 4, prompt 3, command 5, note 0, file 0, image 0, link 6); the two favorite collections keep their star with no count and the three recents keep their count with no badge. `npm run lint` and `npm run build` both clean.
 
 ## History
 
