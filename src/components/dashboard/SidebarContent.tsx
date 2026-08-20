@@ -6,10 +6,12 @@ import { SidebarSection } from '@/components/dashboard/SidebarSection';
 import { SidebarToggle } from '@/components/dashboard/SidebarToggle';
 import { SidebarUser } from '@/components/dashboard/SidebarUser';
 import { SidebarViewAll } from '@/components/dashboard/SidebarViewAll';
+import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { textColorClass } from '@/lib/colors';
 import { getIcon } from '@/lib/icons';
+import { isProType } from '@/lib/pro';
 import { cn } from '@/lib/utils';
 import type { SidebarCollections } from '@/types/collection';
 import type { SidebarItemType } from '@/types/item';
@@ -25,6 +27,18 @@ interface SidebarContentProps {
 /** Type names are stored lowercase ("snippet"); the sidebar shows them capitalized. */
 function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+/** Marks an item type as Pro-only. Sits left of the row's item count. */
+function ProBadge() {
+  return (
+    <Badge
+      variant="outline"
+      className="h-4 px-1.5 text-[10px] tracking-wider text-muted-foreground"
+    >
+      PRO
+    </Badge>
+  );
 }
 
 function GroupLabel({ children }: { children: React.ReactNode }) {
@@ -60,6 +74,7 @@ export function SidebarContent({ itemTypes, collections, user }: SidebarContentP
                 icon={getIcon(type.icon)}
                 iconClassName={textColorClass(type.color)}
                 count={type.itemCount}
+                trailing={isProType(type.slug) ? <ProBadge /> : undefined}
               />
             ))}
           </SidebarSection>
