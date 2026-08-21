@@ -33,9 +33,11 @@ export function CollectionCard({ collection }: CollectionCardProps) {
         </CardHeader>
 
         <CardContent className="flex flex-1 flex-col justify-between gap-4">
-          <p className="line-clamp-2 text-sm text-muted-foreground">{collection.description}</p>
+          {collection.description && (
+            <p className="line-clamp-2 text-sm text-muted-foreground">{collection.description}</p>
+          )}
 
-          <div className="flex items-center gap-2.5">
+          <div className="mt-auto flex items-center gap-2.5">
             {collection.types.map((type) => {
               const Icon = getIcon(type.icon);
               return (

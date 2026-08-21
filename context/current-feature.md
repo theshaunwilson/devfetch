@@ -2,20 +2,55 @@
 
 <!-- Feature Name -->
 
+Code scan quick wins
 
 ## Status
 
 <!-- Not Started|In Progress|Completed -->
 
-Not Started
+In Progress
 
 ## Goals
 
 <!-- Goals & requirements -->
 
+Apply the low-risk findings from the `code-scanner` audit. Each item below is a small, contained edit with no behavior change beyond the one bug fix — nothing here is a refactor, a migration, or a product decision. The larger findings are listed under Notes and deliberately left out.
+
+1. **Scope `getTypeUsage` to the user** — `src/lib/db/collections.ts:31-35`. The `item.groupBy` filters only on `collectionId: { in: collectionIds }`; every other query in `src/lib/db/` carries `where: { userId }`. Not exploitable today (the ids come from a user-scoped `collection.findMany`, and a collection has one owner), but it is the only query in the data layer with no ownership predicate, and it will silently count another user's items the moment shared collections or a request-supplied id exists. Adding `userId` also restores the `Item_userId_*` index path. Both callers (`:83`, `:123`) already have `userId` in scope, so this is a parameter and a filter key.
+
+2. **One user lookup per request** — `src/lib/db/user.ts:11-31`. `getCurrentUserId` and `getCurrentUser` are separate `cache()` entries that each run the same `findUnique` on `demo@devfetch.io`, and `src/app/dashboard/layout.tsx` hits both paths, so both fire. Derive the id from the user: `getCurrentUserId = async () => (await getCurrentUser())?.id ?? null`. Removes one round trip and makes the "once per request" comment on `:22` true.
+
+3. **Guard the null description in `CollectionCard`** — `src/components/dashboard/CollectionCard.tsx:36`. `collection.description` is `string | null` (`src/types/collection.ts:13`, matching the nullable column) but renders unguarded, so a description-less collection emits an empty `<p>` inside a `flex flex-col gap-4` container — a stray 16px gap that misaligns cards sharing a grid row. Mirror `ItemRow.tsx:49`, which already guards the same field the right way. The only user-visible fix in this batch.
+
+4. **`server-only` guard on the Prisma client** — `src/lib/prisma.ts`. Nothing stops a client component importing `@/lib/prisma` or `@/lib/db/*`. The import graph is clean today, but `SidebarContent` is already an implicit client module (imported by the `'use client'` `Sidebar`), so the boundary is convention rather than constraint. `import 'server-only'` turns a confusing runtime `DATABASE_URL is not set` into a build-time error. Adds one dependency.
+
+5. **Move `shadcn` to `devDependencies`** — `package.json:30`. It is a CLI needed at build time only (`src/app/globals.css:3` does `@import "shadcn/tailwind.css"`); build environments install devDependencies, so the import still resolves. Keeps ~6.5MB out of a production `node_modules` on any non-Vercel deploy.
+
+6. **Delete `src/lib/mock-data.ts`** — 450 lines, verified unreferenced across the repo since the sidebar user went live. It still exports `User`, `ItemType`, `Collection` and `Item` interfaces that shadow the real ones in `src/types/` and the Prisma client, so autocomplete offers them to any future feature. **Needs explicit confirmation before deleting** per `context/ai-interaction.md`.
+
 ## Notes
 
 <!-- Any extra notes -->
+
+Two deviations from the plan as written, both forced by verification:
+
+- **`server-only` went on `src/lib/db/*.ts`, not `src/lib/prisma.ts`.** `prisma/seed.ts:408` and `scripts/test-db.ts:136` both dynamically import `@/lib/prisma` under `tsx`, which sets no `react-server` condition, so `server-only` resolves to the module that throws — confirmed by running it, not assumed. Guarding it there would have broken `npm run db:seed` and `npm run db:test`. The three db modules are only reachable from server components and cover the case the finding actually describes (a client component picking up a db call), with a comment recording why. The package sits in `dependencies` per the Next.js docs, which is also where the compiler alias expects it.
+- **`CollectionCard`'s icon row gained `mt-auto`.** `CardContent` is `flex flex-col justify-between`, so once the description `<p>` is conditional, a description-less card has a single flex child and `justify-between` places it at flex-start — the icons would have jumped to the top instead of staying aligned with the other cards in the row. `mt-auto` pins them to the bottom in both cases.
+
+Verified against the seeded Neon branch with the dev server: one `User` lookup per request instead of two; the `Item` groupBy now issues `WHERE ("Item"."userId" = $1 AND "Item"."collectionId" IN (...))`; stat tiles still 18/5/5/2 and sidebar type counts still 4/3/5/0/0/0/6; a temporarily nulled `Design Resources` description renders no `<p>` at all with its icon row still bottom-aligned beside the other four cards. The `server-only` guard was proved live rather than assumed — importing `@/lib/db/user` from `SidebarContent` fails the build with an import trace naming the file. `npm run db:test`, `npm run lint`, `npx tsc --noEmit` and `npm run build` all pass.
+
+Findings deliberately **not** in this batch, each for a reason:
+
+- **Duplicate `getTypeUsage` per render** (`collections.ts:83`, `:123`) — the layout and the page each call it in the same RSC pass, so 4 Neon round trips where 2 would do. The fix is a `cache`d per-user variant; `cache()` cannot dedupe it as written because the argument is a fresh array each call and `React.cache` keys on argument identity. A real change to the data layer's shape, not a quick win.
+- **Splitting `SidebarContent`** (72-line render body plus `capitalize`, `ProBadge`, `GroupLabel`) — a refactor, and `context/ai-interaction.md` says to ask first.
+- **`take` ceilings on the unbounded `findMany`s** (`items.ts:46-50`, `collections.ts:110-114`) — truncating Pinned or favorite collections is a product decision about what a Pro user sees, not a cleanup.
+- **Composite sort indexes** (`schema.prisma:120`, `:165`) — `@@index([userId, isPinned])` backs the filter but not the `updatedAt desc` sort. Correct, but it needs a migration; worth doing on its own.
+- **Consolidating the three colour maps** (`colors.ts:6-52`) — `TEXT_COLORS`, `BORDER_COLORS` and `SOFT_BG_COLORS` repeat the same 13 keys, and missing one on an edit degrades silently through the fallbacks. Mechanical, but it touches every rendered colour.
+- **Seed and `test-db` query batching** (`seed.ts:340-355`, `:378-399`, `test-db.ts:43-53`) — developer-tooling speed only, and the seed's per-type loop is a documented trade-off around Postgres NULL semantics.
+
+The audit found 0 critical and 0 high; `tsc --noEmit` and `eslint` both pass clean, there are no `any` types, no unused imports, no hardcoded secrets, and no Server Actions yet — so the Zod and `{ success, data, error }` standards have nothing to comply with rather than being unmet.
+
+Suggested branch: `chore/code-scan-quick-wins`. Verify against the seeded Neon branch with the dev server: dashboard tiles still 18/5/5/2, sidebar type counts still 4/3/5/0/0/0/6, collection cards aligned in each grid row, and `npm run build` clean.
 
 ## History
 

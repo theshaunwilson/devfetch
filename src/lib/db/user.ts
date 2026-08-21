@@ -1,3 +1,7 @@
+// Fails the build if a client component imports this. Not in `@/lib/prisma`,
+// which the tsx scripts import, where `server-only` throws.
+import 'server-only';
+
 import { cache } from 'react';
 
 import { prisma } from '@/lib/prisma';
@@ -7,19 +11,9 @@ import type { CurrentUser } from '@/types/user';
 // session user once NextAuth is wired up.
 const DEMO_USER_EMAIL = 'demo@devfetch.io';
 
-/** Cached per request so parallel dashboard queries share one lookup. */
-export const getCurrentUserId = cache(async (): Promise<string | null> => {
-  const user = await prisma.user.findUnique({
-    where: { email: DEMO_USER_EMAIL },
-    select: { id: true },
-  });
-
-  return user?.id ?? null;
-});
-
 /**
- * The current user's profile. Cached alongside `getCurrentUserId` so the
- * dashboard resolves the user once per request however many callers ask.
+ * The current user's profile. Cached so the dashboard resolves the user once
+ * per request however many callers ask.
  */
 export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const user = await prisma.user.findUnique({
@@ -29,3 +23,13 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
 
   return user;
 });
+
+/**
+ * The current user's id. Reads through `getCurrentUser` rather than running
+ * its own query, so the two share the one cached lookup.
+ */
+export async function getCurrentUserId(): Promise<string | null> {
+  const user = await getCurrentUser();
+
+  return user?.id ?? null;
+}

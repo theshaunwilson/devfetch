@@ -1,3 +1,7 @@
+// Fails the build if a client component imports this. Not in `@/lib/prisma`,
+// which the tsx scripts import, where `server-only` throws.
+import 'server-only';
+
 import { getCurrentUserId } from '@/lib/db/user';
 import { prisma } from '@/lib/prisma';
 import type {
@@ -22,15 +26,22 @@ const byUsageDesc = (a: TypeUsage, b: TypeUsage) =>
  *
  * Counting per (collection, type) in the database keeps the item rows out of
  * the response — callers only need totals and the type mix.
+ *
+ * Scoped to `userId` like every other query here: the ids come from a
+ * user-scoped lookup today, but the filter keeps that true if a caller ever
+ * passes an id from a request, and it matches the `userId` indexes on Item.
  */
-async function getTypeUsage(collectionIds: string[]): Promise<Map<string, TypeUsage[]>> {
+async function getTypeUsage(
+  userId: string,
+  collectionIds: string[]
+): Promise<Map<string, TypeUsage[]>> {
   const usageByCollection = new Map<string, TypeUsage[]>();
 
   if (collectionIds.length === 0) return usageByCollection;
 
   const usage = await prisma.item.groupBy({
     by: ['collectionId', 'typeId'],
-    where: { collectionId: { in: collectionIds } },
+    where: { userId, collectionId: { in: collectionIds } },
     _count: { _all: true },
   });
 
@@ -80,7 +91,10 @@ export async function getRecentCollections(limit: number): Promise<DashboardColl
     },
   });
 
-  const usageByCollection = await getTypeUsage(collections.map((collection) => collection.id));
+  const usageByCollection = await getTypeUsage(
+    userId,
+    collections.map((collection) => collection.id)
+  );
 
   return collections.map((collection) => {
     const entries = usageByCollection.get(collection.id) ?? [];
@@ -121,6 +135,7 @@ export async function getSidebarCollections(recentLimit: number): Promise<Sideba
   ]);
 
   const usageByCollection = await getTypeUsage(
+    userId,
     [...favorites, ...recent].map((collection) => collection.id)
   );
 

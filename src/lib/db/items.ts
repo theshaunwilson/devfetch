@@ -1,3 +1,7 @@
+// Fails the build if a client component imports this. Not in `@/lib/prisma`,
+// which the tsx scripts import, where `server-only` throws.
+import 'server-only';
+
 import { getCurrentUserId } from '@/lib/db/user';
 import { prisma } from '@/lib/prisma';
 import type { Prisma } from '@/generated/prisma/client';
