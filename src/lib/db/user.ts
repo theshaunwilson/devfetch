@@ -4,20 +4,25 @@ import 'server-only';
 
 import { cache } from 'react';
 
+import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import type { CurrentUser } from '@/types/user';
 
-// No auth yet, so the dashboard reads the seeded demo user. Replaced by the
-// session user once NextAuth is wired up.
-const DEMO_USER_EMAIL = 'demo@devfetch.io';
-
 /**
- * The current user's profile. Cached so the dashboard resolves the user once
- * per request however many callers ask.
+ * The signed-in user's profile, or null when nobody is signed in. Cached so
+ * the dashboard resolves the user once per request however many callers ask.
  */
 export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    return null;
+  }
+
+  // The JWT outlives the row it names — a deleted account still presents a
+  // valid session — so the lookup, not the token, is what decides.
   const user = await prisma.user.findUnique({
-    where: { email: DEMO_USER_EMAIL },
+    where: { id: session.user.id },
     select: { id: true, name: true, email: true, image: true },
   });
 

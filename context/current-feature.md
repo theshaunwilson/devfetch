@@ -1,20 +1,35 @@
-# Current Feature
-
-<!-- Feature Name -->
+# Current Feature: Auth UI — Sign In, Register & Sign Out
 
 ## Status
 
 <!-- Not Started|In Progress|Completed -->
 
-Not Started
+In Progress
 
 ## Goals
 
 <!-- Goals & requirements -->
 
+- **`/sign-in` page** replacing NextAuth's default page: email + password fields, a "Sign in with GitHub" button, a link to `/register`, client-side validation and inline error display (including the generic "invalid credentials" message from `CredentialsSignin`).
+- **`/register` page**: name, email, password, confirm-password fields, validation (email format, passwords match, password policy), submits to the existing `POST /api/auth/register`, redirects to `/sign-in` on success.
+- **Point NextAuth at the custom pages** so the proxy's redirect and any `signIn()` call land on `/sign-in` instead of `/api/auth/signin`.
+- **Reusable avatar component**: uses `user.image` when present (GitHub), otherwise renders initials from the name (falling back to the email's first letter, as `getInitials()` already does).
+- **Sidebar user area becomes interactive**: clicking the avatar/user row opens a dropdown (opening upward) containing a "Sign out" action; the avatar itself links to `/profile`.
+- **Sign out works** — clears the session and redirects.
+
 ## Notes
 
 <!-- Any extra notes -->
+
+- Source spec: `context/features/auth-phase-3-spec.md`. This is Auth Phase 3; Phases 1 (NextAuth v5 + GitHub) and 2 (credentials + `/api/auth/register`) are already merged.
+- The register API, both providers, and the Zod schemas in `src/lib/validation/auth.ts` already exist — this phase is UI only. Reuse `registerSchema`/`signInSchema` client-side rather than re-declaring rules (they carry the 72-**byte** password cap); `confirmPassword` is new and belongs in a form-only schema.
+- `SidebarUser` is already a client component receiving a `CurrentUser` prop from `src/app/dashboard/layout.tsx`, and already has `getInitials()` — the avatar component should absorb that logic rather than duplicate it. `SidebarContent` hides the whole user area when the user is null.
+- `/sign-in` and `/register` must stay outside the proxy matcher (`['/dashboard/:path*']`), so no matcher change is needed — but signed-in users hitting them should probably be bounced to `/dashboard`.
+- **Decided (spec inconsistency):** requirements say *bottom of sidebar*, test steps 4–5 say *top bar*. Building it in the **sidebar only**, per the requirements section; the top bar keeps brand + toggles.
+- **Decided:** `/profile` gets a **minimal stub page** so the link is honest — name, email and avatar read from the session, no editing. It needs adding to the proxy matcher, which today only covers `/dashboard/:path*`.
+- **Decided (in scope):** `getCurrentUser()` in `src/lib/db/user.ts` stops hardcoding `demo@devfetch.io` and reads the session user id instead — otherwise the avatar and Sign out would describe a different user than the one signed in. Consequence: a GitHub or freshly registered user sees an empty dashboard, since every seeded item belongs to the demo account. Signing in as `demo@devfetch.io` / `12345678` still shows the seeded data.
+- Still unverified from earlier phases: the real GitHub OAuth round-trip (needs the account's own credentials) and whether GitHub-after-credentials on the same email raises `OAuthAccountNotLinked`.
+- No rate limiting on sign-in or registration — still out of scope.
 
 ## History
 
