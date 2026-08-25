@@ -1,4 +1,4 @@
-# Current Feature: Auth Phase 1 — NextAuth v5 + GitHub Provider
+# Current Feature
 
 <!-- Feature Name -->
 
@@ -6,66 +6,15 @@
 
 <!-- Not Started|In Progress|Completed -->
 
-In Progress
+Not Started
 
 ## Goals
 
 <!-- Goals & requirements -->
 
-- Install NextAuth v5 (`next-auth@beta`) and `@auth/prisma-adapter`
-- Set up the split auth config pattern for edge compatibility
-- Add the GitHub OAuth provider
-- Protect `/dashboard/*` routes using the Next.js 16 proxy
-- Redirect unauthenticated users to sign-in
-- Use NextAuth's default sign-in page for testing (no custom `pages.signIn`)
-
 ## Notes
 
 <!-- Any extra notes -->
-
-Spec: `context/features/auth-phase-1-spec.md`
-
-### Files to create
-
-1. `src/auth.config.ts` — edge-compatible config (providers only, no adapter)
-2. `src/auth.ts` — full config with Prisma adapter and JWT strategy
-3. `src/app/api/auth/[...nextauth]/route.ts` — export handlers from `auth.ts`
-4. `src/proxy.ts` — route protection with redirect logic
-5. `src/types/next-auth.d.ts` — extend the `Session` type with `user.id`
-
-### Gotchas
-
-Use Context7 to verify the newest config and conventions before writing code.
-
-- Install `next-auth@beta` — `@latest` still resolves to v4
-- The proxy file must sit at `src/proxy.ts`, the same level as `app/`
-- Named export: `export const proxy = auth(...)`, not a default export
-- `session: { strategy: 'jwt' }` is required with the split config pattern
-- Don't set a custom `pages.signIn`
-
-### Environment variables
-
-```
-AUTH_SECRET=
-AUTH_GITHUB_ID=
-AUTH_GITHUB_SECRET=
-```
-
-### Testing
-
-1. Visit `/dashboard` — should redirect to sign-in
-2. Click "Sign in with GitHub"
-3. Verify the redirect back to `/dashboard` after auth
-
-### References
-
-- Edge compatibility: https://authjs.dev/getting-started/installation#edge-compatibility
-- Prisma adapter: https://authjs.dev/getting-started/adapters/prisma
-
-### Open questions
-
-- The Prisma schema already has the Auth.js models (`Account`, `Session`, `VerificationToken`), so no migration should be needed — verify at implementation time.
-- The db layer currently resolves the user by hardcoding `demo@devfetch.io` in `getCurrentUser()`. Swapping that for the session user is not in this phase's spec; flag it when the sign-in flow works.
 
 ## History
 
@@ -86,3 +35,4 @@ AUTH_GITHUB_SECRET=
 - Sidebar user from the database — `SidebarUser` reads the real user through Prisma, so nothing in `src/` imports `lib/mock-data.ts` any more (the file itself is left in place for now). `getCurrentUser()` sits next to `getCurrentUserId()` in `src/lib/db/user.ts`, `cache`d the same way so each stays one lookup per request, and returns `null` when the demo user is missing like every other db module. `src/types/user.ts` holds `CurrentUser` (`id`, `name`, `email`, `image`) — only what the row renders, with `name` and `image` nullable as the schema has them; `isPro` is left out since the design shows no Pro badge. The fetch joins the layout's existing `Promise.all` and the user threads down through `Sidebar` → `SidebarContent` → `SidebarUser` as a prop, since `SidebarUser` is in the client bundle and cannot query for itself. `SidebarContent` hides the entire user area when the user is null rather than rendering a placeholder, matching how Pinned disappears when empty. `getInitials()` now takes the user instead of a name string: an unnamed user gets the first letter of their email rather than crashing on `.split(' ')`, a `.filter(Boolean)` stops stray double spaces producing an `undefined` initial, and the email line is skipped when the name is null because `displayName` already falls back to it. Verified against the seeded branch: the row renders "Demo User" / "demo@devfetch.io" with a `DU` fallback and no `<img>` (the seeded `image` is null), a temporarily nulled name renders a single email line with a `D` initial, and a temporarily nulled user removes the user area while the types, collections and "View all collections" link keep rendering
 - Pro badge in the sidebar — the File and Image rows in the sidebar's Types list now carry a subtle uppercase `PRO` badge, marking the gated types before a user clicks into them. Which types are Pro lives in `src/lib/pro.ts` as a module-level `Set` behind `isProType(slug)`, not as an `ItemType.isPro` column: which built-ins are Pro is a pricing decision that can change without a migration, and custom types are Pro by definition anyway. `getItemTypes()` already returned `slug` for the `/items/[slug]` link, so no query, type or prop threading changed — the badge rides on data the sidebar was already holding. `SidebarItem` previously rendered `trailing ?? count`, which would have swallowed the item count on exactly the two rows the badge lands on, so it now renders both with a `gap-1.5`; no existing caller passed both, leaving favorite collections (star, no count) and recents (count, no star) unchanged. `ProBadge` is a local component in `SidebarContent` alongside `GroupLabel` since nothing else renders it yet, wrapping ShadCN `Badge` with `variant="outline"` shrunk to `h-4 px-1.5 text-[10px] tracking-wider text-muted-foreground` — the default variant is a solid `bg-primary` pill at `h-5`, far too loud beside a 14px row label — and `PRO` is a literal rather than a CSS transform. Purely a marker: the rows stay live links, nothing is disabled and no gating is enforced ahead of billing. Two things were flagged: Image was badged even though `context/project-overview.md` then put image uploads on the Free tier — resolved by moving image uploads to Pro in the spec, so the badge stands as built — and both Pro rows show the badge beside a `0` count, left as is. Verified against the seeded branch through the running dev server: `PRO` on exactly two rows, badge before the count, all seven type counts unchanged (4/3/5/0/0/0/6), and the collections group rendering identically
 - Code scan quick wins — the low-risk findings from a `code-scanner` audit of the whole codebase, applied as one batch. `getTypeUsage()` in `src/lib/db/collections.ts` now takes `userId` and filters on it: it was the only query in `src/lib/db/` with no ownership predicate, harmless today because the collection ids come from a user-scoped `findMany` and a collection has one owner, but wrong the moment shared collections or a request-supplied id exists — and the filter also puts the aggregation back on the `Item_userId_*` indexes. `getCurrentUserId()` stopped being its own `cache()` entry and now reads through `getCurrentUser()`, so the two share one lookup instead of issuing the same `findUnique` twice per request. `CollectionCard` guards `collection.description`, which is nullable, so a description-less collection no longer emits an empty `<p>`; its icon row gained `mt-auto` because with the `<p>` conditional the icons become the only child under `justify-between`, which would have parked them at the top of the card instead of the bottom. `server-only` landed on the three `src/lib/db/*` modules rather than on `src/lib/prisma.ts` as first planned: `prisma/seed.ts` and `scripts/test-db.ts` both import that module dynamically under `tsx`, which sets no `react-server` condition, so `server-only` resolves to the copy that throws and the guard would have broken `npm run db:seed` and `npm run db:test` — confirmed by running it rather than assumed. The db modules are only reachable from server components anyway, which is the case the finding described. The package sits in `dependencies` per the Next.js docs. `shadcn` moved to `devDependencies` as a build-time CLI, and `src/lib/mock-data.ts` was deleted — 450 lines, unreferenced since the sidebar user went live, and still exporting `User`/`ItemType`/`Collection`/`Item` interfaces that shadowed the real ones; the six archived specs in `context/features/` keep their `@` references as a historical record. Deliberately left out and still open: the duplicate `getTypeUsage` per render (the layout and the page each call it, so the groupBy still runs twice), splitting `SidebarContent`, `take` ceilings on the unbounded `findMany`s, composite sort indexes needing a migration, consolidating the three colour maps, and seed/`test-db` query batching. Verified against the seeded Neon branch: one `User` query per request instead of two, the groupBy issuing `WHERE ("Item"."userId" = $1 AND "Item"."collectionId" IN (...))`, tiles still 18/5/5/2 and sidebar counts still 4/3/5/0/0/0/6, a temporarily nulled description rendering no `<p>` at all, and the guard proved live — importing `@/lib/db/user` from `SidebarContent` fails the build with an import trace. `npm run db:test`, `npm run lint`, `npx tsc --noEmit` and `npm run build` all pass.
+- Auth Phase 1, NextAuth v5 + GitHub — `next-auth@beta` (5.0.0-beta.32) and `@auth/prisma-adapter` (2.11.3) wired up behind the split config pattern. `src/auth.config.ts` holds the GitHub provider and nothing else, `satisfies NextAuthConfig`; `src/auth.ts` spreads it, then adds `PrismaAdapter(prisma)`, `session: { strategy: 'jwt' }` and a session callback. The spread goes first so the local options win if the two ever collide. `src/proxy.ts` builds its **own** `NextAuth(authConfig)` instance rather than importing `@/auth` — Next 16's proxy is nodejs-only so the adapter would in fact run there, but this keeps Prisma out of every matched request — and `export const proxy = auth(...)` redirects to `/api/auth/signin` with a `callbackUrl` when `req.auth` is absent, matching `['/dashboard/:path*']`. `src/app/api/auth/[...nextauth]/route.ts` re-exports `GET`/`POST` from `handlers`, and `src/types/next-auth.d.ts` augments `Session` with `user.id`. The session callback reads `token.sub` rather than adding a paired `jwt` callback: the installed `@auth/core` assigns `sub: user.id` in its callback handler before any user callback runs, and its default JWT session exposes only name/email/image — so one callback covers it and `next-auth/jwt` needs no augmentation. Both facts were read out of `node_modules/@auth/core/lib/` rather than assumed. No migration: the schema has carried `Account`, `Session` and `VerificationToken` since the Prisma feature, and `PrismaAdapter` typechecks against the Prisma 7 client generated to `src/generated/prisma` even though the adapter's peer range stops at `>=6`. `.env.example` gained the three `AUTH_*` variables (already populated in the untracked `.env`). Verified against the running dev server: `/dashboard` unauthenticated returns 302 to `/api/auth/signin?callbackUrl=%2Fdashboard`, the default sign-in page renders a single "Sign in with GitHub" button, and clicking it reaches github.com with `redirect_uri=http://localhost:3000/api/auth/callback/github`, PKCE S256 and scope `read:user user:email`. The three paths needing a real session were checked by minting a session JWT with `AUTH_SECRET` (salt = the cookie name, temp scripts deleted): `/api/auth/session` returned `user.id` alongside name and email, `/dashboard` returned 200, and `/` stayed 200 to prove the matcher does not overreach. **Not verified: the real GitHub round-trip** — completing that login needs the account's own credentials, so spec test step 3 is still outstanding, as is confirming the GitHub OAuth app's callback URL. Two known gaps left for later phases: signing in creates a new `User` row for the GitHub email while `src/lib/db/user.ts` still hardcodes `demo@devfetch.io`, so the dashboard keeps rendering demo data until that swap lands; and nothing signs out or shows session state in the UI yet. `npm run lint`, `npx tsc --noEmit` and `npm run build` all pass, with the build reporting the proxy and the `/api/auth/[...nextauth]` route.
