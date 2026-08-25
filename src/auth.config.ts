@@ -2,6 +2,8 @@ import type { NextAuthConfig } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import GitHub from 'next-auth/providers/github';
 
+import { SIGN_IN_PATH } from '@/lib/auth-redirect';
+
 /**
  * The fields the default sign-in page renders for credentials, shared so the
  * real provider in `src/auth.ts` presents the same form.
@@ -19,6 +21,13 @@ export const credentialsFields = {
  * The adapter, session strategy and callbacks live in `src/auth.ts`.
  */
 export default {
+  // Replaces the built-in `/api/auth/signin` and `/api/auth/error` screens.
+  // Errors Auth.js raises outside a form action — OAuthAccountNotLinked, for
+  // one — arrive back here as `?error=<code>`.
+  pages: {
+    signIn: SIGN_IN_PATH,
+    error: SIGN_IN_PATH,
+  },
   providers: [
     // Reads AUTH_GITHUB_ID and AUTH_GITHUB_SECRET from the environment.
     GitHub,
