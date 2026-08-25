@@ -1,4 +1,4 @@
-# Current Feature
+# Current Feature: Auth Phase 2 — Credentials (Email/Password)
 
 <!-- Feature Name -->
 
@@ -6,15 +6,38 @@
 
 <!-- Not Started|In Progress|Completed -->
 
-Not Started
+In Progress
 
 ## Goals
 
 <!-- Goals & requirements -->
 
+- Add a Credentials provider so users can sign in with email + password alongside GitHub OAuth
+- Hash and verify passwords with `bcryptjs` (already a dependency)
+- Keep the split config pattern intact: `auth.config.ts` carries an edge-safe Credentials placeholder (`authorize: () => null`), `auth.ts` overrides it with the real bcrypt/Prisma validation
+- Add `POST /api/auth/register` accepting `name`, `email`, `password`, `confirmPassword` — validate the passwords match, reject a duplicate email, hash the password, create the user, and return a success/error response
+- GitHub OAuth continues to work unchanged, and a credentials sign-in lands on `/dashboard`
+
 ## Notes
 
 <!-- Any extra notes -->
+
+Spec: @context/features/auth-phase-2-spec.md
+
+- **No migration needed.** `User.password` already exists (`String?`, "Null for OAuth-only users") from the original Prisma schema, and `prisma/seed.ts` already writes a bcrypt hash at cost 12 for `demo@devfetch.io` (password `12345678`) — so that seeded account is the natural first credentials login to test against. Match cost 12 in registration for consistency.
+- **Why the placeholder in `auth.config.ts`.** `src/proxy.ts` builds its own `NextAuth(authConfig)` instance to keep Prisma out of the request path. The provider must be *listed* there so the proxy's route handling and the sign-in page know it exists, but its `authorize` must not touch the database — hence `() => null` in the edge half and the real implementation spread in from `auth.ts`. The spread in `auth.ts` puts `...authConfig` first, so a locally redefined `providers` array wins.
+- `session: { strategy: 'jwt' }` is already set, which the Credentials provider requires anyway (it has no adapter-backed session).
+- **Decisions taken during implementation**
+  - Zod 4.4.3 installed, per the coding standard. Schemas live in `src/lib/validation/auth.ts` (no `server-only`, so a sign-in/register form can reuse them in a later phase).
+  - `auth.ts` does not re-list the providers; it maps over `authConfig.providers` and swaps only the credentials entry, so GitHub cannot drift between the two configs.
+  - `authorize` always compares against a bcrypt hash — a constant dummy hash when no user is found — so an unregistered email costs the same ~271ms as a wrong password.
+  - Registration caps the password at 72 **bytes**, the most bcrypt hashes. Without it a longer password also authenticates with anything after the 72nd byte changed or dropped. Bytes rather than characters because 19 emoji are 19 characters but 76 bytes.
+- **Not addressed, and out of this phase's scope:** neither `/api/auth/register` nor the credentials sign-in is rate limited, so both are open to online password guessing and bulk account creation. Sitting behind Auth.js's CSRF token is not a substitute.
+- **Untested interaction:** registering `x@y.com` with a password and then signing in with a GitHub account on the same address should raise Auth.js's `OAuthAccountNotLinked` (account linking is off by default, which is the safe behaviour). Confirming it needs the real GitHub round-trip.
+- **Timing/enumeration.** `authorize` returns the same generic `CredentialsSignin` for wrong password / unknown email / OAuth-only account. `/api/auth/register` does still reveal that an email is taken (409), as the spec asked.
+- Auth.js swallows `authorize` errors into a generic `CredentialsSignin`; the default sign-in page will show that rather than a specific message. A real sign-in/register UI is not in this phase's scope.
+- Known gap carried over from Phase 1 and **still not fixed here**: `src/lib/db/user.ts` hardcodes `demo@devfetch.io`, so the dashboard renders demo data regardless of who signs in. Swapping that to the live session is a later phase.
+- Phase 1's outstanding test — the real GitHub OAuth round-trip — is still unverified; test step 5 ("verify GitHub OAuth still works") re-raises it.
 
 ## History
 
