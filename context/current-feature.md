@@ -1,4 +1,4 @@
-# Current Feature
+# Current Feature: Auth Phase 1 — NextAuth v5 + GitHub Provider
 
 <!-- Feature Name -->
 
@@ -6,15 +6,66 @@
 
 <!-- Not Started|In Progress|Completed -->
 
-Not Started
+In Progress
 
 ## Goals
 
 <!-- Goals & requirements -->
 
+- Install NextAuth v5 (`next-auth@beta`) and `@auth/prisma-adapter`
+- Set up the split auth config pattern for edge compatibility
+- Add the GitHub OAuth provider
+- Protect `/dashboard/*` routes using the Next.js 16 proxy
+- Redirect unauthenticated users to sign-in
+- Use NextAuth's default sign-in page for testing (no custom `pages.signIn`)
+
 ## Notes
 
 <!-- Any extra notes -->
+
+Spec: `context/features/auth-phase-1-spec.md`
+
+### Files to create
+
+1. `src/auth.config.ts` — edge-compatible config (providers only, no adapter)
+2. `src/auth.ts` — full config with Prisma adapter and JWT strategy
+3. `src/app/api/auth/[...nextauth]/route.ts` — export handlers from `auth.ts`
+4. `src/proxy.ts` — route protection with redirect logic
+5. `src/types/next-auth.d.ts` — extend the `Session` type with `user.id`
+
+### Gotchas
+
+Use Context7 to verify the newest config and conventions before writing code.
+
+- Install `next-auth@beta` — `@latest` still resolves to v4
+- The proxy file must sit at `src/proxy.ts`, the same level as `app/`
+- Named export: `export const proxy = auth(...)`, not a default export
+- `session: { strategy: 'jwt' }` is required with the split config pattern
+- Don't set a custom `pages.signIn`
+
+### Environment variables
+
+```
+AUTH_SECRET=
+AUTH_GITHUB_ID=
+AUTH_GITHUB_SECRET=
+```
+
+### Testing
+
+1. Visit `/dashboard` — should redirect to sign-in
+2. Click "Sign in with GitHub"
+3. Verify the redirect back to `/dashboard` after auth
+
+### References
+
+- Edge compatibility: https://authjs.dev/getting-started/installation#edge-compatibility
+- Prisma adapter: https://authjs.dev/getting-started/adapters/prisma
+
+### Open questions
+
+- The Prisma schema already has the Auth.js models (`Account`, `Session`, `VerificationToken`), so no migration should be needed — verify at implementation time.
+- The db layer currently resolves the user by hardcoding `demo@devfetch.io` in `getCurrentUser()`. Swapping that for the session user is not in this phase's spec; flag it when the sign-in flow works.
 
 ## History
 
