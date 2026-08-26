@@ -54,3 +54,9 @@ export const signInSchema = z.object({
   email,
   password: z.string().min(1),
 });
+
+/**
+ * Only the address — the caller has already proven the account is theirs by
+ * getting the password right, and no other field is needed to reissue a link.
+ */
+export const resendVerificationSchema = z.object({ email });
