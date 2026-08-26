@@ -7,6 +7,7 @@ import { signInWithCredentials, signInWithGitHub, type SignInState } from '@/act
 import { FieldError } from '@/components/auth/FieldError';
 import { FormMessage } from '@/components/auth/FormMessage';
 import { GitHubIcon } from '@/components/auth/GitHubIcon';
+import { ResendVerification } from '@/components/auth/ResendVerification';
 import { SubmitButton } from '@/components/auth/SubmitButton';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,19 +19,36 @@ interface SignInFormProps {
   initialError?: string;
   /** Set after `/register` redirects here. */
   justRegistered?: boolean;
+  /** Set after `/verify-email` accepted a link. */
+  justVerified?: boolean;
 }
 
-export function SignInForm({ callbackUrl, initialError, justRegistered }: SignInFormProps) {
+export function SignInForm({
+  callbackUrl,
+  initialError,
+  justRegistered,
+  justVerified,
+}: SignInFormProps) {
   const [state, formAction] = useActionState<SignInState, FormData>(signInWithCredentials, {
     error: initialError,
   });
 
+  // A banner from the previous page is stale the moment a submit comes back,
+  // so the error takes the slot rather than stacking on top of it.
+  const successBanner = state.error
+    ? null
+    : justVerified
+      ? 'Email verified. Sign in to continue.'
+      : justRegistered
+        ? 'Account created. Check your email for the verification link, then sign in.'
+        : null;
+
   return (
     <div className="flex flex-col gap-5">
-      {justRegistered && !state.error && (
-        <FormMessage variant="success">Account created. Sign in to continue.</FormMessage>
-      )}
+      {successBanner && <FormMessage variant="success">{successBanner}</FormMessage>}
       {state.error && <FormMessage>{state.error}</FormMessage>}
+      {/* Only after a correct password met an unverified account. */}
+      {state.canResend && state.email && <ResendVerification email={state.email} />}
 
       <form action={formAction} className="flex flex-col gap-4">
         <input type="hidden" name="callbackUrl" value={callbackUrl} />

@@ -1,11 +1,21 @@
 import { PrismaAdapter } from '@auth/prisma-adapter';
 import bcrypt from 'bcryptjs';
-import NextAuth from 'next-auth';
+import NextAuth, { CredentialsSignin } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 
 import authConfig, { credentialsFields } from '@/auth.config';
+import { EMAIL_NOT_VERIFIED_CODE } from '@/lib/auth-errors';
 import { prisma } from '@/lib/prisma';
 import { signInSchema } from '@/lib/validation/auth';
+
+/**
+ * The one credentials failure worth naming. Auth.js rethrows the instance
+ * itself to a server action, so `src/actions/auth.ts` reads `code` off it
+ * rather than parsing it back out of a redirect URL.
+ */
+export class EmailNotVerifiedError extends CredentialsSignin {
+  code = EMAIL_NOT_VERIFIED_CODE;
+}
 
 /**
  * A real hash of a value nobody can supply. An email with no account still
@@ -34,7 +44,7 @@ const credentialsProvider = Credentials({
 
     const user = await prisma.user.findUnique({
       where: { email },
-      select: { id: true, name: true, email: true, image: true, password: true },
+      select: { id: true, name: true, email: true, image: true, password: true, emailVerified: true },
     });
 
     // `User.password` is null for accounts created through GitHub.
@@ -42,6 +52,13 @@ const credentialsProvider = Credentials({
 
     if (!user?.password || !passwordMatches) {
       return null;
+    }
+
+    // Deliberately after the password check, never before it. Reversed, this
+    // would answer "is this address registered?" for anyone who asked,
+    // without their needing the password.
+    if (!user.emailVerified) {
+      throw new EmailNotVerifiedError();
     }
 
     return { id: user.id, name: user.name, email: user.email, image: user.image };

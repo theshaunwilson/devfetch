@@ -4,14 +4,22 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { SignInForm } from '@/components/auth/SignInForm';
 import { safeCallbackUrl } from '@/lib/auth-redirect';
-import { signInErrorMessage } from '@/lib/auth-errors';
+import { signInErrorMessage, verificationErrorMessage } from '@/lib/auth-errors';
 
 export const metadata: Metadata = {
   title: 'Sign in · DevFetch',
 };
 
 interface SignInPageProps {
-  searchParams: Promise<{ callbackUrl?: string; error?: string; registered?: string }>;
+  searchParams: Promise<{
+    callbackUrl?: string;
+    error?: string;
+    registered?: string;
+    /** Set by `/verify-email` after it accepted a link. */
+    verified?: string;
+    /** Set by `/verify-email` when it did not. */
+    verifyError?: string;
+  }>;
 }
 
 export default async function SignInPage({ searchParams }: SignInPageProps) {
@@ -32,8 +40,10 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
 
       <SignInForm
         callbackUrl={callbackUrl}
-        initialError={signInErrorMessage(params.error)}
+        // Both land in the same banner slot; only one can be set at a time.
+        initialError={signInErrorMessage(params.error) ?? verificationErrorMessage(params.verifyError)}
         justRegistered={params.registered === '1'}
+        justVerified={params.verified === '1'}
       />
     </>
   );

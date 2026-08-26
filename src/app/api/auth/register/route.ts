@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { Prisma } from '@/generated/prisma/client';
+import { sendVerificationEmail } from '@/lib/email/verification';
 import { prisma } from '@/lib/prisma';
 import { registerSchema } from '@/lib/validation/auth';
 
@@ -51,9 +52,17 @@ export async function POST(request: Request): Promise<NextResponse<RegisterRespo
     }
 
     const user = await prisma.user.create({
+      // `emailVerified` stays null until the link in the email is clicked,
+      // and `authorize` refuses a credentials sign-in until it is set.
       data: { name, email, password: await bcrypt.hash(password, BCRYPT_COST) },
       select: { id: true, name: true, email: true },
     });
+
+    // Awaited but never fatal. The account exists either way, so a send that
+    // fails must not turn into a 500 the user would read as "try again" —
+    // they would only hit the duplicate-email path. `sendVerificationEmail`
+    // logs the reason and the user can ask for another link from sign-in.
+    await sendVerificationEmail(user.email);
 
     return NextResponse.json({ success: true, data: user }, { status: 201 });
   } catch (error) {

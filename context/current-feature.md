@@ -1,22 +1,59 @@
-# Current Feature
-
-<!-- Feature Name -->
+# Current Feature: Auth Phase 4 — Email verification on register
 
 ## Status
 
 <!-- Not Started|In Progress|Completed -->
 
-Not Started
+In Progress
 
 ## Goals
 
 <!-- Goals & requirements -->
 
+- **Send a verification email on register.** `POST /api/auth/register` creates the user as it does today, then issues a verification token and emails a link through Resend. Account creation still returns 201 — a failed send must not roll back a created account or leak SMTP trouble to the caller.
+- **Verify by clicking the link.** A `GET /verify-email?token=…` route consumes the token, stamps `User.emailVerified` with the current time, and deletes the token. Success lands on `/sign-in` with a "your email is verified" banner.
+- **Handle every failure of that link distinctly** — unknown/already-used token, expired token, and a token whose user no longer exists — each with its own message rather than one generic failure.
+- **Gate credentials sign-in on verification.** An unverified account must not reach `/dashboard` through the credentials provider. GitHub sign-in is *not* gated (see Notes).
+- **Offer a resend.** An unverified user who did not get the email can request another one without disclosing whether an address is registered.
+- **Reuse what exists.** `User.emailVerified` and the `VerificationToken` model have been in the schema since the Prisma feature, so the target is **no migration**. Confirm that before writing one.
+- `npm run lint`, `npx tsc --noEmit`, `npm run build` and `npm run db:test` all pass.
+
 ## Notes
 
 <!-- Any extra notes -->
 
+### Environment
+
+`RESEND_API_KEY` is present in the untracked `.env` (confirmed). `.env.example` needs it added alongside the `AUTH_*` variables, plus whatever sender and base-URL variables the implementation settles on.
+
+`resend` is **not** installed — `npm i resend`. Everything else this feature needs is already a dependency (`zod`, `bcryptjs`, Prisma, Auth.js).
+
+### Decisions settled at `start`
+
+1. **Token storage — reused `VerificationToken`.** No migration, as targeted. Coupling noted: the table is keyed on the email string with no foreign key to `User`, so a deleted account orphans its token (see the sweep below).
+2. **The stored token is a SHA-256 digest.** The email carries the only copy of the plaintext. Confirmed live: the column holds 64 hex characters, not the 43-character token.
+3. **24h TTL, single use.** The row is deleted on use, and on every failure branch, so a link works exactly once.
+4. **An unverified sign-in gets its own message.** It does disclose that the address is registered — but only to someone who already supplied the right password, and `/register` already returns 409 for a taken address, so nothing is disclosed that was not already. Weighed against stranding a legitimate user on "Invalid email or password", the specific message wins. The check sits **after** the password comparison, so a wrong password stays byte-identical to an unknown email.
+
+### Constraints found while loading
+
+- **GitHub users must not be gated.** The GitHub provider's profile mapping does not set `emailVerified`, so an OAuth user's column stays `null`. A blanket check would lock every GitHub account out of the app. The gate belongs in the credentials `authorize` only.
+- ~~**The seeded demo user is unverified.**~~ **Wrong when loaded** — `prisma/seed.ts` already sets `emailVerified: new Date()`, so no seed change was needed and the demo account was never at risk.
+- **Resend's testing sender only reaches your own address.** Without a verified domain, `onboarding@resend.dev` can only send to the email on the Resend account — anything else returns 403 with `You can only send testing emails to your own email address`. So end-to-end testing needs either a verified domain or registering with that address. Confirm which is available before the test pass.
+- **The Resend SDK does not throw.** `emails.send()` returns `{ data, error }`; both halves have to be handled or a failed send looks like a success.
+- **The register form's success copy is now wrong.** `RegisterForm` redirects to `/sign-in?registered=1` and the banner says the account was created. It needs to tell the user to go and check their email.
+- **Orphaned and expired tokens accumulate.** Found in testing, not at load: `VerificationToken` has no foreign key to `User`, so deleting an account leaves its pending token behind, and a link nobody clicks never goes away. `createEmailVerificationToken` now sweeps expired rows on every issue, using the `@@index([expires])` the schema already carried.
+- **`Verification` is already in the error map.** `src/lib/auth-errors.ts` carries a `Verification` entry that Phase 3 recorded as dead without an email provider. Check whether Auth.js can now actually raise it before treating it as this feature's message — it may still be dead, and this feature's failures may deserve their own codes.
+
+### Out of scope / still open after this
+
+- **Rate limiting** — still absent from sign-in and registration, and a resend-verification endpoint makes it worse: unthrottled, it is an email-bomb aimed at any address an attacker names. Carried forward from Phase 2 as the largest open gap.
+- Changing an existing account's email (which should re-trigger verification) — no such UI exists yet.
+- Password reset, which would reuse most of this machinery.
+- The real GitHub round-trip, still unverified from Phases 1–3.
+
 ## History
+
 
 <!-- Keep this updated. Earliest to latest -->
 

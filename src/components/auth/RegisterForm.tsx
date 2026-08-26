@@ -87,7 +87,9 @@ export function RegisterForm() {
     <div className="flex flex-col gap-5">
       {state.error && <FormMessage>{state.error}</FormMessage>}
       {state.created && (
-        <FormMessage variant="success">Account created. Taking you to sign in…</FormMessage>
+        <FormMessage variant="success">
+          Account created. Check your email for the verification link…
+        </FormMessage>
       )}
 
       <form action={formAction} className="flex flex-col gap-4">
