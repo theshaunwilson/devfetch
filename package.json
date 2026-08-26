@@ -12,6 +12,7 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:status": "prisma migrate status",
     "db:seed": "prisma db seed",
+    "db:prune-users": "tsx scripts/prune-users.ts",
     "db:studio": "prisma studio",
     "db:test": "tsx scripts/test-db.ts"
   },
