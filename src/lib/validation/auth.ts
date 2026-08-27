@@ -33,6 +33,15 @@ const password = z
     message: `Password must be at most ${PASSWORD_MAX_BYTES} bytes`,
   });
 
+/**
+ * Shared by every form that sets a password, so registration and reset cannot
+ * end up disagreeing about what a mismatch says or which field it lands on.
+ */
+const PASSWORDS_MATCH = {
+  message: 'Passwords do not match',
+  path: ['confirmPassword'],
+};
+
 export const registerSchema = z
   .object({
     name: z.string().trim().min(1, 'Name is required').max(100),
@@ -40,10 +49,7 @@ export const registerSchema = z
     password,
     confirmPassword: z.string(),
   })
-  .refine((values) => values.password === values.confirmPassword, {
-    message: 'Passwords do not match',
-    path: ['confirmPassword'],
-  });
+  .refine((values) => values.password === values.confirmPassword, PASSWORDS_MATCH);
 
 /**
  * Deliberately looser than `registerSchema`: sign-in only needs the fields to
@@ -60,3 +66,21 @@ export const signInSchema = z.object({
  * getting the password right, and no other field is needed to reissue a link.
  */
 export const resendVerificationSchema = z.object({ email });
+
+/**
+ * Only the address. Separate from `resendVerificationSchema` despite the same
+ * shape: they answer different requests and either could gain a field.
+ */
+export const forgotPasswordSchema = z.object({ email });
+
+/**
+ * The new password and its confirmation. No current password and no email —
+ * the reset token is what proves the account is theirs, and it is read from
+ * the request rather than the form body.
+ */
+export const resetPasswordSchema = z
+  .object({
+    password,
+    confirmPassword: z.string(),
+  })
+  .refine((values) => values.password === values.confirmPassword, PASSWORDS_MATCH);

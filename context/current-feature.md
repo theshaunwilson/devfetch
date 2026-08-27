@@ -1,4 +1,4 @@
-# Current Feature
+# Current Feature: Forgot Password
 
 <!-- Feature Name -->
 
@@ -6,15 +6,54 @@
 
 <!-- Not Started|In Progress|Completed -->
 
-Not Started
+In Progress
 
 ## Goals
 
 <!-- Goals & requirements -->
 
+- Add a **Forgot password?** link on `/sign-in`, next to the password field, pointing at a new `/forgot-password` page.
+- `/forgot-password` takes an email, issues a password-reset token and emails a reset link through Resend. Its reply is **identical** for an unknown address, an OAuth-only account and a real send — it must not disclose whether an address is registered.
+- `/reset-password?token=…` renders a new-password form (password + confirm), validates the token, and on submit hashes the new password at cost 12, writes it, deletes the token, and redirects to `/sign-in?reset=1` with a success banner.
+- Reset tokens reuse the existing **`VerificationToken`** model — **no migration**. Store only a SHA-256 digest, exactly as Auth Phase 4 does; the email carries the only copy of the plaintext.
+- **Namespace reset tokens apart from email-verification tokens.** Both live in one table and `consumeEmailVerificationToken` looks up by token hash alone, so without a scope a verification link would work as a password-reset credential and vice versa. Prefix the `identifier` (e.g. `password-reset:<email>`) and have each consumer reject a record whose scope does not match.
+- Tokens are single-use and short-lived — **1 hour**, not the 24h verification TTL — deleted on use and on every failure branch.
+- Reuse the Phase 2 password rules: `PASSWORD_MIN_LENGTH` (8), the 72-**byte** bcrypt cap, and the passwords-match refine. Both the form and the server parse with the same Zod schema.
+- Every failure branch (`invalid`, `expired`, `unknown-user`) gets its own message, following `verificationErrorMessage()`'s shape rather than one generic failure.
+- `npm run lint`, `npx tsc --noEmit` and `npm run build` pass; the flow is verified end to end in the browser against the seeded Neon **development** branch.
+
 ## Notes
 
 <!-- Any extra notes -->
+
+### Reuses what Auth Phase 4 already built
+
+- `src/lib/auth/verification-token.ts` — the hash/issue/consume pattern, the expired-row sweep, and the "issuing a token drops the previous one" rule.
+- `src/lib/email/client.ts` — lazy `getResend()` and `EMAIL_FROM`; `new Resend(undefined)` throws at construction, so the client must stay lazy.
+- `src/lib/email/verification.ts` — the inline-styled template, the UTC "sent at" note explaining that only the newest link works, and the return-don't-throw contract.
+- `src/lib/app-url.ts` — `absoluteUrl()`, so the link's origin comes from `APP_URL` and never from a caller-controlled `Host` header.
+- `src/lib/validation/auth.ts` — the `email` pipe (trim → lowercase → validate; chaining rejects instead of normalizing) and the `password` rules.
+- `src/lib/auth-errors.ts` — the code→message maps the banners read.
+
+### Design decisions to settle at `start`
+
+1. **Token scoping.** Prefix `identifier` with a purpose rather than adding a column — keeps the no-migration constraint. The consume path must check the prefix, since lookup is by token hash alone.
+2. **OAuth-only accounts** (`password: null`). Recommendation: issue no reset link for them, and reply with the same generic confirmation, so a GitHub-only account cannot be converted into a credentials account through the inbox alone. The alternative — letting the reset set a first password — is defensible but widens the account model.
+3. **`emailVerified` interaction.** Clicking a reset link proves inbox control. Recommendation: stamp `emailVerified` if it is null when the reset succeeds; otherwise a user who resets their password is still refused by the `authorize` gate with no obvious way out.
+4. **Relationship to `EMAIL_VERIFICATION`.** Recommendation: do **not** gate password reset on that flag — it means "is verification required", not "is mail configured". Practical consequence carried over from Phase 4: with no verified Resend domain, only the Resend account's own address actually receives the email.
+5. **After a successful reset**, redirect to `/sign-in?reset=1` rather than signing the user in automatically.
+
+### Known limitations to record, not fix
+
+- **No rate limiting**, still, anywhere in auth. `/forgot-password` adds another email-bomb vector aimed at any named address — the same gap the resend action left open.
+- **Sessions are JWTs**, so changing a password does not invalidate sessions already issued. There is no revocation mechanism to hook into.
+- A single-use link can in principle be burned by a link scanner prefetching it. The reset link is a `GET` to a *form*, not a mutation, so this is milder here than for `/verify-email` — the password only changes on `POST`.
+
+### Files this is expected to touch
+
+- New: `src/app/(auth)/forgot-password/page.tsx`, `src/app/(auth)/reset-password/page.tsx`, `src/components/auth/ForgotPasswordForm.tsx`, `src/components/auth/ResetPasswordForm.tsx`, `src/lib/auth/password-reset-token.ts`, `src/lib/email/password-reset.ts`.
+- Changed: `src/actions/auth.ts` (request + perform reset), `src/lib/validation/auth.ts` (`forgotPasswordSchema`, `resetPasswordSchema`), `src/lib/auth-errors.ts` (reset failure messages), `src/lib/auth-redirect.ts` (paths), `src/components/auth/SignInForm.tsx` (the link and a `reset=1` banner), `src/app/(auth)/sign-in/page.tsx` (`?reset` param).
+- Possibly refactored: `src/lib/auth/verification-token.ts`, if the hashing and scoping are shared rather than duplicated.
 
 ## History
 

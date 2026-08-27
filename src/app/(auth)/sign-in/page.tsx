@@ -20,6 +20,8 @@ interface SignInPageProps {
     verified?: string;
     /** Set by `/verify-email` when it did not. */
     verifyError?: string;
+    /** Set after a password reset succeeded. */
+    reset?: string;
   }>;
 }
 
@@ -45,6 +47,7 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
         initialError={signInErrorMessage(params.error) ?? verificationErrorMessage(params.verifyError)}
         justRegistered={params.registered === '1'}
         justVerified={params.verified === '1'}
+        justReset={params.reset === '1'}
         verificationRequired={isEmailVerificationEnabled()}
       />
     </>

@@ -47,3 +47,26 @@ export function verificationErrorMessage(code: unknown): string | undefined {
 
   return VERIFICATION_ERRORS[code] ?? 'We could not verify that link. Please try again.';
 }
+
+/**
+ * Outcomes of a password reset link, shown on `/reset-password` before the
+ * form is offered and after a submit that came too late. Each names something
+ * the user can act on — every one of them ends at a fresh request, so the
+ * page pairs these with a link back to `/forgot-password`.
+ */
+const PASSWORD_RESET_ERRORS: Record<string, string> = {
+  // Superseded links land here too: issuing a new token deletes the previous
+  // one, so the most common cause is a newer email already in the inbox.
+  invalid:
+    'That reset link is no longer valid. If you asked for more than one email, open the most recent one — otherwise request a new link.',
+  expired: 'That reset link has expired. Reset links last one hour; request a new one.',
+  'unknown-user': 'That account no longer exists. Create a new one to continue.',
+};
+
+const PASSWORD_RESET_FALLBACK = 'We could not use that reset link. Please request a new one.';
+
+export function passwordResetErrorMessage(code: unknown): string {
+  if (typeof code !== 'string') return PASSWORD_RESET_FALLBACK;
+
+  return PASSWORD_RESET_ERRORS[code] ?? PASSWORD_RESET_FALLBACK;
+}
