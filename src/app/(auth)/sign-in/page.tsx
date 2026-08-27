@@ -5,6 +5,7 @@ import { auth } from '@/auth';
 import { SignInForm } from '@/components/auth/SignInForm';
 import { safeCallbackUrl } from '@/lib/auth-redirect';
 import { signInErrorMessage, verificationErrorMessage } from '@/lib/auth-errors';
+import { isEmailVerificationEnabled } from '@/lib/features';
 
 export const metadata: Metadata = {
   title: 'Sign in · DevFetch',
@@ -44,6 +45,7 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
         initialError={signInErrorMessage(params.error) ?? verificationErrorMessage(params.verifyError)}
         justRegistered={params.registered === '1'}
         justVerified={params.verified === '1'}
+        verificationRequired={isEmailVerificationEnabled()}
       />
     </>
   );

@@ -31,7 +31,15 @@ interface RegisterState {
   created?: boolean;
 }
 
-export function RegisterForm() {
+interface RegisterFormProps {
+  /**
+   * From `isEmailVerificationEnabled()` on the server. `EMAIL_VERIFICATION` is
+   * not a `NEXT_PUBLIC_` variable, so this component cannot read it itself.
+   */
+  verificationRequired: boolean;
+}
+
+export function RegisterForm({ verificationRequired }: RegisterFormProps) {
   const router = useRouter();
 
   const [state, formAction] = useActionState<RegisterState, FormData>(async (_prevState, formData) => {
@@ -88,7 +96,9 @@ export function RegisterForm() {
       {state.error && <FormMessage>{state.error}</FormMessage>}
       {state.created && (
         <FormMessage variant="success">
-          Account created. Check your email for the verification link…
+          {verificationRequired
+            ? 'Account created. Check your email for the verification link…'
+            : 'Account created. Taking you to sign in…'}
         </FormMessage>
       )}
 

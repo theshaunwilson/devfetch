@@ -1,4 +1,4 @@
-# Current Feature
+# Current Feature: Email Verification Toggle
 
 <!-- Feature Name -->
 
@@ -6,15 +6,54 @@
 
 <!-- Not Started|In Progress|Completed -->
 
-Not Started
+Completed
 
 ## Goals
 
 <!-- Goals & requirements -->
 
+- **One flag, one module.** `src/lib/features.ts` exports `isEmailVerificationEnabled()`, reading `process.env.EMAIL_VERIFICATION` **at call time** rather than at module scope, so `next build` cannot bake the value into the bundle. Anything other than the literal `"off"` means enabled — an unset or misspelled variable keeps the gate on. Config lives in a module rather than a database column, the same call `src/lib/pro.ts` makes: this is an operational decision, not a property of any row.
+- **Registration, flag off.** `src/app/api/auth/register/route.ts` skips `sendVerificationEmail()` entirely — no token issued, no Resend call — and creates the user with `emailVerified: new Date()` set at creation. Still `201`, still the same response shape.
+- **Sign-in, flag off.** The `!user.emailVerified` branch in `authorize` (`src/auth.ts`) is skipped, so accounts left sitting unverified from an earlier run are not stranded. The bcrypt comparison and the `!user?.password` guard are untouched, and the check stays *after* the comparison when the flag is on.
+- **Resend, flag off.** `resendVerificationEmail()` in `src/actions/auth.ts` no-ops before touching Prisma or Resend, and returns the same `{ sent: true }` it always has. Unreachable from the UI in this state, but it is an exported server action and anyone can post to it.
+- **Copy follows the flag.** With verification off, the register success banner drops "Check your email for the verification link…" and the `?registered=1` sign-in banner drops "Check your email for the verification link, then sign in." Both `RegisterForm` and `SignInForm` are `'use client'` and `EMAIL_VERIFICATION` is not `NEXT_PUBLIC_`, so the value has to arrive as a prop from the server components that render them — `src/app/(auth)/register/page.tsx` and `src/app/(auth)/sign-in/page.tsx`.
+- **`/verify-email` stays live in both states**, so a link already sitting in an inbox when the flag flips still works and still stamps the account. It needs no change.
+- **`.env.example` documents `EMAIL_VERIFICATION`** — what it accepts, that the default is on, and why it is off locally. The untracked `.env` gets `EMAIL_VERIFICATION="off"` so registration works for any address while no domain is verified at Resend.
+
 ## Notes
 
 <!-- Any extra notes -->
+
+### The problem this solves
+
+Resend rejects every recipient but the Resend account's own address until a domain is verified at `resend.com/domains` — plus-aliases included, tested during Auth Phase 4. Registration returns `201` regardless (the send is deliberately non-fatal), but the account is then unreachable: `authorize` refuses the credentials sign-in and no link ever arrives. Any address other than the account's own is effectively a dead account.
+
+### Decisions taken at load
+
+- **Env var over deriving it from `RESEND_API_KEY`.** Deriving would need no new variable, but it would make the key mean two things at once — you could not keep the key set for other mail while turning verification off, nor test the verified flow without one.
+- **Default on, opt out with `"off"`.** A production deploy that forgets the variable then fails secure. The inverse default is more convenient locally and silently ships open registration when someone forgets it in `.env.production`.
+- **`emailVerified` is stamped at creation while the flag is off**, rather than left null. Turning the flag back on later would otherwise lock out every account created in the meantime, and their only route back is the resend button — which needs exactly the working Resend recipient that is missing. The sign-in gate is bypassed while off *as well*, which covers accounts already sitting unverified from before the flag existed.
+- **No migration.** `User.emailVerified` and `VerificationToken` are already in the schema and neither changes.
+
+### Watch for
+
+- `.env.production` is loaded in preference to `.env` by `npm run build` / `npm run start`, so a production-mode local run reads its own value of this flag — and its own database branch. Set the variable in both files or expect the two modes to disagree.
+- `src/lib/email/verification.ts` and `src/lib/auth/verification-token.ts` should not learn about the flag. Callers decide whether to send; the senders stay dumb, so `/verify-email` and any future password-reset flow keep working unchanged.
+- `state.canResend` needs no guard: it is only ever set on the `EMAIL_NOT_VERIFIED_CODE` branch, which cannot fire while the flag is off, so the resend button disappears on its own.
+
+### Test steps
+
+1. With `EMAIL_VERIFICATION="off"`: register an address that is **not** the Resend account's — expect `201`, no Resend call in the server log, and `emailVerified` set in the database.
+2. Sign in as that user immediately. Expect `/dashboard` and a session cookie, with no verification banner and no resend button anywhere.
+3. Confirm the register and `?registered=1` banners no longer mention email.
+4. Plant a user with `emailVerified = NULL` and sign in — expect success while the flag is off, proving nobody from an earlier run is stranded.
+5. Remove the variable (or set it to `"on"`), restart, and re-run Auth Phase 4's path end to end against the Resend account address: registration emails a link, sign-in is refused with the verification message, the resend button appears, and the link verifies. Wrong password on an unverified account must still return `code=credentials`, byte-identical to an unknown email.
+6. Flip back to `"off"` and confirm the user from step 5, still unverified, can now sign in.
+7. `npm run lint`, `npx tsc --noEmit`, `npm run build`, `npm run db:test`.
+
+### Out of scope
+
+Still no rate limiting anywhere on auth. A UI or database-backed feature-flag system, per-environment flag dashboards, and any second flag are not part of this — one variable, one helper. Email change and password reset remain unbuilt.
 
 ## History
 
