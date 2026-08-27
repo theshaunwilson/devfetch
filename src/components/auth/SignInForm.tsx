@@ -21,6 +21,11 @@ interface SignInFormProps {
   justRegistered?: boolean;
   /** Set after `/verify-email` accepted a link. */
   justVerified?: boolean;
+  /**
+   * From `isEmailVerificationEnabled()` on the server. `EMAIL_VERIFICATION` is
+   * not a `NEXT_PUBLIC_` variable, so this component cannot read it itself.
+   */
+  verificationRequired: boolean;
 }
 
 export function SignInForm({
@@ -28,6 +33,7 @@ export function SignInForm({
   initialError,
   justRegistered,
   justVerified,
+  verificationRequired,
 }: SignInFormProps) {
   const [state, formAction] = useActionState<SignInState, FormData>(signInWithCredentials, {
     error: initialError,
@@ -40,7 +46,9 @@ export function SignInForm({
     : justVerified
       ? 'Email verified. Sign in to continue.'
       : justRegistered
-        ? 'Account created. Check your email for the verification link, then sign in.'
+        ? verificationRequired
+          ? 'Account created. Check your email for the verification link, then sign in.'
+          : 'Account created. Sign in to continue.'
         : null;
 
   return (

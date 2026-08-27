@@ -8,6 +8,7 @@ import { signIn, signOut } from '@/auth';
 import { EMAIL_NOT_VERIFIED_CODE, EMAIL_NOT_VERIFIED_MESSAGE } from '@/lib/auth-errors';
 import { SIGN_IN_PATH, safeCallbackUrl } from '@/lib/auth-redirect';
 import { sendVerificationEmail } from '@/lib/email/verification';
+import { isEmailVerificationEnabled } from '@/lib/features';
 import { prisma } from '@/lib/prisma';
 import { resendVerificationSchema, signInSchema } from '@/lib/validation/auth';
 
@@ -106,6 +107,14 @@ export async function resendVerificationEmail(
   }
 
   const { email } = parsed.data;
+
+  // Nothing to resend when no link is ever issued. Unreachable from the UI in
+  // that state — `canResend` is only set on the unverified branch, which
+  // cannot fire — but this is an exported server action and anyone can post
+  // to it. The reply is the same one every other outcome gets.
+  if (!isEmailVerificationEnabled()) {
+    return { sent: true };
+  }
 
   try {
     const user = await prisma.user.findUnique({

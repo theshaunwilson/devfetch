@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { RegisterForm } from '@/components/auth/RegisterForm';
 import { DEFAULT_SIGNED_IN_PATH } from '@/lib/auth-redirect';
+import { isEmailVerificationEnabled } from '@/lib/features';
 
 export const metadata: Metadata = {
   title: 'Create an account · DevFetch',
@@ -23,7 +24,7 @@ export default async function RegisterPage() {
         <p className="text-sm text-muted-foreground">Store smarter. Build faster.</p>
       </div>
 
-      <RegisterForm />
+      <RegisterForm verificationRequired={isEmailVerificationEnabled()} />
     </>
   );
 }

@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { Prisma } from '@/generated/prisma/client';
 import { sendVerificationEmail } from '@/lib/email/verification';
+import { isEmailVerificationEnabled } from '@/lib/features';
 import { prisma } from '@/lib/prisma';
 import { registerSchema } from '@/lib/validation/auth';
 
@@ -51,18 +52,31 @@ export async function POST(request: Request): Promise<NextResponse<RegisterRespo
       return NextResponse.json({ success: false, error: EMAIL_TAKEN }, { status: 409 });
     }
 
+    const verificationRequired = isEmailVerificationEnabled();
+
     const user = await prisma.user.create({
-      // `emailVerified` stays null until the link in the email is clicked,
-      // and `authorize` refuses a credentials sign-in until it is set.
-      data: { name, email, password: await bcrypt.hash(password, BCRYPT_COST) },
+      data: {
+        name,
+        email,
+        password: await bcrypt.hash(password, BCRYPT_COST),
+        // With verification on, this stays null until the link in the email is
+        // clicked and `authorize` refuses a credentials sign-in until it is
+        // set. With it off, stamping it here means turning the flag back on
+        // later does not lock out everyone who registered in the meantime —
+        // their only way back would be a resend, which needs exactly the
+        // working Resend recipient that is missing.
+        emailVerified: verificationRequired ? null : new Date(),
+      },
       select: { id: true, name: true, email: true },
     });
 
-    // Awaited but never fatal. The account exists either way, so a send that
-    // fails must not turn into a 500 the user would read as "try again" —
-    // they would only hit the duplicate-email path. `sendVerificationEmail`
-    // logs the reason and the user can ask for another link from sign-in.
-    await sendVerificationEmail(user.email);
+    if (verificationRequired) {
+      // Awaited but never fatal. The account exists either way, so a send that
+      // fails must not turn into a 500 the user would read as "try again" —
+      // they would only hit the duplicate-email path. `sendVerificationEmail`
+      // logs the reason and the user can ask for another link from sign-in.
+      await sendVerificationEmail(user.email);
+    }
 
     return NextResponse.json({ success: true, data: user }, { status: 201 });
   } catch (error) {

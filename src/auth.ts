@@ -5,6 +5,7 @@ import Credentials from 'next-auth/providers/credentials';
 
 import authConfig, { credentialsFields } from '@/auth.config';
 import { EMAIL_NOT_VERIFIED_CODE } from '@/lib/auth-errors';
+import { isEmailVerificationEnabled } from '@/lib/features';
 import { prisma } from '@/lib/prisma';
 import { signInSchema } from '@/lib/validation/auth';
 
@@ -57,7 +58,10 @@ const credentialsProvider = Credentials({
     // Deliberately after the password check, never before it. Reversed, this
     // would answer "is this address registered?" for anyone who asked,
     // without their needing the password.
-    if (!user.emailVerified) {
+    //
+    // The flag is read here as well as at registration, so accounts left
+    // unverified while it was on are not stranded once it goes off.
+    if (isEmailVerificationEnabled() && !user.emailVerified) {
       throw new EmailNotVerifiedError();
     }
 
