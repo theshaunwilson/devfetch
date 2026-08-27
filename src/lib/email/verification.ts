@@ -4,32 +4,12 @@ import { createEmailVerificationToken } from '@/lib/auth/verification-token';
 import { absoluteUrl } from '@/lib/app-url';
 
 import { EMAIL_FROM, getResend } from './client';
+import { sentAtNote } from './sent-at';
 
 const SUBJECT = 'Verify your email for DevFetch';
 
-/**
- * Fixed to UTC, like `lib/format.ts`, so the stamp does not depend on where
- * the server happens to run. Kept local — nothing else sends mail yet.
- */
-const SENT_AT_FORMATTER = new Intl.DateTimeFormat('en-GB', {
-  day: 'numeric',
-  month: 'short',
-  year: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-  timeZone: 'UTC',
-  timeZoneName: 'short',
-});
-
-/**
- * Issuing a token deletes the one before it, so an inbox holding several of
- * these has exactly one working link and no way to tell which — the subject
- * and body are otherwise identical, and mail clients thread them together.
- * The timestamp is what makes the newest identifiable.
- */
-function sentAtNote(sentAt: Date): string {
-  return `Sent ${SENT_AT_FORMATTER.format(sentAt)}. If you asked for more than one verification email, only the most recent link works.`;
-}
+/** How the shared "sent at" note names this email. */
+const VERIFICATION_EMAIL = 'verification email';
 
 function verificationHtml(verifyUrl: string, sentAt: Date): string {
   // Inlined styles and a table-free single column: every rule below is one an
@@ -48,7 +28,7 @@ function verificationHtml(verifyUrl: string, sentAt: Date): string {
         <span style="word-break:break-all;">${verifyUrl}</span>
       </p>
       <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#64748b;">
-        ${sentAtNote(sentAt)}
+        ${sentAtNote(sentAt, VERIFICATION_EMAIL)}
       </p>
       <p style="margin:12px 0 0;font-size:13px;line-height:1.6;color:#64748b;">
         This link expires in 24 hours. If you did not create a DevFetch account, you can ignore this email.
@@ -64,7 +44,7 @@ function verificationText(verifyUrl: string, sentAt: Date): string {
     'Confirm this address to finish setting up your DevFetch account:',
     verifyUrl,
     '',
-    sentAtNote(sentAt),
+    sentAtNote(sentAt, VERIFICATION_EMAIL),
     '',
     'This link expires in 24 hours.',
     'If you did not create a DevFetch account, you can ignore this email.',

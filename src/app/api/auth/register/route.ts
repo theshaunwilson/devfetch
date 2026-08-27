@@ -1,15 +1,12 @@
-import bcrypt from 'bcryptjs';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { Prisma } from '@/generated/prisma/client';
+import { hashPassword } from '@/lib/auth/password';
 import { sendVerificationEmail } from '@/lib/email/verification';
 import { isEmailVerificationEnabled } from '@/lib/features';
 import { prisma } from '@/lib/prisma';
 import { registerSchema } from '@/lib/validation/auth';
-
-/** Matches the cost `prisma/seed.ts` uses for the demo account. */
-const BCRYPT_COST = 12;
 
 const EMAIL_TAKEN = 'An account with that email already exists';
 
@@ -58,7 +55,7 @@ export async function POST(request: Request): Promise<NextResponse<RegisterRespo
       data: {
         name,
         email,
-        password: await bcrypt.hash(password, BCRYPT_COST),
+        password: await hashPassword(password),
         // With verification on, this stays null until the link in the email is
         // clicked and `authorize` refuses a credentials sign-in until it is
         // set. With it off, stamping it here means turning the flag back on

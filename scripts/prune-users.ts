@@ -9,6 +9,10 @@
  */
 import { config as loadEnv } from 'dotenv';
 
+// Safe to import statically: no Prisma, no `server-only`, just the identifier
+// format. The client itself still has to be imported dynamically, below.
+import { allScopedIdentifiers } from '../src/lib/auth/token-scopes';
+
 // Prisma 7 no longer loads .env files itself. Mirror Next.js precedence:
 // .env.local wins, .env fills in the gaps.
 loadEnv({ path: '.env.local', quiet: true });
@@ -102,10 +106,14 @@ async function prune(prisma: Prisma, users: DoomedUser[]): Promise<void> {
     // Only their own types. The seeded system types have `userId: null`, and
     // a null never matches an `in` filter, so those are left alone.
     prisma.itemType.deleteMany({ where: { userId: { in: userIds } } }),
-    // `VerificationToken` is keyed on the email string with no foreign key to
-    // `User`, so nothing cascades here — an unclicked verification link would
-    // outlive the account it was issued for.
-    prisma.verificationToken.deleteMany({ where: { identifier: { in: emails } } }),
+    // `VerificationToken` has no foreign key to `User`, so nothing cascades
+    // here — an unclicked link would outlive the account it was issued for.
+    // Identifiers are scoped (`"<scope>:<email>"`), so the addresses are
+    // expanded through the same helper the app writes with rather than
+    // matched raw; matching on the bare email finds nothing.
+    prisma.verificationToken.deleteMany({
+      where: { identifier: { in: emails.flatMap(allScopedIdentifiers) } },
+    }),
     // Cascades to Account and Session.
     prisma.user.deleteMany({ where: { id: { in: userIds } } }),
   ]);

@@ -5,12 +5,26 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
 import { signIn, signOut } from '@/auth';
-import { EMAIL_NOT_VERIFIED_CODE, EMAIL_NOT_VERIFIED_MESSAGE } from '@/lib/auth-errors';
+import {
+  consumePasswordResetToken,
+  type PasswordResetResult,
+} from '@/lib/auth/password-reset-token';
+import {
+  EMAIL_NOT_VERIFIED_CODE,
+  EMAIL_NOT_VERIFIED_MESSAGE,
+  passwordResetErrorMessage,
+} from '@/lib/auth-errors';
 import { SIGN_IN_PATH, safeCallbackUrl } from '@/lib/auth-redirect';
+import { sendPasswordResetEmail } from '@/lib/email/password-reset';
 import { sendVerificationEmail } from '@/lib/email/verification';
 import { isEmailVerificationEnabled } from '@/lib/features';
 import { prisma } from '@/lib/prisma';
-import { resendVerificationSchema, signInSchema } from '@/lib/validation/auth';
+import {
+  forgotPasswordSchema,
+  resendVerificationSchema,
+  resetPasswordSchema,
+  signInSchema,
+} from '@/lib/validation/auth';
 
 /**
  * One message for a wrong password, an unknown email and an OAuth-only
@@ -148,4 +162,114 @@ export async function signInWithGitHub(formData: FormData): Promise<void> {
 
 export async function signOutAction(): Promise<void> {
   await signOut({ redirectTo: SIGN_IN_PATH });
+}
+
+export interface ForgotPasswordState {
+  sent?: boolean;
+  error?: string;
+  fieldErrors?: Record<string, string[]>;
+  /** Echoed back so a rejected address survives React resetting the form. */
+  email?: string;
+}
+
+/**
+ * Emails a password reset link.
+ *
+ * The reply never varies: an unknown address, an account that signs in with
+ * GitHub only and a real send all return the same confirmation, so this
+ * cannot be used to test whether an address is registered. A failed send is
+ * not reported either, for the same reason — it is logged instead.
+ */
+export async function requestPasswordReset(
+  _prevState: ForgotPasswordState,
+  formData: FormData,
+): Promise<ForgotPasswordState> {
+  const submittedEmail = formData.get('email');
+  // Kept as typed rather than normalized, so the field does not silently
+  // rewrite itself under the user after a rejected attempt.
+  const email = typeof submittedEmail === 'string' ? submittedEmail : undefined;
+
+  const parsed = forgotPasswordSchema.safeParse({ email: submittedEmail });
+
+  if (!parsed.success) {
+    return {
+      error: 'Enter a valid email address.',
+      fieldErrors: z.flattenError(parsed.error).fieldErrors,
+      email,
+    };
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email: parsed.data.email },
+      select: { password: true },
+    });
+
+    // Only accounts that already have a password. An account created through
+    // GitHub has none, and writing one off the back of inbox control alone
+    // would hand it a second way in that its owner never asked for — they can
+    // still sign in with GitHub. Told the same thing either way.
+    if (user?.password) {
+      await sendPasswordResetEmail(parsed.data.email);
+    }
+  } catch (error) {
+    console.error('Could not send the password reset email:', error);
+  }
+
+  return { sent: true };
+}
+
+export interface ResetPasswordState {
+  error?: string;
+  fieldErrors?: Record<string, string[]>;
+  /**
+   * Set when the failure is the link rather than the input, so the form can
+   * step aside for a way to request a new one. Retyping cannot help here.
+   */
+  linkDead?: boolean;
+}
+
+/**
+ * Sets a new password against a reset token, then sends the user to sign in
+ * with it — deliberately not signing them in here, so the new password is
+ * exercised once before they rely on it.
+ */
+export async function resetPassword(
+  _prevState: ResetPasswordState,
+  formData: FormData,
+): Promise<ResetPasswordState> {
+  const token = formData.get('token');
+
+  if (typeof token !== 'string' || !token) {
+    return { error: passwordResetErrorMessage('invalid'), linkDead: true };
+  }
+
+  const parsed = resetPasswordSchema.safeParse({
+    password: formData.get('password'),
+    confirmPassword: formData.get('confirmPassword'),
+  });
+
+  if (!parsed.success) {
+    return { fieldErrors: z.flattenError(parsed.error).fieldErrors };
+  }
+
+  let result: PasswordResetResult;
+
+  try {
+    result = await consumePasswordResetToken(token, parsed.data.password);
+  } catch (error) {
+    console.error('Could not reset the password:', error);
+
+    return { error: 'Could not reset your password. Please try again.' };
+  }
+
+  if (result.status !== 'reset') {
+    // The link was live when the page rendered and is not any more — spent in
+    // another tab, or expired while the form sat open.
+    return { error: passwordResetErrorMessage(result.status), linkDead: true };
+  }
+
+  // Throws NEXT_REDIRECT, so nothing below runs. Outside the try above for
+  // exactly that reason.
+  redirect(`${SIGN_IN_PATH}?reset=1`);
 }

@@ -12,6 +12,7 @@ import { SubmitButton } from '@/components/auth/SubmitButton';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { FORGOT_PASSWORD_PATH } from '@/lib/auth-redirect';
 
 interface SignInFormProps {
   callbackUrl: string;
@@ -21,6 +22,8 @@ interface SignInFormProps {
   justRegistered?: boolean;
   /** Set after `/verify-email` accepted a link. */
   justVerified?: boolean;
+  /** Set after a password reset landed back here. */
+  justReset?: boolean;
   /**
    * From `isEmailVerificationEnabled()` on the server. `EMAIL_VERIFICATION` is
    * not a `NEXT_PUBLIC_` variable, so this component cannot read it itself.
@@ -33,6 +36,7 @@ export function SignInForm({
   initialError,
   justRegistered,
   justVerified,
+  justReset,
   verificationRequired,
 }: SignInFormProps) {
   const [state, formAction] = useActionState<SignInState, FormData>(signInWithCredentials, {
@@ -43,13 +47,15 @@ export function SignInForm({
   // so the error takes the slot rather than stacking on top of it.
   const successBanner = state.error
     ? null
-    : justVerified
-      ? 'Email verified. Sign in to continue.'
-      : justRegistered
-        ? verificationRequired
-          ? 'Account created. Check your email for the verification link, then sign in.'
-          : 'Account created. Sign in to continue.'
-        : null;
+    : justReset
+      ? 'Password updated. Sign in with your new password.'
+      : justVerified
+        ? 'Email verified. Sign in to continue.'
+        : justRegistered
+          ? verificationRequired
+            ? 'Account created. Check your email for the verification link, then sign in.'
+            : 'Account created. Sign in to continue.'
+          : null;
 
   return (
     <div className="flex flex-col gap-5">
@@ -80,7 +86,15 @@ export function SignInForm({
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="password">Password</Label>
+          <div className="flex items-center justify-between gap-2">
+            <Label htmlFor="password">Password</Label>
+            <Link
+              href={FORGOT_PASSWORD_PATH}
+              className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            >
+              Forgot password?
+            </Link>
+          </div>
           <Input
             id="password"
             name="password"
