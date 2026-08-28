@@ -84,3 +84,31 @@ export const resetPasswordSchema = z
     confirmPassword: z.string(),
   })
   .refine((values) => values.password === values.confirmPassword, PASSWORDS_MATCH);
+
+/**
+ * Changing a password from inside a session.
+ *
+ * `currentPassword` is deliberately as loose as `signInSchema`'s: enforcing
+ * the policy on it would report "at least 8 characters" for a wrong guess,
+ * naming the rule instead of just refusing. The new password gets the full
+ * rule set, since that one is being written.
+ */
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'Enter your current password'),
+    password,
+    confirmPassword: z.string(),
+  })
+  .refine((values) => values.password === values.confirmPassword, PASSWORDS_MATCH);
+
+/**
+ * Deleting an account. Only the typed confirmation — the session says whose
+ * account it is, and the address is compared against it on the server rather
+ * than trusted from the form.
+ *
+ * Normalized the same way `email` is, so the confirmation matches the stored
+ * address whatever case or padding it was typed with.
+ */
+export const deleteAccountSchema = z.object({
+  confirmEmail: z.string().trim().toLowerCase(),
+});
