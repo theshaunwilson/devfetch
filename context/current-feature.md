@@ -1,20 +1,88 @@
-# Current Feature
-
-<!-- Feature Name -->
+# Current Feature: Rate Limiting for Auth
 
 ## Status
 
 <!-- Not Started|In Progress|Completed -->
 
-Not Started
+In Progress
 
 ## Goals
 
 <!-- Goals & requirements -->
 
+- Rate limit every auth entry point so brute force, credential stuffing and email-bombing are bounded — the gap every auth phase since Phase 2 has recorded as open.
+- Add `@upstash/ratelimit` + `@upstash/redis`, configured from `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`.
+- One reusable utility at `src/lib/rate-limit.ts`: sliding window, returning `{ success, remaining, reset }`.
+- Derive the client IP from `x-forwarded-for` (Vercel) with a sane fallback; key by IP, or IP + email where the table says so.
+- Enforce the spec's five limits:
+  - sign-in (credentials) — 5 per 15 min, keyed IP + email
+  - register — 3 per hour, keyed IP
+  - forgot password — 3 per hour, keyed IP
+  - reset password — 5 per 15 min, keyed IP
+  - resend verification — 3 per 15 min, keyed IP + email
+- API routes that are rate limited return **429** with `{ error: "Too many attempts. Please try again in X minutes." }` and a `Retry-After` header.
+- The limited-out message reaches the user in the UI, not just the network tab.
+- **Fail open**: if Upstash is unreachable or unconfigured, the request proceeds rather than locking everyone out.
+
 ## Notes
 
 <!-- Any extra notes -->
+
+Spec: `context/features/rate-limiting-spec.md`.
+
+### Three of the five endpoints in the spec's table do not exist
+
+The spec is written as if all five are API routes. Checked against the tree — only two are:
+
+| Spec endpoint | What actually exists |
+|---|---|
+| `/api/auth/callback/credentials` | real, but it is NextAuth's catch-all; sign-in is driven by the `signInWithCredentials` **server action**, which calls `signIn('credentials', …)` |
+| `/api/auth/register` | real — `src/app/api/auth/register/route.ts` |
+| `/api/auth/forgot-password` | **does not exist** — server action `requestPasswordReset` |
+| `/api/auth/reset-password` | **does not exist** — server action `resetPassword` |
+| `/api/auth/resend-verification` | **does not exist** — server action `resendVerificationEmail` |
+
+All three missing ones are server actions in `src/actions/auth.ts`. A server action has no HTTP status to
+return and no headers to set from inside the action, so "429 + `Retry-After`" is meaningful for
+`/api/auth/register` and nothing else. The other four have to surface the limit through the state each
+form already renders. To settle at `start`: enforce inside the actions and return an error string
+(preserving the existing `{ error, fieldErrors, email }` shape), or build new API routes purely so the
+status codes exist. The former is far less churn and keeps the forms working as they do today.
+
+### Sign-in is the awkward one, exactly as the spec's own note says
+
+`authorize` runs inside `@auth/core`, not in our request handler, so it has no clean access to headers.
+Limiting in `signInWithCredentials` before `signIn()` is called is the straightforward point, but note
+that leaves the raw `POST /api/auth/callback/credentials` route unlimited for anyone who posts to it
+directly. Whether that matters enough to also gate inside `authorize` is a `start` decision.
+
+### The spec says toast; this codebase has no toasts
+
+No toast library is installed (`sonner` is absent) and every auth form — sign-in, register, forgot
+password, reset password — renders errors as inline banners through `useActionState`. `coding-standards.md`
+does say "user-friendly error messages via toast", so the standard and the built reality disagree.
+Adding `sonner` for one message is a lot; matching the existing banners is nearly free. Decide at `start`.
+
+### Fail open is the stated requirement, and it is the opposite of every other auth choice here
+
+`EMAIL_VERIFICATION` was deliberately built to fail *secure*. This one is specified to fail *open*, which
+is right for availability but means a missing env var silently disables all limiting. Whatever is built
+should be loud about it (a log line at minimum) so an unconfigured deploy is not mistaken for a protected
+one, and unconfigured-at-boot should be distinguishable from Upstash-down-right-now.
+
+### Carried over from previous phases, still relevant
+
+- Sessions are JWTs with no revocation, so limiting is the only lever against online guessing.
+- `/forgot-password` and the resend action are email-bomb vectors aimed at any named address — the strongest
+  argument for the IP + email keys.
+- Both the register route and the auth actions run on `force-dynamic` paths already, so no static-render
+  concerns.
+
+### Not in scope
+
+Rate limiting anything outside auth (profile change-password is a guessing surface too, but the spec does
+not list it), the middleware refactor the spec files under "consider later", and any account lockout or
+CAPTCHA. No migration is expected — this stores nothing in Postgres.
 
 ## History
 

@@ -4,9 +4,10 @@ import NextAuth, { CredentialsSignin } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 
 import authConfig, { credentialsFields } from '@/auth.config';
-import { EMAIL_NOT_VERIFIED_CODE } from '@/lib/auth-errors';
+import { EMAIL_NOT_VERIFIED_CODE, RATE_LIMITED_CODE } from '@/lib/auth-errors';
 import { isEmailVerificationEnabled } from '@/lib/features';
 import { prisma } from '@/lib/prisma';
+import { checkIpEmailRateLimit } from '@/lib/rate-limit';
 import { signInSchema } from '@/lib/validation/auth';
 
 /**
@@ -16,6 +17,21 @@ import { signInSchema } from '@/lib/validation/auth';
  */
 export class EmailNotVerifiedError extends CredentialsSignin {
   code = EMAIL_NOT_VERIFIED_CODE;
+}
+
+/**
+ * Thrown once an IP has spent its sign-in budget against one address.
+ *
+ * Carries the window's reset time on the instance rather than only in `code`,
+ * since Auth.js hands the error object itself back to the server action and
+ * the message has to name a wait the user can act on.
+ */
+export class RateLimitedError extends CredentialsSignin {
+  code = RATE_LIMITED_CODE;
+
+  constructor(readonly reset: number) {
+    super();
+  }
 }
 
 /**
@@ -42,6 +58,17 @@ const credentialsProvider = Credentials({
     }
 
     const { email, password } = parsed.data;
+
+    // Before the lookup and before bcrypt, so a caller who is already over
+    // the limit costs us neither a query nor a hash. Enforced here rather
+    // than in the sign-in server action because `authorize` is the one point
+    // every credentials attempt passes through — posting straight at
+    // `/api/auth/callback/credentials` skips the action entirely.
+    const rateLimit = await checkIpEmailRateLimit('signIn', email);
+
+    if (!rateLimit.success) {
+      throw new RateLimitedError(rateLimit.reset);
+    }
 
     const user = await prisma.user.findUnique({
       where: { email },
