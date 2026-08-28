@@ -51,7 +51,9 @@ export function DeleteAccountDialog({
       }}
     >
       <AlertDialogTrigger asChild>
-        <Button variant="destructive">Delete account</Button>
+        <Button variant="destructive" className="w-full sm:w-auto">
+          Delete account
+        </Button>
       </AlertDialogTrigger>
 
       <AlertDialogContent>
@@ -72,8 +74,12 @@ export function DeleteAccountDialog({
             and cancel the submission before it reached the server. */}
         <form action={formAction} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="confirmEmail">
-              Type <span className="font-mono text-foreground">{email}</span> to confirm
+            {/* `block`, not the Label's default `flex`: a flex row does not
+                wrap, so a longer address than the seeded demo one ran past
+                the dialog's right edge. `break-all` covers an address with
+                no break opportunity in it at all. */}
+            <Label htmlFor="confirmEmail" className="block">
+              Type <span className="font-mono break-all text-foreground">{email}</span> to confirm
             </Label>
             <Input
               id="confirmEmail"

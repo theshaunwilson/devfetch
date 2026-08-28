@@ -1,13 +1,12 @@
 'use client';
 
-import { LogOut, Settings } from 'lucide-react';
+import { LogOut, User } from 'lucide-react';
 import Link from 'next/link';
 import { useId } from 'react';
 
 import { signOutAction } from '@/actions/auth';
 import { useSidebar } from '@/components/dashboard/SidebarProvider';
 import { UserAvatar } from '@/components/user/UserAvatar';
-import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,8 +23,8 @@ interface SidebarUserProps {
 }
 
 /**
- * User area pinned to the bottom of the sidebar. The avatar opens an account
- * menu; the gear goes to the profile page.
+ * User area pinned to the bottom of the sidebar. The row opens an account
+ * menu holding the profile link and sign out.
  */
 export function SidebarUser({ user }: SidebarUserProps) {
   const { closeMobile } = useSidebar();
@@ -35,7 +34,7 @@ export function SidebarUser({ user }: SidebarUserProps) {
   const signOutFormId = useId();
 
   return (
-    <div className="flex shrink-0 items-center gap-1 border-t px-3 py-3">
+    <div className="shrink-0 border-t px-3 py-3">
       {/* Outside the menu: the item that submits it unmounts when the menu closes. */}
       <form id={signOutFormId} action={signOutAction} className="hidden" />
 
@@ -43,7 +42,7 @@ export function SidebarUser({ user }: SidebarUserProps) {
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="flex min-w-0 flex-1 items-center gap-3 rounded-md px-1 py-1 text-left transition-colors hover:bg-accent aria-expanded:bg-accent"
+            className="flex w-full min-w-0 items-center gap-3 rounded-md px-1 py-1 text-left transition-colors hover:bg-accent aria-expanded:bg-accent"
           >
             <UserAvatar user={user} />
 
@@ -70,6 +69,14 @@ export function SidebarUser({ user }: SidebarUserProps) {
           <DropdownMenuSeparator />
 
           <DropdownMenuItem asChild>
+            {/* Closes the mobile drawer like every other sidebar link. */}
+            <Link href="/profile" onClick={closeMobile}>
+              <User className="size-4" />
+              Profile
+            </Link>
+          </DropdownMenuItem>
+
+          <DropdownMenuItem asChild>
             <button type="submit" form={signOutFormId} className="w-full">
               <LogOut className="size-4" />
               Sign out
@@ -77,12 +84,6 @@ export function SidebarUser({ user }: SidebarUserProps) {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-
-      <Button asChild variant="ghost" size="icon" aria-label="Profile">
-        <Link href="/profile" onClick={closeMobile}>
-          <Settings className="size-4" />
-        </Link>
-      </Button>
     </div>
   );
 }
