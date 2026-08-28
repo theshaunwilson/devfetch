@@ -6,7 +6,7 @@ import { cache } from 'react';
 
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
-import type { CurrentUser } from '@/types/user';
+import type { CurrentUser, ProfileUser } from '@/types/user';
 
 /**
  * The signed-in user's profile, or null when nobody is signed in. Cached so
@@ -38,3 +38,45 @@ export async function getCurrentUserId(): Promise<string | null> {
 
   return user?.id ?? null;
 }
+
+/**
+ * The signed-in user with the extra fields the profile page renders.
+ *
+ * A separate query rather than a widened `getCurrentUser`, so the sidebar —
+ * which runs on every dashboard request — keeps selecting only the four
+ * columns it draws. `password` is read but never returned: only whether one
+ * exists leaves this function.
+ */
+export const getProfileUser = cache(async (): Promise<ProfileUser | null> => {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    return null;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      image: true,
+      createdAt: true,
+      password: true,
+    },
+  });
+
+  if (!user) {
+    return null;
+  }
+
+  const { password, createdAt, ...rest } = user;
+
+  return {
+    ...rest,
+    createdAt: createdAt.toISOString(),
+    // The hash stops here. Only the boolean crosses to the client, where it
+    // decides whether the change-password form renders at all.
+    hasPassword: password !== null,
+  };
+});

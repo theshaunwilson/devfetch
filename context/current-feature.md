@@ -1,20 +1,57 @@
-# Current Feature
-
-<!-- Feature Name -->
+# Current Feature: Profile Page
 
 ## Status
 
 <!-- Not Started|In Progress|Completed -->
 
-Not Started
+In Progress
 
 ## Goals
 
 <!-- Goals & requirements -->
 
+- Build out `/profile` from its current read-only stub into a real profile page
+- Display user info: email, name, avatar (GitHub image or initials fallback), account creation date
+- Show usage stats: total items, total collections, and a per-type breakdown (snippet, prompt, note, command, url, file, image)
+- Change password — visible **only** for users who signed up with email/password, not GitHub OAuth
+- Delete account, behind a confirmation dialog
+- Route stays protected (already matched by the proxy)
+- Follow existing patterns: `src/lib/db/*` for queries, server actions in `src/actions/`, Zod schemas in `src/lib/validation/`, `{ success, data, error }` returns
+
 ## Notes
 
 <!-- Any extra notes -->
+
+### What already exists
+
+- `/profile` exists as a display-only stub (`src/app/profile/page.tsx`) — avatar, display name, email, a back link and a "not available yet" line. It is `force-dynamic` and already redirects to `/sign-in?callbackUrl=%2Fprofile` when the row behind a valid session is gone.
+- The proxy matcher already covers `/profile/:path*`, so route protection needs no change.
+- `getCurrentUser()` selects only `id`, `name`, `email`, `image` — `createdAt` is **not** in `CurrentUser`, so either the type widens or the page runs its own query.
+- `getItemStats()` gives `{ total, favorites }` and `getCollectionStats()` the collection side; `getItemTypes()` already returns every available type with a per-type `itemCount` via `item.groupBy({ by: ['typeId'] })` — the type breakdown may not need a new query at all.
+- `hashPassword` lives in `src/lib/auth/password.ts`; `registerSchema` / `resetPasswordSchema` and the shared passwords-match refine are in `src/lib/validation/auth.ts`. The 72-**byte** bcrypt cap and the `.trim().toLowerCase().pipe()` email ordering are settled rules — reuse, don't re-derive.
+- No `dialog` or `alert-dialog` in `src/components/ui/` yet, so the delete confirmation needs `shadcn add`.
+
+### Decisions settled at `start`
+
+- **Layout** — `/profile` stays a standalone centered page, widened from `max-w-lg` to `max-w-3xl`. Putting it inside the dashboard shell would need a route-group refactor of the working `dashboard/layout.tsx`, which is beyond the spec.
+- **Email vs OAuth user** — a `hasPassword` boolean derived from `User.password != null`, never the column itself. An `Account`-row check would mis-handle a user who has both.
+- **Change password requires the current password.** Sessions are JWTs with no revocation, so a stolen session could otherwise silently replace the credential. The current password is validated with a `min(1)` rule, not the full policy, so a wrong one cannot disclose what the policy is.
+- **Delete confirms by typing the account email.** Works identically for GitHub-only and email accounts, unlike a password prompt which would need a second flow.
+- **Delete reuses the `prune-users` ordering** — items → collections → tags → itemTypes → scoped tokens → user, in one `$transaction`. Tokens go through `allScopedIdentifiers`, since `VerificationToken` has no FK to `User`.
+- **Delete signs out afterwards**, so the JWT naming a deleted row is dropped rather than left to fail on the next request.
+
+### Found in testing
+
+- **A pre-existing infinite redirect loop, hit immediately.** `/sign-in` redirected any session-holder to `?callbackUrl=`, and `/profile` redirects a missing user row back to `/sign-in?callbackUrl=%2Fprofile` — so a JWT naming a deleted account looped forever and the browser refused to render. Reached on the first page load, with a stale token for `Reset Tester`, an account pruned during Forgot Password. The stub had the identical redirect, so it predates this feature, but the feature's own route walks into it. `/sign-in` now resolves through `getCurrentUser()` rather than `auth()` alone, applying the rule the codebase already states — the lookup, not the token, decides. `/register` is left as it was: it redirects to `/dashboard`, which tolerates a null user, so it does not loop.
+- **The `Restrict` claim was overstated.** A plain `user.delete()` against a user whose items used their own custom type **succeeded** — probed inside a rolled-back transaction, so nothing was lost. Postgres resolved the cascade in an order that did not trip `Item.type`'s `Restrict`. The explicit ordering is kept because that order is not guaranteed and it matches `prune-users`, but it is defensive, not load-bearing, and the note claiming a plain cascade "can abort" was corrected rather than left standing.
+
+### Out of scope / carried forward
+
+- Still no rate limiting anywhere on auth — a change-password endpoint adds another guessing surface.
+- Changing a password does not invalidate existing JWT sessions; no revocation mechanism exists to hook into.
+- Email change remains unbuilt.
+- The real GitHub OAuth round-trip stays unverified from Phases 1–3. The OAuth-only branch of this page was exercised with a minted session JWT and a `password: null` row, not a real GitHub login.
+- `changePassword`'s own OAuth guard ("this account signs in with GitHub") is **inspection-only**: it is unreachable from the UI, which does not render the form for those accounts, and a raw POST needs React's bound-argument encoding — the same limitation the email-verification toggle hit.
 
 ## History
 
