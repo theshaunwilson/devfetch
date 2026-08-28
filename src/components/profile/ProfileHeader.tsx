@@ -1,14 +1,23 @@
 import { CalendarDays } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { UserAvatar } from '@/components/user/UserAvatar';
 import { formatLongDate } from '@/lib/format';
 import { getDisplayName } from '@/lib/user';
 import type { ProfileUser } from '@/types/user';
 
-/** Identity card: avatar, name, email and when the account was created. */
-export function ProfileHeader({ user }: { user: ProfileUser }) {
+interface ProfileHeaderProps {
+  user: ProfileUser;
+  /** The account actions, rendered beneath the identity row. */
+  actions: React.ReactNode;
+}
+
+/**
+ * Identity card: avatar, name, email, when the account was created, and the
+ * account actions.
+ */
+export function ProfileHeader({ user, actions }: ProfileHeaderProps) {
   return (
     <Card>
       <CardContent className="flex flex-col items-center gap-4 text-center sm:flex-row sm:items-center sm:text-left">
@@ -33,6 +42,10 @@ export function ProfileHeader({ user }: { user: ProfileUser }) {
           </p>
         </div>
       </CardContent>
+
+      {/* Full width below `sm` so neither button can be squeezed narrower than
+          its own label; auto width and right-aligned once there is room. */}
+      <CardFooter className="flex flex-col gap-2 sm:flex-row sm:justify-end">{actions}</CardFooter>
     </Card>
   );
 }
