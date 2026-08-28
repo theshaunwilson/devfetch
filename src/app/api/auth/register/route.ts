@@ -6,6 +6,7 @@ import { hashPassword } from '@/lib/auth/password';
 import { sendVerificationEmail } from '@/lib/email/verification';
 import { isEmailVerificationEnabled } from '@/lib/features';
 import { prisma } from '@/lib/prisma';
+import { checkIpRateLimit, rateLimitMessage, retryAfterSeconds } from '@/lib/rate-limit';
 import { registerSchema } from '@/lib/validation/auth';
 
 const EMAIL_TAKEN = 'An account with that email already exists';
@@ -21,6 +22,18 @@ type RegisterResponse =
   | { success: false; error: string; fieldErrors?: Record<string, string[]> };
 
 export async function POST(request: Request): Promise<NextResponse<RegisterResponse>> {
+  // Before the body is even read: bulk account creation is what this limit
+  // exists to stop, so a successful registration spends a token too, not only
+  // a rejected one.
+  const rateLimit = await checkIpRateLimit('register');
+
+  if (!rateLimit.success) {
+    return NextResponse.json(
+      { success: false, error: rateLimitMessage(rateLimit.reset) },
+      { status: 429, headers: { 'Retry-After': String(retryAfterSeconds(rateLimit.reset)) } },
+    );
+  }
+
   let body: unknown;
 
   try {

@@ -9,6 +9,18 @@ export const EMAIL_NOT_VERIFIED_MESSAGE =
   'Verify your email before signing in. Check your inbox for the link we sent you.';
 
 /**
+ * The `code` carried by the error `authorize` throws once an IP has spent its
+ * sign-in budget against one address. Distinct from the generic failure on
+ * purpose: this one is not a wrong password, and telling someone to keep
+ * retyping would be useless advice.
+ *
+ * Nothing is disclosed by naming it — the limit is keyed on the very address
+ * the caller just typed, so it says only "you have tried this too often",
+ * which they already know.
+ */
+export const RATE_LIMITED_CODE = 'rate_limited';
+
+/**
  * Auth.js redirects to `pages.error` with `?error=<code>` for failures it
  * raises outside a form action — the OAuth handshake, mostly. Codes it does
  * not name here fall through to the generic message.

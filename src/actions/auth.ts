@@ -4,7 +4,7 @@ import { AuthError } from 'next-auth';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
-import { signIn, signOut } from '@/auth';
+import { RateLimitedError, signIn, signOut } from '@/auth';
 import {
   consumePasswordResetToken,
   type PasswordResetResult,
@@ -19,6 +19,7 @@ import { sendPasswordResetEmail } from '@/lib/email/password-reset';
 import { sendVerificationEmail } from '@/lib/email/verification';
 import { isEmailVerificationEnabled } from '@/lib/features';
 import { prisma } from '@/lib/prisma';
+import { checkIpEmailRateLimit, checkIpRateLimit, rateLimitMessage } from '@/lib/rate-limit';
 import {
   forgotPasswordSchema,
   resendVerificationSchema,
@@ -81,6 +82,12 @@ export async function signInWithCredentials(
     });
   } catch (error) {
     if (error instanceof AuthError) {
+      // Auth.js rethrows the error `authorize` threw, so the instance — and
+      // with it the reset time — survives the trip back here.
+      if (error instanceof RateLimitedError) {
+        return { error: rateLimitMessage(error.reset), email };
+      }
+
       // Auth.js rethrows the error `authorize` threw, so the code survives.
       // Everything else stays deliberately indistinguishable.
       if ('code' in error && error.code === EMAIL_NOT_VERIFIED_CODE) {
@@ -128,6 +135,16 @@ export async function resendVerificationEmail(
   // to it. The reply is the same one every other outcome gets.
   if (!isEmailVerificationEnabled()) {
     return { sent: true };
+  }
+
+  // Keyed by address as well as IP, because the abuse this stops lands in
+  // someone else's inbox: without the email in the key, one machine could
+  // spread its budget across many addresses. Checked after the flag test so a
+  // deployment with verification off spends no Upstash quota at all.
+  const rateLimit = await checkIpEmailRateLimit('resendVerification', email);
+
+  if (!rateLimit.success) {
+    return { error: rateLimitMessage(rateLimit.reset) };
   }
 
   try {
@@ -199,6 +216,15 @@ export async function requestPasswordReset(
     };
   }
 
+  // After parsing, so a mistyped address does not spend the budget of the
+  // person who then types it correctly. Everything expensive — the lookup,
+  // the token, the send — sits behind this.
+  const rateLimit = await checkIpRateLimit('forgotPassword');
+
+  if (!rateLimit.success) {
+    return { error: rateLimitMessage(rateLimit.reset), email };
+  }
+
   try {
     const user = await prisma.user.findUnique({
       where: { email: parsed.data.email },
@@ -238,6 +264,17 @@ export async function resetPassword(
   _prevState: ResetPasswordState,
   formData: FormData,
 ): Promise<ResetPasswordState> {
+  // First, before the token is even looked at: submitting tokens is exactly
+  // how this endpoint would be attacked, so a guess must cost a token from
+  // the budget whether or not it parses. Legitimate users rarely reach here
+  // more than once — the form parses client-side, so a mismatch never
+  // becomes a request.
+  const rateLimit = await checkIpRateLimit('resetPassword');
+
+  if (!rateLimit.success) {
+    return { error: rateLimitMessage(rateLimit.reset) };
+  }
+
   const token = formData.get('token');
 
   if (typeof token !== 'string' || !token) {
