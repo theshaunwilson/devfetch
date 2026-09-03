@@ -8,17 +8,24 @@ import { cn } from '@/lib/utils';
 interface ItemDrawerActionsProps {
   isFavorite: boolean;
   isPinned: boolean;
+  onEdit: () => void;
+  /** False until the full item has loaded — there is nothing to edit yet. */
+  canEdit: boolean;
 }
 
 /**
  * The drawer's action bar.
  *
- * Layout only for now — favouriting, pinning, copying, editing and deleting all
- * need mutations that do not exist yet, so the buttons land together with them
- * rather than one working button sitting among four dead ones. The favourite
- * and pin states still render, since they come from the item itself.
+ * Edit is live. Favouriting, pinning, copying and deleting still need mutations
+ * that do not exist yet, so those four stay inert; their state still renders,
+ * since it comes from the item itself.
  */
-export function ItemDrawerActions({ isFavorite, isPinned }: ItemDrawerActionsProps) {
+export function ItemDrawerActions({
+  isFavorite,
+  isPinned,
+  onEdit,
+  canEdit,
+}: ItemDrawerActionsProps) {
   return (
     // Wraps rather than overflows: buttons are `shrink-0`, so on a narrow
     // screen the bar would otherwise run past the drawer's edge.
@@ -41,7 +48,7 @@ export function ItemDrawerActions({ isFavorite, isPinned }: ItemDrawerActionsPro
       {/* One group, so the pair stays together when the bar wraps and the
           auto margin only pushes them right while they share a line. */}
       <div className="ml-auto flex items-center gap-1">
-        <Button variant="ghost" size="sm">
+        <Button variant="ghost" size="sm" onClick={onEdit} disabled={!canEdit}>
           <Pencil className="size-4" />
           Edit
         </Button>

@@ -50,12 +50,23 @@ export interface ItemDetailCollection {
 }
 
 /**
+ * The item's type as the drawer knows it. Carries the slug on top of what a
+ * card needs, because the edit form decides which fields to show from it —
+ * `name` is user-facing text and a custom type could reuse one.
+ */
+export interface ItemDetailType extends DashboardItemType {
+  slug: string;
+}
+
+/**
  * An item as rendered in the detail drawer: everything a card already knows,
  * plus the fields only the drawer shows.
  */
 export interface ItemDetail extends DashboardItem {
+  type: ItemDetailType;
   content: string | null;
   language: string | null;
+  url: string | null;
   collection: ItemDetailCollection | null;
   /** ISO string, like `updatedAt` */
   createdAt: string;
@@ -65,3 +76,14 @@ export interface ItemDetail extends DashboardItem {
 export type ItemDetailResponse =
   | { success: true; data: ItemDetail }
   | { success: false; error: string };
+
+/**
+ * What `updateItem` returns. The updated item comes back in full so the drawer
+ * can refresh itself without a second fetch.
+ *
+ * `fieldErrors` carries Zod's per-field messages; `error` is always set on a
+ * failure, so a caller that only shows one message still has something to say.
+ */
+export type UpdateItemResult =
+  | { success: true; data: ItemDetail }
+  | { success: false; error: string; fieldErrors?: Record<string, string[]> };

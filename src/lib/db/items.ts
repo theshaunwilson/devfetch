@@ -6,7 +6,8 @@ import { cache } from 'react';
 
 import { getCurrentUserId } from '@/lib/db/user';
 import { prisma } from '@/lib/prisma';
-import type { Prisma } from '@/generated/prisma/client';
+import type { UpdateItemData } from '@/lib/validation/items';
+import { Prisma } from '@/generated/prisma/client';
 import type {
   DashboardItem,
   ItemDetail,
@@ -118,8 +119,12 @@ export const getItemsByTypeSlug = cache(async (slug: string): Promise<ItemsByTyp
 /** Everything the detail drawer renders on top of what a card already holds. */
 const ITEM_DETAIL_SELECT = {
   ...ITEM_SELECT,
+  // Widened rather than inherited: the edit form picks which type-specific
+  // fields to show from the slug, and a card has no use for it.
+  type: { select: { id: true, name: true, slug: true, icon: true, color: true } },
   content: true,
   language: true,
+  url: true,
   createdAt: true,
   collection: { select: { id: true, name: true } },
 } satisfies Prisma.ItemSelect;
@@ -129,8 +134,10 @@ type ItemDetailPayload = Prisma.ItemGetPayload<{ select: typeof ITEM_DETAIL_SELE
 function toItemDetail(item: ItemDetailPayload): ItemDetail {
   return {
     ...toDashboardItem(item),
+    type: item.type,
     content: item.content,
     language: item.language,
+    url: item.url,
     collection: item.collection,
     createdAt: item.createdAt.toISOString(),
   };
@@ -158,6 +165,74 @@ export async function getItemDetail(id: string): Promise<ItemDetail | null> {
   if (!item) return null;
 
   return toItemDetail(item);
+}
+
+/**
+ * Writes the editable half of one item and returns it in full.
+ *
+ * Scoped to the signed-in user inside the `where` clause rather than by reading
+ * the row first: the id comes from the client, so the ownership filter has to
+ * be part of the write itself — a read-then-write could be raced, and
+ * `findUnique` would accept the id alone. No match returns null, so an item
+ * belonging to somebody else is indistinguishable from one that never existed.
+ *
+ * Only the keys the caller actually sent are written. A field the edit form
+ * never showed — content on a link item, say — is absent rather than blank, so
+ * it is left as it was instead of being cleared.
+ */
+export async function updateItem(id: string, data: UpdateItemData): Promise<ItemDetail | null> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) return null;
+
+  const { title, description, content, language, url, tags } = data;
+
+  // Assigned one at a time rather than spread: `undefined` in a Prisma `data`
+  // object is ignored, but an explicit `null` clears the column, and the two
+  // have to stay distinguishable.
+  const fields: Prisma.ItemUpdateInput = { title };
+
+  if (description !== undefined) fields.description = description;
+  if (content !== undefined) fields.content = content;
+  if (language !== undefined) fields.language = language;
+  if (url !== undefined) fields.url = url;
+
+  if (tags) {
+    fields.tags = {
+      // Replace rather than diff, as the spec asks: every join row goes, then
+      // the new set is connected, creating any tag the user does not own yet.
+      deleteMany: {},
+      create: tags.map((name) => ({
+        tag: {
+          connectOrCreate: {
+            where: { userId_name: { userId, name } },
+            create: { userId, name },
+          },
+        },
+      })),
+    };
+  }
+
+  try {
+    const item = await prisma.item.update({
+      // Not a unique filter on its own — Prisma allows the extra scalar here,
+      // and that is the whole point: the update matches nothing at all when the
+      // item is not this user's.
+      where: { id, userId },
+      data: fields,
+      select: ITEM_DETAIL_SELECT,
+    });
+
+    return toItemDetail(item);
+  } catch (error) {
+    // P2025: no row matched the filter. Unknown id and somebody else's id both
+    // land here, and both mean the same thing to the caller.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+      return null;
+    }
+
+    throw error;
+  }
 }
 
 /** Item counts for the dashboard stat tiles. */

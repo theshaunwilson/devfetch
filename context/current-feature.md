@@ -1,20 +1,44 @@
-# Current Feature
-
-<!-- Feature Name -->
+# Current Feature: Item Drawer — Edit Mode
 
 ## Status
 
 <!-- Not Started|In Progress|Completed -->
 
-Not Started
+In Progress
 
 ## Goals
 
 <!-- Goals & requirements -->
 
+- Clicking Edit (pencil) in the item drawer's action bar switches the open drawer into edit mode inline — no navigation, no separate page
+- In edit mode the action bar is replaced by Save and Cancel; Cancel discards changes and returns to view mode
+- Save persists via a server action, returns to view mode and refreshes the drawer data from the action's own response (no second fetch), with a toast on success or error
+- Editable for every type: Title (text, required), Description (textarea, optional), Tags (comma-separated input converted to a tag array on save)
+- Type-specific fields, shown only for the relevant type: Content (textarea — snippet, prompt, command, note), Language (text — snippet, command), URL (text — link)
+- Item type, collection and the created/updated dates stay display-only in edit mode
+- `updateItemSchema` (Zod) validates the payload in the server action before the database is touched: `title` non-empty and trimmed; `description`, `content`, `language` string-or-null and optional; `url` a valid URL or null; `tags` an array of trimmed non-empty strings
+- Zod errors come back in the `{ success: false, error }` response so the client can display them
+- `updateItem(itemId, data)` lands in `src/actions/items.ts` following the `{ success, data, error }` pattern — parses with Zod, resolves the session via `auth()`, checks ownership, then calls the query function
+- `updateItem` query function in `src/lib/db/items.ts` disconnects all existing tags and connect-or-creates the new ones, returning the updated `ItemDetail`
+- `router.refresh()` after a successful save so the underlying card list reflects the change
+
 ## Notes
 
 <!-- Any extra notes -->
+
+- Spec: `context/features/item-drawer-edit-spec.md`
+- **Toast decided in favour of the spec**: `sonner` was installed (`shadcn add sonner`), since both the spec and `coding-standards.md` ask for toasts and a drawer that returns to view mode on save has nowhere sensible to put a banner. shadcn generates `sonner.tsx` against `next-themes`, which this app does not use — `<html>` carries a literal `dark` class and there is no provider, so the hook would report the OS preference and light the toast up on a light machine. `theme="dark"` is hardcoded and `next-themes` was uninstalled; `sonner` is the only added dependency. `<Toaster />` mounts in `AppShell`, not the root layout, since the auth pages report themselves with inline banners
+- No form library, per the spec: controlled inputs over local state, `useTransition` for the pending state
+- **Two fields the drawer did not have.** `ItemDetail` carried no `url` (the Item Drawer feature deferred type-specific rendering) and no type `slug`, and the edit form needs both — the slug is what decides which type-specific inputs to show. Both were added to `ITEM_DETAIL_SELECT`; `ItemDetailType extends DashboardItemType` narrows the type on the detail only, so a card still selects four columns
+- **View mode now shows the URL for link items.** Not in the spec, but a field you can edit has to be readable back or a save cannot be checked
+- `editableFieldsFor(slug)` and `parseTagInput` live in `src/lib/items.ts` as pure utilities, so both are unit-tested. A custom (Pro) type matches no slug and gets title/description/tags only
+- **Ownership rides in the `where` clause of the update itself** — `prisma.item.update({ where: { id, userId } })`, which Prisma allows — rather than a read-then-write that could be raced. P2025 becomes `null`, so somebody else's item reads exactly like one that does not exist
+- **An omitted field is left alone; a blank one is stored as NULL.** That distinction is what stops a link item's save wiping the content of an item that was once a different type, and it is why the query assigns each field rather than spreading
+- **A comment was written wrongly and corrected**: the action first hand-rolled a field-error grouper on the claim that Zod's `flattenError` drops nested paths like `tags.0`. A mutation test refused to fail, and probing Zod 4 directly showed `flattenError` already groups on the first path segment — the helper was deleted for `z.flattenError`, the same call `src/actions/profile.ts` makes
+- **The tag replace idiom was proven, not assumed.** `deleteMany: {}` plus `create` in one nested write re-creates a kept tag's join row, which would violate the `[itemId, tagId]` primary key if Prisma ran the create first. Verified against the Neon dev branch inside a rolled-back transaction: a kept tag survived, and nothing persisted
+- **Verified in the browser** against the seeded branch at 1440px and 390px, signed in as the demo account: edit mode shows exactly the spec's fields per type (snippet → content + language, prompt → content, link → URL and no content); Save is disabled on a whitespace-only title; Cancel discards and re-seeds clean on the next open; a real save trimmed the title, wrote the tags with a duplicate and trailing comma absorbed, showed "Item updated" and refreshed the card list behind the drawer through `router.refresh()`; an over-long title came back as an inline field error plus an error toast with the typed values still in place; `type="url"` blocks a malformed URL natively before any request; Escape from edit mode closes the drawer and returns focus to the exact card; zero elements past the drawer's edge at either width
+- **Left as open, not built**: unlinking the last item using a tag leaves an orphaned `Tag` row (the spec's replace strategy says nothing about cleanup); Escape discards an in-progress edit with no confirmation; the other four action-bar buttons are still inert; and the type-specific gating is client-side only — the action writes whatever field it is given, which is harmless since nothing renders an unused column
+- Database left as found: 18 items, 5 collections, 27 tags, 38 `ItemTag` rows, 2 users. One seeded snippet's `updatedAt` moved, which a real save cannot avoid
 
 ## History
 
