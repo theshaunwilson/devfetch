@@ -1,3 +1,5 @@
+import { cookies } from 'next/headers';
+
 import { Sidebar } from '@/components/dashboard/Sidebar';
 import { SidebarProvider } from '@/components/dashboard/SidebarProvider';
 import { Topbar } from '@/components/dashboard/Topbar';
@@ -5,6 +7,7 @@ import { ItemDrawerProvider } from '@/components/items/ItemDrawerProvider';
 import { getSidebarCollections } from '@/lib/db/collections';
 import { getItemTypes } from '@/lib/db/items';
 import { getCurrentUser } from '@/lib/db/user';
+import { isSidebarOpen, SIDEBAR_COOKIE } from '@/lib/sidebar';
 
 const SIDEBAR_COLLECTION_LIMIT = 5;
 
@@ -14,14 +17,20 @@ const SIDEBAR_COLLECTION_LIMIT = 5;
  * sidebar reads its types and collections per request.
  */
 export async function AppShell({ children }: { children: React.ReactNode }) {
-  const [itemTypes, collections, user] = await Promise.all([
+  const [itemTypes, collections, user, cookieStore] = await Promise.all([
     getItemTypes(),
     getSidebarCollections(SIDEBAR_COLLECTION_LIMIT),
     getCurrentUser(),
+    cookies(),
   ]);
 
+  // Read on the server so the first paint already has the right width. The
+  // two sections mount their own AppShell, so this is also what carries the
+  // choice across a move between /dashboard and /items.
+  const sidebarOpen = isSidebarOpen(cookieStore.get(SIDEBAR_COOKIE)?.value);
+
   return (
-    <SidebarProvider>
+    <SidebarProvider defaultOpen={sidebarOpen}>
       <div className="flex h-svh overflow-hidden">
         <Sidebar itemTypes={itemTypes} collections={collections} user={user} />
         <div className="flex min-w-0 flex-1 flex-col">

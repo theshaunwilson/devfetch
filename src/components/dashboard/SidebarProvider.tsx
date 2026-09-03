@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { sidebarCookie } from '@/lib/sidebar';
 
 interface SidebarContextValue {
   /** Desktop sidebar visibility */
@@ -18,18 +19,36 @@ interface SidebarContextValue {
 
 const SidebarContext = createContext<SidebarContextValue | null>(null);
 
-export function SidebarProvider({ children }: { children: React.ReactNode }) {
+interface SidebarProviderProps {
+  children: React.ReactNode;
+  /**
+   * The sidebar's state as the server read it from the cookie. Required, not
+   * defaulted, so a new caller cannot silently render the wrong width and
+   * reintroduce the hydration mismatch this exists to avoid.
+   */
+  defaultOpen: boolean;
+}
+
+export function SidebarProvider({ children, defaultOpen }: SidebarProviderProps) {
   const isMobile = useIsMobile();
-  const [isOpen, setOpen] = useState(true);
+  const [isOpen, setOpen] = useState(defaultOpen);
   const [isMobileOpen, setMobileOpen] = useState(false);
 
   const toggle = useCallback(() => {
+    // The drawer is transient — it should never be open on arrival — so only
+    // the desktop state is persisted.
     if (isMobile) {
       setMobileOpen((open) => !open);
-    } else {
-      setOpen((open) => !open);
+      return;
     }
-  }, [isMobile]);
+
+    const next = !isOpen;
+
+    setOpen(next);
+    // Written on the toggle rather than in an effect: the cookie records a
+    // deliberate choice, not every render that happens to have a value.
+    document.cookie = sidebarCookie(next);
+  }, [isMobile, isOpen]);
 
   const closeMobile = useCallback(() => setMobileOpen(false), []);
 
