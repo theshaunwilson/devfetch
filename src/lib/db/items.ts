@@ -2,10 +2,12 @@
 // which the tsx scripts import, where `server-only` throws.
 import 'server-only';
 
+import { cache } from 'react';
+
 import { getCurrentUserId } from '@/lib/db/user';
 import { prisma } from '@/lib/prisma';
 import type { Prisma } from '@/generated/prisma/client';
-import type { DashboardItem, ItemStats, SidebarItemType } from '@/types/item';
+import type { DashboardItem, ItemsByType, ItemStats, SidebarItemType } from '@/types/item';
 
 /** Everything an item row renders: type for the icon and border, plus tags. */
 const ITEM_SELECT = {
@@ -71,6 +73,41 @@ export async function getRecentItems(limit: number): Promise<DashboardItem[]> {
 
   return items.map(toDashboardItem);
 }
+
+/**
+ * One item type resolved from its slug, with the current user's items of that
+ * type, most recently updated first.
+ *
+ * Returns null when the slug names no type the user can see, so the caller can
+ * tell a bad slug from a type that simply holds no items.
+ *
+ * Cached, because the page and its `generateMetadata` both ask for it.
+ */
+export const getItemsByTypeSlug = cache(async (slug: string): Promise<ItemsByType | null> => {
+  const userId = await getCurrentUserId();
+
+  if (!userId) return null;
+
+  const type = await prisma.itemType.findFirst({
+    // System types are global (userId: null), so they cannot be matched on
+    // userId alone.
+    where: { slug, OR: [{ userId: null }, { userId }] },
+    // @@unique([userId, slug]) allows a custom type to reuse a system slug, so
+    // two rows can match. Prefer the user's own.
+    orderBy: { userId: { sort: 'desc', nulls: 'last' } },
+    select: { id: true, name: true, icon: true, color: true },
+  });
+
+  if (!type) return null;
+
+  const items = await prisma.item.findMany({
+    where: { userId, typeId: type.id },
+    orderBy: { updatedAt: 'desc' },
+    select: ITEM_SELECT,
+  });
+
+  return { type, items: items.map(toDashboardItem) };
+});
 
 /** Item counts for the dashboard stat tiles. */
 export async function getItemStats(): Promise<ItemStats> {

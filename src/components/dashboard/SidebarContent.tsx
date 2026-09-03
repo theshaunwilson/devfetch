@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { textColorClass } from '@/lib/colors';
+import { capitalize } from '@/lib/format';
 import { getIcon } from '@/lib/icons';
 import { isProType } from '@/lib/pro';
 import { cn } from '@/lib/utils';
@@ -22,11 +23,6 @@ interface SidebarContentProps {
   collections: SidebarCollections;
   /** Null when the seeded demo user is missing; the user area is then hidden. */
   user: CurrentUser | null;
-}
-
-/** Type names are stored lowercase ("snippet"); the sidebar shows them capitalized. */
-function capitalize(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 /** Marks an item type as Pro-only. Sits left of the row's item count. */
