@@ -11,14 +11,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/auth', () => ({ auth: vi.fn() }));
-vi.mock('@/lib/db/items', () => ({ updateItem: vi.fn() }));
+vi.mock('@/lib/db/items', () => ({ updateItem: vi.fn(), deleteItem: vi.fn() }));
 
 const { auth } = await import('@/auth');
-const { updateItem: updateItemRow } = await import('@/lib/db/items');
-const { updateItem } = await import('./items');
+const { updateItem: updateItemRow, deleteItem: deleteItemRow } = await import('@/lib/db/items');
+const { deleteItem, updateItem } = await import('./items');
 
 const session = vi.mocked(auth);
 const writeRow = vi.mocked(updateItemRow);
+const deleteRow = vi.mocked(deleteItemRow);
 
 const USER_ID = 'user_1';
 const ITEM_ID = 'item_1';
@@ -45,6 +46,7 @@ beforeEach(() => {
   // asserted through unknown rather than reconstructed in full.
   session.mockResolvedValue({ user: { id: USER_ID } } as unknown as never);
   writeRow.mockResolvedValue(saved);
+  deleteRow.mockResolvedValue(true);
 });
 
 describe('updateItem', () => {
@@ -139,6 +141,49 @@ describe('updateItem', () => {
     expect(result).toEqual({
       success: false,
       error: 'Could not save your changes. Please try again.',
+    });
+  });
+});
+
+describe('deleteItem', () => {
+  it('refuses without touching the row when there is no session', async () => {
+    session.mockResolvedValue(null as unknown as never);
+
+    const result = await deleteItem(ITEM_ID);
+
+    expect(result).toEqual({ success: false, error: 'Your session has expired. Sign in again.' });
+    expect(deleteRow).not.toHaveBeenCalled();
+  });
+
+  it('refuses a session with no user id on it', async () => {
+    session.mockResolvedValue({ user: {} } as unknown as never);
+
+    await expect(deleteItem(ITEM_ID)).resolves.toMatchObject({ success: false });
+    expect(deleteRow).not.toHaveBeenCalled();
+  });
+
+  it('reports success once the row is gone', async () => {
+    await expect(deleteItem(ITEM_ID)).resolves.toEqual({ success: true });
+    expect(deleteRow).toHaveBeenCalledWith(ITEM_ID);
+  });
+
+  it('reads a row that did not match as not found rather than as a failure', async () => {
+    deleteRow.mockResolvedValue(false);
+
+    // Somebody else's item and an unknown id are the same answer.
+    await expect(deleteItem(ITEM_ID)).resolves.toEqual({
+      success: false,
+      error: 'That item could not be found.',
+    });
+  });
+
+  it('turns a thrown query into a generic failure rather than leaking it', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    deleteRow.mockRejectedValue(new Error('connection to db-prod-01 refused'));
+
+    await expect(deleteItem(ITEM_ID)).resolves.toEqual({
+      success: false,
+      error: 'Could not delete this item. Please try again.',
     });
   });
 });

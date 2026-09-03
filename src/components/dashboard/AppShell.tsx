@@ -5,6 +5,7 @@ import { SidebarProvider } from '@/components/dashboard/SidebarProvider';
 import { Topbar } from '@/components/dashboard/Topbar';
 import { ItemDrawerProvider } from '@/components/items/ItemDrawerProvider';
 import { Toaster } from '@/components/ui/sonner';
+import { MAIN_CONTENT_ID } from '@/lib/constants';
 import { getSidebarCollections } from '@/lib/db/collections';
 import { getItemTypes } from '@/lib/db/items';
 import { getCurrentUser } from '@/lib/db/user';
@@ -41,7 +42,10 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
         <Sidebar itemTypes={itemTypes} collections={collections} user={user} />
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar />
-          <main className="flex-1 overflow-y-auto">
+          {/* `tabIndex={-1}` so focus has somewhere to land when the element
+              it would have returned to is gone — see the drawer's
+              `onCloseAutoFocus`. */}
+          <main id={MAIN_CONTENT_ID} tabIndex={-1} className="flex-1 overflow-y-auto outline-none">
             {/* Wraps the pages rather than each list, so the one drawer serves
                 the dashboard's two lists and the items grid alike. */}
             <ItemDrawerProvider>{children}</ItemDrawerProvider>
