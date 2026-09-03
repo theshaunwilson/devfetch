@@ -54,6 +54,7 @@ Example v4 configuration:
 - Server Actions: `src/actions/[feature].ts`
 - Types: `src/types/[feature].ts`
 - Lib/Utils: `src/lib/[utility].ts`
+- Tests: co-located `[subject].test.ts` next to the file under test
 
 ## Naming
 
@@ -88,6 +89,23 @@ Example v4 configuration:
 - Use try/catch in Server Actions
 - Return `{ success, data, error }` pattern from actions
 - Display user-friendly error messages via toast
+
+## Testing
+
+- Vitest, `environment: 'node'` — see `vitest.config.mts`
+- **Test server actions (`src/actions`) and utilities (`src/lib`) only.** No
+  component tests: components are verified in the browser
+- Test files are `.ts`, never `.tsx`. The include glob is `src/**/*.test.ts`, so
+  a `.tsx` test is not collected — that is what keeps the scope honest
+- Co-locate: `src/lib/format.test.ts` next to `src/lib/format.ts`
+- Import `describe`, `it`, `expect` and `vi` from `vitest` explicitly — `globals`
+  is off, so nothing is magically in scope
+- No database, no Redis, no network. Mock the module boundary (`@/auth`,
+  `@/lib/prisma`, `@/lib/rate-limit`), not the library behind it, and leave pure
+  modules (Zod schemas, `auth-errors`, `auth-redirect`) real
+- `server-only` is aliased to `test/stubs/server-only.ts`; without it every
+  module that imports it throws on load
+- Prove a new test can fail before trusting it
 
 ## Code Quality
 
