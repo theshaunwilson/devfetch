@@ -1,4 +1,4 @@
-# Current Feature: Vitest for Unit Testing
+# Current Feature: Items Grid — Three Columns on Large Screens
 
 <!-- Feature Name -->
 
@@ -12,50 +12,55 @@ Complete
 
 <!-- Goals & requirements -->
 
-Set up Vitest for unit testing, scoped to **server actions and utilities only** —
-no component tests.
+Widen the `/items/[type]` grid to three columns on large screens, keeping it
+responsive at every size below that.
 
-- Install `vitest` and `@vitest/coverage-v8` as devDependencies
-- Add `vitest.config.mts`: `environment: 'node'`, `@/*` alias, `server-only` stubbed
-- Add `npm run test`, `test:watch` and `test:coverage`
-- Co-locate tests as `src/**/*.test.ts` (`.ts`, never `.tsx`)
-- Cover the pure utilities and the Zod schemas
-- One server action test (`signInWithCredentials`) to establish the mocking pattern
-- Update `context/ai-interaction.md` so the workflow's Test step names unit tests,
-  and add a Testing section to `context/coding-standards.md`
+- `/items/[type]` renders 3 columns on large screens instead of stopping at 2
+- 2 columns at `md` and 1 column on mobile are unchanged
+- No horizontal overflow at any width; cards stay readable, not squeezed
+- Matches the dashboard Collections grid, which already goes to 3
 
 ## Notes
 
 <!-- Any extra notes -->
 
-**Why `environment: 'node'` and no React plugin.** Nothing under test renders, so
-there is no jsdom, no `@vitejs/plugin-react` and no Testing Library. That is the
-whole point of the scope: components are verified in the browser, as the workflow
-already says.
+**The one line that changes.** `src/app/items/[type]/page.tsx:38` is
+`grid gap-4 md:grid-cols-2`. The dashboard Collections grid at
+`src/app/dashboard/page.tsx:41` is already `grid gap-4 md:grid-cols-2
+xl:grid-cols-3`, so this is bringing one grid in line with the other rather
+than inventing a layout — `coding-standards.md` says preserve existing
+patterns.
 
-**`.ts`, not `.tsx`, is the enforcement.** The include pattern is
-`src/**/*.test.ts`. A component test needs JSX, so it needs `.tsx`, so it is not
-collected. The convention is not a rule someone has to remember — the glob refuses
-it.
+**`xl` rather than `lg`.** These pages render inside `AppShell`, so the sidebar
+takes 256px of the viewport. Measured card widths: 342px at 390, 224px at 768,
+352px at 1024, 315px at 1280, 368px at 1440. `lg` would put three columns in
+the 1024px case at ~229px each.
 
-**`server-only` has to be stubbed.** `src/lib/rate-limit.ts`, `src/lib/email/client.ts`
-and the three `src/lib/db/*` modules import it. Its `exports` map resolves to
-`empty.js` only under the `react-server` condition, which Vitest does not set, so
-the default resolution is `index.js` — a file whose entire body is a `throw`.
-Aliased to a stub in `test/stubs/`. Setting `resolve.conditions: ['react-server']`
-instead would fix it too, but that flips resolution for React and Next as well;
-the alias touches one package.
+The load-time argument for `xl` was that ~229px would be "narrower than the
+single-column mobile card" and so too squeezed — **that reasoning was wrong,
+and measuring caught it.** The grid already renders 224px cards at `md`, with
+`ItemCard` truncating titles there today, so `lg` would not have been
+unprecedented. `xl` still stands, but on the honest ground: it is what the
+dashboard Collections grid already uses, and matching it means the two grids
+now agree at every breakpoint rather than approximately. 315px at 1280 is also
+comfortable enough that `2xl` is not needed — the longest seeded title,
+"Multi-stage Next.js Dockerfile", fits there without truncating.
 
-**`next-auth` has to be inlined.** It imports `next/server` with no file extension
-while the `next` package ships no `exports` map at all, so Node's native ESM
-resolution cannot find it. `server.deps.inline: ['next-auth']` hands it to Vite,
-whose resolver adds the extension.
+**Tailwind breakpoints are viewport-based, not container-based.** The sidebar
+collapses, which widens the content area without changing the viewport — so
+the column count will not respond to it. That is the existing behaviour on the
+dashboard too, and changing it would mean container queries, which is well
+past this feature.
 
-**Server actions need mocks, not a database.** `src/actions/auth.ts` reaches
-`@/auth` (which builds NextAuth and the Prisma adapter), `@/lib/prisma` (which
-throws at import when `DATABASE_URL` is unset), `next/navigation` and
-`@/lib/rate-limit`. All are `vi.mock`ed, so the suite runs with no database and no
-environment, and a test never touches the Neon branch.
+**Verify in the browser, not only in the diff.** The item counts are uneven —
+the seeded types hold 4, 3, 5, 0, 0, 0 and 6 — so the interesting cases are a
+row that does not divide by three (4 items leaves a lone card) and the three
+empty types, which render the empty state instead of a grid. Widths worth
+checking: 390, 768, 1024, 1280 and 1440.
+
+**No unit tests expected.** This is a Tailwind class on a server component;
+there is no server action or utility involved, and per the Testing section in
+`ai-interaction.md` components are verified in the browser.
 
 ## History
 
