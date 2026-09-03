@@ -101,3 +101,24 @@ export type UpdateItemInput = z.input<typeof updateItemSchema>;
 
 /** What the server action hands the query function, after normalization. */
 export type UpdateItemData = z.output<typeof updateItemSchema>;
+
+/**
+ * A new item. The editable half plus the type it belongs to, which an existing
+ * item already has and so `updateItemSchema` never carries.
+ *
+ * The one rule this schema cannot express is the type-specific one — a link
+ * item must have a URL — because that depends on the type's slug, and the slug
+ * is not in the payload. Only the id is, and it is worth nothing until it has
+ * been resolved against the types this user can actually see. So the action
+ * looks the type up first and applies `requiredFieldsFor` to what comes back,
+ * rather than trusting a slug the caller sent alongside the id.
+ */
+export const createItemSchema = updateItemSchema.extend({
+  typeId: z.string().min(1, 'Choose an item type'),
+});
+
+/** What a caller sends. */
+export type CreateItemInput = z.input<typeof createItemSchema>;
+
+/** What the server action hands the query function, after normalization. */
+export type CreateItemData = z.output<typeof createItemSchema>;

@@ -41,7 +41,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex h-svh overflow-hidden">
         <Sidebar itemTypes={itemTypes} collections={collections} user={user} />
         <div className="flex min-w-0 flex-1 flex-col">
-          <Topbar />
+          <Topbar itemTypes={itemTypes} />
           {/* `tabIndex={-1}` so focus has somewhere to land when the element
               it would have returned to is gone — see the drawer's
               `onCloseAutoFocus`. */}

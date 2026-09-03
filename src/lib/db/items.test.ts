@@ -11,14 +11,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
 
 vi.mock('@/lib/prisma', () => ({
-  prisma: { item: { findFirst: vi.fn(), update: vi.fn(), delete: vi.fn() } },
+  prisma: {
+    item: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
+    itemType: { findFirst: vi.fn() },
+  },
 }));
 
 vi.mock('@/lib/db/user', () => ({ getCurrentUserId: vi.fn() }));
 
 const { prisma } = await import('@/lib/prisma');
 const { getCurrentUserId } = await import('@/lib/db/user');
-const { deleteItem, getItemDetail, updateItem } = await import('./items');
+const { createItem, deleteItem, getItemDetail, getItemTypeById, updateItem } =
+  await import('./items');
 const { Prisma } = await import('@/generated/prisma/client');
 
 /** What `ITEM_DETAIL_SELECT` narrows an `Item` row down to. */
@@ -47,6 +51,10 @@ const findFirst = prisma.item.findFirst as unknown as Mock<
 >;
 const update = prisma.item.update as unknown as Mock<(args: unknown) => Promise<DetailRow>>;
 const destroy = prisma.item.delete as unknown as Mock<(args: unknown) => Promise<{ id: string }>>;
+const create = prisma.item.create as unknown as Mock<(args: unknown) => Promise<DetailRow>>;
+const findType = prisma.itemType.findFirst as unknown as Mock<
+  (args: unknown) => Promise<{ id: string; slug: string } | null>
+>;
 const currentUserId = vi.mocked(getCurrentUserId);
 
 const USER_ID = 'user_1';
@@ -280,5 +288,125 @@ describe('deleteItem', () => {
     destroy.mockRejectedValue(new Error('connection lost'));
 
     await expect(deleteItem(ITEM_ID)).rejects.toThrow('connection lost');
+  });
+});
+
+/** The one argument shape `prisma.item.create` is called with. */
+interface CreateArgs {
+  data: Record<string, unknown> & {
+    user: { connect: { id: string } };
+    type: { connect: { id: string } };
+    tags: { create: { tag: { connectOrCreate: { where: object; create: object } } }[] };
+  };
+}
+
+const createArgs = (): CreateArgs => create.mock.calls[0][0] as CreateArgs;
+
+describe('getItemTypeById', () => {
+  it("accepts a global system type or one of the user's own, and nothing else", async () => {
+    findType.mockResolvedValue({ id: 'type_1', slug: 'snippet' });
+
+    await getItemTypeById('type_1');
+
+    expect(findType.mock.calls[0][0]).toMatchObject({
+      where: { id: 'type_1', OR: [{ userId: null }, { userId: USER_ID }] },
+    });
+  });
+
+  it('returns null when the id names a type the user cannot see', async () => {
+    findType.mockResolvedValue(null);
+
+    await expect(getItemTypeById('someone_elses_type')).resolves.toBeNull();
+  });
+
+  it('returns null without querying when nobody is signed in', async () => {
+    currentUserId.mockResolvedValue(null);
+
+    await expect(getItemTypeById('type_1')).resolves.toBeNull();
+    expect(findType).not.toHaveBeenCalled();
+  });
+});
+
+describe('createItem', () => {
+  const data = {
+    typeId: 'type_1',
+    title: 'useDebounce Hook',
+    description: 'Delays a value',
+    content: 'export function useDebounce() {}',
+    language: 'typescript',
+    url: null,
+    tags: ['hooks', 'react'],
+  };
+
+  it('takes the owner from the session, never from the caller', async () => {
+    create.mockResolvedValue(row());
+
+    // A `userId` in the payload would be the whole attack: it must not reach
+    // the write.
+    await createItem({ ...data, userId: 'someone_else' } as never);
+
+    expect(createArgs().data.user).toEqual({ connect: { id: USER_ID } });
+    expect(createArgs().data).not.toHaveProperty('userId');
+  });
+
+  it('files the item under the type it was given', async () => {
+    create.mockResolvedValue(row());
+
+    await createItem(data);
+
+    expect(createArgs().data.type).toEqual({ connect: { id: 'type_1' } });
+  });
+
+  it('returns null without writing when nobody is signed in', async () => {
+    currentUserId.mockResolvedValue(null);
+
+    await expect(createItem(data)).resolves.toBeNull();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('writes a field the form never showed as null rather than leaving it out', async () => {
+    create.mockResolvedValue(row());
+
+    // A link item sends no content or language at all. On a create there is
+    // nothing behind those columns to preserve, so both mean empty.
+    await createItem({ typeId: 'type_1', title: 'A link', url: 'https://example.com' });
+
+    expect(createArgs().data).toMatchObject({
+      description: null,
+      content: null,
+      language: null,
+      url: 'https://example.com',
+    });
+  });
+
+  it('connects an existing tag rather than creating a second one for the same user', async () => {
+    create.mockResolvedValue(row());
+
+    await createItem(data);
+
+    const tags = createArgs().data.tags.create;
+
+    expect(tags).toHaveLength(2);
+    expect(tags[0].tag.connectOrCreate).toEqual({
+      where: { userId_name: { userId: USER_ID, name: 'hooks' } },
+      create: { userId: USER_ID, name: 'hooks' },
+    });
+  });
+
+  it('writes no tag rows when none were sent', async () => {
+    create.mockResolvedValue(row());
+
+    await createItem({ typeId: 'type_1', title: 'Untagged' });
+
+    expect(createArgs().data.tags.create).toEqual([]);
+  });
+
+  it('serializes both dates, so the dialog gets the same shape a card holds', async () => {
+    create.mockResolvedValue(row());
+
+    await expect(createItem(data)).resolves.toMatchObject({
+      updatedAt: '2026-08-18T21:56:33.193Z',
+      createdAt: '2026-08-17T10:00:00.000Z',
+    });
   });
 });

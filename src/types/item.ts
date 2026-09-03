@@ -93,3 +93,21 @@ export type UpdateItemResult =
  * and the drawer closes rather than redrawing anything.
  */
 export type DeleteItemResult = { success: true } | { success: false; error: string };
+
+/**
+ * An item type reduced to what a create needs: the id to file the item under,
+ * and the slug that says which fields that type requires.
+ */
+export interface ItemTypeRef {
+  id: string;
+  slug: string;
+}
+
+/**
+ * What `createItem` returns. The new item comes back in full, on the same
+ * contract as `updateItem`, so a caller has the saved row rather than only the
+ * fact that something was written.
+ */
+export type CreateItemResult =
+  | { success: true; data: ItemDetail }
+  | { success: false; error: string; fieldErrors?: Record<string, string[]> };

@@ -3,10 +3,82 @@
 import { z } from 'zod';
 
 import { auth } from '@/auth';
-import { deleteItem as deleteItemRow, updateItem as updateItemRow } from '@/lib/db/items';
-import { updateItemSchema } from '@/lib/validation/items';
-import type { UpdateItemInput } from '@/lib/validation/items';
-import type { DeleteItemResult, UpdateItemResult } from '@/types/item';
+import {
+  createItem as createItemRow,
+  deleteItem as deleteItemRow,
+  getItemTypeById,
+  updateItem as updateItemRow,
+} from '@/lib/db/items';
+import { requiredFieldsFor } from '@/lib/items';
+import { createItemSchema, updateItemSchema } from '@/lib/validation/items';
+import type { CreateItemInput, UpdateItemInput } from '@/lib/validation/items';
+import type { CreateItemResult, DeleteItemResult, UpdateItemResult } from '@/types/item';
+
+/**
+ * Creates one item for the signed-in user and returns it in full.
+ *
+ * Two things arriving from the client are not trusted with anything until they
+ * have been checked. The owner is never among them — it comes from the session
+ * — and the type id is resolved against the types this user can actually see,
+ * so an item cannot be filed under somebody else's custom type.
+ *
+ * The type-specific requirement is applied here rather than in the schema,
+ * because it depends on the resolved type's slug: a link item is nothing
+ * without its URL, and the caller's own idea of which type it picked is not
+ * what decides that.
+ */
+export async function createItem(data: CreateItemInput): Promise<CreateItemResult> {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    return { success: false, error: 'Your session has expired. Sign in again.' };
+  }
+
+  const parsed = createItemSchema.safeParse(data);
+
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: 'Check the highlighted fields and try again.',
+      fieldErrors: z.flattenError(parsed.error).fieldErrors,
+    };
+  }
+
+  try {
+    const type = await getItemTypeById(parsed.data.typeId);
+
+    if (!type) {
+      // An unknown type and one belonging to somebody else read the same way.
+      return {
+        success: false,
+        error: 'Check the highlighted fields and try again.',
+        fieldErrors: { typeId: ['Choose an item type'] },
+      };
+    }
+
+    if (requiredFieldsFor(type.slug).url && !parsed.data.url) {
+      return {
+        success: false,
+        error: 'Check the highlighted fields and try again.',
+        fieldErrors: { url: ['URL is required'] },
+      };
+    }
+
+    // The resolved id rather than the one that arrived, so what is written is
+    // what was checked.
+    const item = await createItemRow({ ...parsed.data, typeId: type.id });
+
+    if (!item) {
+      return { success: false, error: 'Your session has expired. Sign in again.' };
+    }
+
+    return { success: true, data: item };
+  } catch (error) {
+    console.error('Could not create the item:', error);
+
+    return { success: false, error: 'Could not create this item. Please try again.' };
+  }
+}
 
 /**
  * Saves the editable fields of one item and returns it in full, so the drawer

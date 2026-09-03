@@ -6,13 +6,14 @@ import { cache } from 'react';
 
 import { getCurrentUserId } from '@/lib/db/user';
 import { prisma } from '@/lib/prisma';
-import type { UpdateItemData } from '@/lib/validation/items';
+import type { CreateItemData, UpdateItemData } from '@/lib/validation/items';
 import { Prisma } from '@/generated/prisma/client';
 import type {
   DashboardItem,
   ItemDetail,
   ItemsByType,
   ItemStats,
+  ItemTypeRef,
   SidebarItemType,
 } from '@/types/item';
 
@@ -163,6 +164,76 @@ export async function getItemDetail(id: string): Promise<ItemDetail | null> {
   });
 
   if (!item) return null;
+
+  return toItemDetail(item);
+}
+
+/**
+ * One item type the current user is allowed to file an item under — a global
+ * system type or a custom type of their own.
+ *
+ * The id arrives from the client, so this is the check that stops an item being
+ * attached to somebody else's custom type. Returns null when the id names no
+ * such type, which reads the same either way. The slug comes back because the
+ * caller needs it to decide which fields the type requires.
+ */
+export async function getItemTypeById(id: string): Promise<ItemTypeRef | null> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) return null;
+
+  // findFirst, not findUnique: the ownership filter is what makes this safe,
+  // and findUnique would accept the id on its own.
+  return prisma.itemType.findFirst({
+    // System types are global (userId: null), so they cannot be matched on
+    // userId alone.
+    where: { id, OR: [{ userId: null }, { userId }] },
+    select: { id: true, slug: true },
+  });
+}
+
+/**
+ * Writes a new item and returns it in full, like `updateItem` does.
+ *
+ * The owner comes from the session, never from the caller, so there is no way
+ * to create an item under another user's name. The type is expected to have
+ * been resolved through `getItemTypeById` first — a raw `typeId` is not
+ * something this function can vouch for.
+ *
+ * Blanks were turned into nulls by the schema and are written as such: on a
+ * create there is nothing behind a field to preserve, so unlike `updateItem`
+ * there is no need to keep `undefined` and `null` apart, and an omitted field
+ * and a cleared one both mean an empty column.
+ */
+export async function createItem(data: CreateItemData): Promise<ItemDetail | null> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) return null;
+
+  const { typeId, title, description, content, language, url, tags } = data;
+
+  const item = await prisma.item.create({
+    data: {
+      title,
+      description: description ?? null,
+      content: content ?? null,
+      language: language ?? null,
+      url: url ?? null,
+      user: { connect: { id: userId } },
+      type: { connect: { id: typeId } },
+      tags: {
+        create: (tags ?? []).map((name) => ({
+          tag: {
+            connectOrCreate: {
+              where: { userId_name: { userId, name } },
+              create: { userId, name },
+            },
+          },
+        })),
+      },
+    },
+    select: ITEM_DETAIL_SELECT,
+  });
 
   return toItemDetail(item);
 }

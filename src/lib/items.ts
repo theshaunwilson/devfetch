@@ -26,6 +26,22 @@ export function editableFieldsFor(slug: string): EditableFields {
   };
 }
 
+export interface RequiredFields {
+  url: boolean;
+}
+
+/**
+ * The type-specific fields an item of this type cannot be created without, on
+ * top of the title every item needs.
+ *
+ * Read off the same set as `editableFieldsFor` rather than a second list, so
+ * the two cannot drift: a link with no URL is not a link, so a type that shows
+ * the URL field is a type that requires it.
+ */
+export function requiredFieldsFor(slug: string): RequiredFields {
+  return { url: TYPES_WITH_URL.has(slug) };
+}
+
 /**
  * Turns the tags input's comma-separated text into the array the server takes.
  *

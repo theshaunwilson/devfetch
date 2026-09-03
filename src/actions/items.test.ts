@@ -11,15 +11,27 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/auth', () => ({ auth: vi.fn() }));
-vi.mock('@/lib/db/items', () => ({ updateItem: vi.fn(), deleteItem: vi.fn() }));
+vi.mock('@/lib/db/items', () => ({
+  createItem: vi.fn(),
+  getItemTypeById: vi.fn(),
+  updateItem: vi.fn(),
+  deleteItem: vi.fn(),
+}));
 
 const { auth } = await import('@/auth');
-const { updateItem: updateItemRow, deleteItem: deleteItemRow } = await import('@/lib/db/items');
-const { deleteItem, updateItem } = await import('./items');
+const {
+  createItem: createItemRow,
+  getItemTypeById,
+  updateItem: updateItemRow,
+  deleteItem: deleteItemRow,
+} = await import('@/lib/db/items');
+const { createItem, deleteItem, updateItem } = await import('./items');
 
 const session = vi.mocked(auth);
 const writeRow = vi.mocked(updateItemRow);
 const deleteRow = vi.mocked(deleteItemRow);
+const createRow = vi.mocked(createItemRow);
+const findType = vi.mocked(getItemTypeById);
 
 const USER_ID = 'user_1';
 const ITEM_ID = 'item_1';
@@ -47,6 +59,8 @@ beforeEach(() => {
   session.mockResolvedValue({ user: { id: USER_ID } } as unknown as never);
   writeRow.mockResolvedValue(saved);
   deleteRow.mockResolvedValue(true);
+  createRow.mockResolvedValue(saved);
+  findType.mockResolvedValue({ id: 'type_1', slug: 'snippet' });
 });
 
 describe('updateItem', () => {
@@ -184,6 +198,110 @@ describe('deleteItem', () => {
     await expect(deleteItem(ITEM_ID)).resolves.toEqual({
       success: false,
       error: 'Could not delete this item. Please try again.',
+    });
+  });
+});
+
+describe('createItem', () => {
+  const data = { typeId: 'type_1', title: 'useDebounce' };
+
+  it('refuses before touching the database when nobody is signed in', async () => {
+    session.mockResolvedValue(null as unknown as never);
+
+    await expect(createItem(data)).resolves.toEqual({
+      success: false,
+      error: 'Your session has expired. Sign in again.',
+    });
+    expect(findType).not.toHaveBeenCalled();
+    expect(createRow).not.toHaveBeenCalled();
+  });
+
+  it('rejects a type the user cannot see, without writing anything', async () => {
+    // An id belonging to another user's custom type resolves to nothing, and
+    // reads the same as an id that names no type at all.
+    findType.mockResolvedValue(null);
+
+    const result = await createItem({ ...data, typeId: 'someone_elses_type' });
+
+    expect(result).toMatchObject({
+      success: false,
+      fieldErrors: { typeId: ['Choose an item type'] },
+    });
+    expect(createRow).not.toHaveBeenCalled();
+  });
+
+  it('writes the resolved type id rather than the one that arrived', async () => {
+    findType.mockResolvedValue({ id: 'resolved_type', slug: 'snippet' });
+
+    await createItem(data);
+
+    expect(createRow.mock.calls[0][0]).toMatchObject({ typeId: 'resolved_type' });
+  });
+
+  it('requires a URL on a link item, since the type it resolved to says so', async () => {
+    findType.mockResolvedValue({ id: 'type_link', slug: 'link' });
+
+    const result = await createItem({ typeId: 'type_link', title: 'A link' });
+
+    expect(result).toMatchObject({ success: false, fieldErrors: { url: ['URL is required'] } });
+    expect(createRow).not.toHaveBeenCalled();
+  });
+
+  it('accepts a link item that carries its URL', async () => {
+    findType.mockResolvedValue({ id: 'type_link', slug: 'link' });
+
+    await expect(
+      createItem({ typeId: 'type_link', title: 'A link', url: 'https://example.com' })
+    ).resolves.toEqual({ success: true, data: saved });
+  });
+
+  it('does not demand a URL from a type that has no URL field', async () => {
+    await expect(createItem(data)).resolves.toEqual({ success: true, data: saved });
+  });
+
+  it('reports the field a bad value belongs to', async () => {
+    const result = await createItem({ typeId: 'type_1', title: '   ' });
+
+    expect(result).toMatchObject({
+      success: false,
+      error: 'Check the highlighted fields and try again.',
+      fieldErrors: { title: ['Title is required'] },
+    });
+    expect(createRow).not.toHaveBeenCalled();
+  });
+
+  it('rejects a missing type before it can reach the lookup', async () => {
+    const result = await createItem({ typeId: '', title: 'useDebounce' });
+
+    expect(result).toMatchObject({
+      success: false,
+      fieldErrors: { typeId: ['Choose an item type'] },
+    });
+    expect(findType).not.toHaveBeenCalled();
+  });
+
+  it('hands the query function the normalized values, not what was typed', async () => {
+    await createItem({
+      typeId: 'type_1',
+      title: '  useDebounce  ',
+      description: '   ',
+      tags: ['a', 'a'],
+    });
+
+    expect(createRow.mock.calls[0][0]).toMatchObject({
+      title: 'useDebounce',
+      // A blank field is stored as NULL, and a tag typed twice spends one slot.
+      description: null,
+      tags: ['a'],
+    });
+  });
+
+  it('reports a failed write without leaking the error', async () => {
+    createRow.mockRejectedValue(new Error('connection reset'));
+
+    await expect(createItem(data)).resolves.toEqual({
+      success: false,
+      error: 'Could not create this item. Please try again.',
     });
   });
 });
