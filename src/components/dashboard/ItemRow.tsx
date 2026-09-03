@@ -1,7 +1,8 @@
-import { Pin, Star, type LucideIcon } from 'lucide-react';
+import { Pin, Star } from 'lucide-react';
+import { TypeIconTile } from '@/components/items/TypeIconTile';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import { borderColorClass, softBgColorClass, textColorClass } from '@/lib/colors';
+import { borderColorClass } from '@/lib/colors';
 import { formatShortDate } from '@/lib/format';
 import { getIcon } from '@/lib/icons';
 import { cn } from '@/lib/utils';
@@ -9,20 +10,6 @@ import type { DashboardItem } from '@/types/item';
 
 interface ItemRowProps {
   item: DashboardItem;
-}
-
-/** Tinted tile holding the item type icon. */
-function TypeIconTile({ icon: Icon, color }: { icon: LucideIcon; color: string | null }) {
-  return (
-    <div
-      className={cn(
-        'flex size-9 shrink-0 items-center justify-center rounded-lg',
-        softBgColorClass(color)
-      )}
-    >
-      <Icon className={cn('size-4', textColorClass(color))} />
-    </div>
-  );
 }
 
 /** Item row used by the Pinned and Recent lists. */

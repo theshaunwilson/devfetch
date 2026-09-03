@@ -36,3 +36,9 @@ export interface SidebarItemType {
   color: string | null;
   itemCount: number;
 }
+
+/** One item type together with the current user's items of that type. */
+export interface ItemsByType {
+  type: DashboardItemType;
+  items: DashboardItem[];
+}

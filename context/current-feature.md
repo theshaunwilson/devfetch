@@ -1,20 +1,36 @@
-# Current Feature
-
-<!-- Feature Name -->
+# Current Feature: Items List View
 
 ## Status
 
 <!-- Not Started|In Progress|Completed -->
 
-Not Started
+In Progress
 
 ## Goals
 
 <!-- Goals & requirements -->
 
+- Dynamic route `/items/[type]` that lists the current user's items for one item type
+- Items fetched from Neon through Prisma, scoped to the signed-in user, filtered by the type in the URL
+- Responsive grid of `ItemCard` components — two columns at `md` and up
+- Each card carries a left border tinted by its item type's color
+- Follows existing codebase patterns: server component, `force-dynamic`, db access in `src/lib/db/items.ts`, colors/icons through the shared helpers
+
 ## Notes
 
 <!-- Any extra notes -->
+
+**The route is already linked but does not exist.** `SidebarContent.tsx:72` links every type row to `` `/items/${type.slug}` ``, so all seven sidebar Types entries currently 404. This feature makes those links live.
+
+**Slug mismatch in the spec.** The spec's examples are plural (`/items/snippets`, `/items/notes`), but the seeded `ItemType.slug` values are singular — `snippet`, `prompt`, `command`, `note`, `file`, `image`, `link` — and that is what the sidebar already links to. Matching the data (singular) is the assumption unless told otherwise; changing to plural would mean a seed/data change plus rewriting the sidebar link.
+
+**Data layer.** Add a `getItemsByTypeSlug(slug)` to `src/lib/db/items.ts` reusing the existing `ITEM_SELECT` and `DashboardItem`, so the card renders exactly what `ItemRow` already gets (type, tags, flags, ISO `updatedAt`). Type resolution must match `getItemTypes()`: `OR: [{ userId: null }, { userId }]`, since system types are global and a plain `userId` filter would miss all seven. Items themselves stay filtered on `userId`. No migration — `Item.typeId` and `ItemType.slug` have been in the schema since the Prisma feature.
+
+**Unknown or unowned slug** should `notFound()` rather than render an empty page, so a typo is distinguishable from a type with zero items.
+
+**`ItemCard` is a new component**, not a rename of `ItemRow` — the dashboard's Pinned and Recent lists keep using `ItemRow` unchanged. The card should reuse `borderColorClass`, `softBgColorClass`, `textColorClass`, `getIcon` and `formatShortDate` rather than introducing new colour or date handling. Cards are not links yet — no item detail route exists.
+
+**Out of scope unless raised:** the bare `/items` index (the dashboard's Recent "View all" already points at it and also 404s), search, sorting, pagination, and any item CRUD.
 
 ## History
 

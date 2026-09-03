@@ -20,3 +20,11 @@ const LONG_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
 export function formatLongDate(iso: string): string {
   return LONG_DATE_FORMATTER.format(new Date(iso));
 }
+
+/**
+ * Item type names are stored lowercase ("snippet"); the UI shows them
+ * capitalized.
+ */
+export function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
