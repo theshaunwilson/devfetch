@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Prisma 7 generated client
     "src/generated/**",
+    // Vitest coverage report
+    "coverage/**",
   ]),
 ]);
 
