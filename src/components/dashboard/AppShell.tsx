@@ -4,6 +4,7 @@ import { Sidebar } from '@/components/dashboard/Sidebar';
 import { SidebarProvider } from '@/components/dashboard/SidebarProvider';
 import { Topbar } from '@/components/dashboard/Topbar';
 import { ItemDrawerProvider } from '@/components/items/ItemDrawerProvider';
+import { Toaster } from '@/components/ui/sonner';
 import { getSidebarCollections } from '@/lib/db/collections';
 import { getItemTypes } from '@/lib/db/items';
 import { getCurrentUser } from '@/lib/db/user';
@@ -31,6 +32,11 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarProvider defaultOpen={sidebarOpen}>
+      {/* Outside the shell's `overflow-hidden`, and mounted here rather than in
+          the root layout: toasts belong to the signed-in app, and the auth
+          pages report themselves with inline banners. */}
+      <Toaster position="bottom-right" />
+
       <div className="flex h-svh overflow-hidden">
         <Sidebar itemTypes={itemTypes} collections={collections} user={user} />
         <div className="flex min-w-0 flex-1 flex-col">

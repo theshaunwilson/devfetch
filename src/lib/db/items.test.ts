@@ -11,14 +11,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
 
 vi.mock('@/lib/prisma', () => ({
-  prisma: { item: { findFirst: vi.fn() } },
+  prisma: { item: { findFirst: vi.fn(), update: vi.fn() } },
 }));
 
 vi.mock('@/lib/db/user', () => ({ getCurrentUserId: vi.fn() }));
 
 const { prisma } = await import('@/lib/prisma');
 const { getCurrentUserId } = await import('@/lib/db/user');
-const { getItemDetail } = await import('./items');
+const { getItemDetail, updateItem } = await import('./items');
+const { Prisma } = await import('@/generated/prisma/client');
 
 /** What `ITEM_DETAIL_SELECT` narrows an `Item` row down to. */
 interface DetailRow {
@@ -29,10 +30,11 @@ interface DetailRow {
   isPinned: boolean;
   updatedAt: Date;
   createdAt: Date;
-  type: { id: string; name: string; icon: string | null; color: string | null };
+  type: { id: string; name: string; slug: string; icon: string | null; color: string | null };
   tags: { tag: { name: string } }[];
   content: string | null;
   language: string | null;
+  url: string | null;
   collection: { id: string; name: string } | null;
 }
 
@@ -43,6 +45,7 @@ interface DetailRow {
 const findFirst = prisma.item.findFirst as unknown as Mock<
   (args: unknown) => Promise<DetailRow | null>
 >;
+const update = prisma.item.update as unknown as Mock<(args: unknown) => Promise<DetailRow>>;
 const currentUserId = vi.mocked(getCurrentUserId);
 
 const USER_ID = 'user_1';
@@ -56,13 +59,24 @@ const row = (overrides: Partial<DetailRow> = {}): DetailRow => ({
   isPinned: true,
   updatedAt: new Date('2026-08-18T21:56:33.193Z'),
   createdAt: new Date('2026-08-17T10:00:00.000Z'),
-  type: { id: 'type_1', name: 'snippet', icon: 'Code', color: '#3b82f6' },
+  type: { id: 'type_1', name: 'snippet', slug: 'snippet', icon: 'Code', color: '#3b82f6' },
   tags: [{ tag: { name: 'hooks' } }, { tag: { name: 'react' } }],
   content: 'export function useDebounce() {}',
   language: 'typescript',
+  url: null,
   collection: { id: 'coll_1', name: 'React Patterns' },
   ...overrides,
 });
+
+/** The one argument shape `prisma.item.update` is called with. */
+interface UpdateArgs {
+  where: { id: string; userId: string };
+  data: Record<string, unknown> & {
+    tags?: { deleteMany: object; create: { tag: { connectOrCreate: { where: object } } }[] };
+  };
+}
+
+const updateArgs = (): UpdateArgs => update.mock.calls[0][0] as UpdateArgs;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -128,5 +142,98 @@ describe('getItemDetail', () => {
     expect(item).toMatchObject({ content: null, language: null, collection: null });
     // The drawer omits a section on null, so the keys must be present to read.
     expect(item).toHaveProperty('collection', null);
+  });
+});
+
+describe('updateItem', () => {
+  beforeEach(() => {
+    update.mockResolvedValue(row());
+  });
+
+  it('scopes the write itself to the signed-in user, not just the id', async () => {
+    await updateItem(ITEM_ID, { title: 'New title' });
+
+    // The ownership filter is inside the update rather than a read before it:
+    // a read-then-write could be raced, and the id comes from the client.
+    expect(updateArgs().where).toEqual({ id: ITEM_ID, userId: USER_ID });
+  });
+
+  it('returns null without writing when nobody is signed in', async () => {
+    currentUserId.mockResolvedValue(null);
+
+    await expect(updateItem(ITEM_ID, { title: 'New title' })).resolves.toBeNull();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('returns null when the row does not match, rather than throwing', async () => {
+    update.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('not found', {
+        code: 'P2025',
+        clientVersion: 'test',
+      }),
+    );
+
+    // An unknown id and somebody else's id both land here, and the caller
+    // cannot tell them apart.
+    await expect(updateItem(ITEM_ID, { title: 'New title' })).resolves.toBeNull();
+  });
+
+  it('rethrows anything that is not a missing row', async () => {
+    update.mockRejectedValue(new Error('connection lost'));
+
+    await expect(updateItem(ITEM_ID, { title: 'New title' })).rejects.toThrow('connection lost');
+  });
+
+  it('writes only the fields it was given, so an unshown one is left alone', async () => {
+    await updateItem(ITEM_ID, { title: 'New title', description: null });
+
+    const { data } = updateArgs();
+
+    expect(data.title).toBe('New title');
+    // Present and null: the description was cleared on purpose.
+    expect(data).toHaveProperty('description', null);
+    // Absent entirely: a link item never showed a content box, and sending
+    // undefined here would be the difference between keeping and wiping it.
+    expect(data).not.toHaveProperty('content');
+    expect(data).not.toHaveProperty('url');
+    expect(data).not.toHaveProperty('language');
+  });
+
+  it('leaves the tags untouched when none were sent', async () => {
+    await updateItem(ITEM_ID, { title: 'New title' });
+
+    expect(updateArgs().data).not.toHaveProperty('tags');
+  });
+
+  it('replaces the whole tag set, connecting or creating each name', async () => {
+    await updateItem(ITEM_ID, { title: 'New title', tags: ['react', 'hooks'] });
+
+    const { tags } = updateArgs().data;
+
+    // Every join row goes first, so the new set is exactly what was sent.
+    expect(tags?.deleteMany).toEqual({});
+    expect(tags?.create).toHaveLength(2);
+    expect(tags?.create.map((row) => row.tag.connectOrCreate.where)).toEqual([
+      { userId_name: { userId: USER_ID, name: 'react' } },
+      { userId_name: { userId: USER_ID, name: 'hooks' } },
+    ]);
+  });
+
+  it('clears every tag when handed an empty array', async () => {
+    await updateItem(ITEM_ID, { title: 'New title', tags: [] });
+
+    expect(updateArgs().data.tags).toEqual({ deleteMany: {}, create: [] });
+  });
+
+  it('returns the saved item in the drawer\'s own shape, so no second fetch is needed', async () => {
+    const saved = await updateItem(ITEM_ID, { title: 'New title' });
+
+    expect(saved).toMatchObject({
+      id: ITEM_ID,
+      tags: ['hooks', 'react'],
+      type: { slug: 'snippet' },
+      updatedAt: '2026-08-18T21:56:33.193Z',
+      createdAt: '2026-08-17T10:00:00.000Z',
+    });
   });
 });

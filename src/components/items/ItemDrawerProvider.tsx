@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 
 import { ItemDrawer } from '@/components/items/ItemDrawer';
@@ -7,6 +8,9 @@ import type { DashboardItem, ItemDetail, ItemDetailResponse } from '@/types/item
 
 /** What the drawer knows while its detail request is in flight. */
 export type ItemDetailStatus = 'loading' | 'loaded' | 'error';
+
+/** Reading the item, or editing it in place. */
+export type ItemDrawerMode = 'view' | 'edit';
 
 interface ItemDrawerContextValue {
   /**
@@ -49,6 +53,9 @@ export function ItemDrawerProvider({ children }: { children: React.ReactNode }) 
   const [item, setItem] = useState<DashboardItem | null>(null);
   const [detail, setDetail] = useState<ItemDetail | null>(null);
   const [status, setStatus] = useState<ItemDetailStatus>('loading');
+  const [mode, setMode] = useState<ItemDrawerMode>('view');
+
+  const router = useRouter();
 
   const requestRef = useRef<AbortController | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
@@ -68,6 +75,9 @@ export function ItemDrawerProvider({ children }: { children: React.ReactNode }) 
     setItem(next);
     setDetail(null);
     setStatus('loading');
+    // Reset here rather than on close, where it would visibly flip the drawer
+    // back to view mode partway through the slide-out.
+    setMode('view');
     setOpen(true);
 
     void (async () => {
@@ -96,6 +106,25 @@ export function ItemDrawerProvider({ children }: { children: React.ReactNode }) 
     })();
   }, []);
 
+  /**
+   * Takes the saved item as the new truth for both halves of the drawer's
+   * state: `ItemDetail` is a superset of what a card holds, so the header and
+   * the body both refresh from the one response, with no second fetch.
+   */
+  const handleSaved = useCallback(
+    (saved: ItemDetail) => {
+      setItem(saved);
+      setDetail(saved);
+      setStatus('loaded');
+      setMode('view');
+
+      // The lists behind the drawer are server-rendered, so they keep the old
+      // title and tags until their page re-renders.
+      router.refresh();
+    },
+    [router],
+  );
+
   return (
     <ItemDrawerContext.Provider value={{ openItem }}>
       {children}
@@ -115,6 +144,9 @@ export function ItemDrawerProvider({ children }: { children: React.ReactNode }) 
         item={item}
         detail={detail}
         status={status}
+        mode={mode}
+        onModeChange={setMode}
+        onSaved={handleSaved}
       />
     </ItemDrawerContext.Provider>
   );
