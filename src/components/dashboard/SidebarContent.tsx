@@ -49,7 +49,7 @@ function GroupLabel({ children }: { children: React.ReactNode }) {
 export function SidebarContent({ itemTypes, collections, user }: SidebarContentProps) {
   return (
     <div className="flex h-full min-h-0 w-full flex-col">
-      <Brand className="hidden h-16 shrink-0 px-4 md:flex" />
+      <Brand href="/dashboard" className="hidden h-16 shrink-0 px-4 md:flex" />
 
       <div className="group flex shrink-0 items-center justify-between gap-2 py-3 pr-3 pl-5 md:py-1">
         <h2 className="text-sm text-muted-foreground transition-colors group-hover:font-bold group-hover:text-foreground">

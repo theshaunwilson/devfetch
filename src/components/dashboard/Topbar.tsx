@@ -1,5 +1,5 @@
 import { FolderPlus, Plus, Search } from 'lucide-react';
-import { Brand } from '@/components/dashboard/Brand';
+import { TopbarBrand } from '@/components/dashboard/TopbarBrand';
 import { TopbarToggle } from '@/components/dashboard/TopbarToggle';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +12,7 @@ export function Topbar() {
     <header className="flex h-16 shrink-0 items-center gap-3 border-b px-4">
       <TopbarToggle />
 
-      <Brand className="shrink-0 md:hidden" />
+      <TopbarBrand />
 
       <div className="relative min-w-0 flex-1 sm:max-w-lg">
         <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
