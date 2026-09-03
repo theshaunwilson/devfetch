@@ -1,13 +1,18 @@
-import { FolderPlus, Plus, Search } from 'lucide-react';
+import { FolderPlus, Search } from 'lucide-react';
 import { TopbarBrand } from '@/components/dashboard/TopbarBrand';
 import { TopbarToggle } from '@/components/dashboard/TopbarToggle';
+import { NewItemDialog } from '@/components/items/NewItemDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import type { SidebarItemType } from '@/types/item';
 
 /**
- * Top bar shell. Search and the create buttons are still display only.
+ * Top bar shell. Search and New Collection are still display only.
+ *
+ * The item types come down from `AppShell`, which already loads them for the
+ * sidebar, so the dialog costs no query of its own.
  */
-export function Topbar() {
+export function Topbar({ itemTypes }: { itemTypes: SidebarItemType[] }) {
   return (
     <header className="flex h-16 shrink-0 items-center gap-3 border-b px-4">
       <TopbarToggle />
@@ -32,10 +37,7 @@ export function Topbar() {
           <FolderPlus className="size-4" />
           New Collection
         </Button>
-        <Button className="h-10">
-          <Plus className="size-4" />
-          New Item
-        </Button>
+        <NewItemDialog itemTypes={itemTypes} />
       </div>
     </header>
   );

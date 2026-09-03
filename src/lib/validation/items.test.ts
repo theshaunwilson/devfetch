@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  createItemSchema,
   TAGS_MAX_COUNT,
   TAG_MAX_LENGTH,
   TITLE_MAX_LENGTH,
@@ -133,5 +134,35 @@ describe('tags', () => {
 
   it('accepts an empty array, which is how every tag is removed', () => {
     expect(updateItemSchema.parse({ title: 'x', tags: [] }).tags).toEqual([]);
+  });
+});
+
+describe('createItemSchema', () => {
+  it('demands a type, which an existing item already has and so update does not', () => {
+    const result = createItemSchema.safeParse({ title: 'A note' });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an empty type id rather than letting it reach the lookup', () => {
+    const result = createItemSchema.safeParse({ typeId: '', title: 'A note' });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('normalizes the shared fields exactly as updateItemSchema does', () => {
+    const result = createItemSchema.parse({
+      typeId: 'type_1',
+      title: '  A note  ',
+      description: '   ',
+      tags: ['react', 'react', ' '],
+    });
+
+    expect(result).toMatchObject({ title: 'A note', description: null, tags: ['react'] });
+  });
+
+  it('leaves the URL optional \u2014 the required-when-link rule is the action\u2019s', () => {
+    // The schema cannot see the slug, only the id, so it cannot decide this.
+    expect(createItemSchema.safeParse({ typeId: 'type_1', title: 'A link' }).success).toBe(true);
   });
 });

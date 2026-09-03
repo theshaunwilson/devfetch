@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { editableFieldsFor, formatTagInput, parseTagInput } from './items';
+import { editableFieldsFor, formatTagInput, parseTagInput, requiredFieldsFor } from './items';
 
 describe('editableFieldsFor', () => {
   it('gives snippet and command a language, and the other content types none', () => {
@@ -65,5 +65,30 @@ describe('formatTagInput', () => {
 
   it('is empty for an item with no tags', () => {
     expect(formatTagInput([])).toBe('');
+  });
+});
+
+describe('requiredFieldsFor', () => {
+  it('requires a URL from a link, which is nothing without one', () => {
+    expect(requiredFieldsFor('link')).toEqual({ url: true });
+  });
+
+  it.each(['snippet', 'prompt', 'command', 'note'])('requires no URL from a %s', (slug) => {
+    expect(requiredFieldsFor(slug)).toEqual({ url: false });
+  });
+
+  it('requires nothing type-specific of a custom type', () => {
+    expect(requiredFieldsFor('recipe')).toEqual({ url: false });
+  });
+
+  it('never requires a field the type does not show', () => {
+    // The two are read off one set on purpose. A type that required a field it
+    // never renders could not be saved at all.
+    for (const slug of ['snippet', 'prompt', 'command', 'note', 'link', 'recipe']) {
+      const required = requiredFieldsFor(slug);
+      const editable = editableFieldsFor(slug);
+
+      expect(required.url && !editable.url).toBe(false);
+    }
   });
 });

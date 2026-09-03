@@ -1,20 +1,39 @@
-# Current Feature
-
-<!-- Feature Name -->
+# Current Feature: Item Create
 
 ## Status
 
 <!-- Not Started|In Progress|Completed -->
 
-Not Started
+In Progress
 
 ## Goals
 
 <!-- Goals & requirements -->
 
+- The top bar's existing "New Item" button — inert since Dashboard UI Phase 1 — opens a shadcn `Dialog` for creating an item
+- The dialog has a type selector covering snippet, prompt, command, note and link
+- Fields render based on the selected type:
+  - All types: title (required), description, tags
+  - snippet / command: content, language
+  - prompt / note: content
+  - link: URL (required)
+- A `createItem` server action validates input with Zod and returns the `{ success, data, error }` shape
+- A `createItem` query function lives in `src/lib/db/items.ts`
+- On success: toast, close the modal, refresh the lists behind it
+
 ## Notes
 
 <!-- Any extra notes -->
+
+- Spec: `context/features/item-create-spec.md`
+- The spec's type list omits File and Image — the two Pro types (`src/lib/pro.ts`) — so the selector covers the five free system types only
+- `editableFieldsFor(slug)` in `src/lib/items.ts` already encodes exactly this per-type field mapping for edit mode, and `parseTagInput` already handles the tag string; both should be reused rather than duplicated
+- Tags are created/connected the same way `updateItem` does it; a new item needs the connect-or-create half only
+- `Item.typeId` is required and `ItemType` rows are resolved by slug — the same `OR: [{ userId: null }, { userId }]` join `getItemTypes()` uses, since the system types are global
+- No migration expected: every field the spec names has been in the schema since the Prisma feature
+- Ownership: `userId` comes from the session, never the request body
+- `Topbar` is a client component already, so the dialog can mount from it; note `Topbar` renders once in `AppShell`, the same place `ItemDrawerProvider` and `<Toaster />` live
+- The spec does not mention collection assignment — out of scope; new items get no collection
 
 ## History
 
