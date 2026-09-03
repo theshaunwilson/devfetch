@@ -28,6 +28,8 @@ interface ItemDrawerProps {
   onModeChange: (mode: ItemDrawerMode) => void;
   /** Called with the saved item after an edit. */
   onSaved: (item: ItemDetail) => void;
+  /** Called once the item has been deleted. */
+  onDeleted: () => void;
 }
 
 function SectionLabel({ icon: Icon, children }: { icon?: LucideIcon; children: React.ReactNode }) {
@@ -69,6 +71,7 @@ export function ItemDrawer({
   mode,
   onModeChange,
   onSaved,
+  onDeleted,
 }: ItemDrawerProps) {
   // Edit needs the fields only the detail request carries, so it cannot open
   // until that has landed.
@@ -122,10 +125,13 @@ export function ItemDrawer({
                 {heading}
 
                 <ItemDrawerActions
+                  itemId={item.id}
+                  title={item.title}
                   isFavorite={item.isFavorite}
                   isPinned={item.isPinned}
                   onEdit={() => onModeChange('edit')}
                   canEdit={detail !== null}
+                  onDeleted={onDeleted}
                 />
               </SheetHeader>
 

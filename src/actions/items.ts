@@ -3,10 +3,10 @@
 import { z } from 'zod';
 
 import { auth } from '@/auth';
-import { updateItem as updateItemRow } from '@/lib/db/items';
+import { deleteItem as deleteItemRow, updateItem as updateItemRow } from '@/lib/db/items';
 import { updateItemSchema } from '@/lib/validation/items';
 import type { UpdateItemInput } from '@/lib/validation/items';
-import type { UpdateItemResult } from '@/types/item';
+import type { DeleteItemResult, UpdateItemResult } from '@/types/item';
 
 /**
  * Saves the editable fields of one item and returns it in full, so the drawer
@@ -48,5 +48,35 @@ export async function updateItem(itemId: string, data: UpdateItemInput): Promise
     console.error('Could not update the item:', error);
 
     return { success: false, error: 'Could not save your changes. Please try again.' };
+  }
+}
+
+/**
+ * Deletes one item.
+ *
+ * Like `updateItem`, the id arrives from the client and is trusted for nothing:
+ * the session says who is asking and the delete is itself scoped to that user —
+ * see `deleteItem` in `@/lib/db/items`.
+ */
+export async function deleteItem(itemId: string): Promise<DeleteItemResult> {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    return { success: false, error: 'Your session has expired. Sign in again.' };
+  }
+
+  try {
+    const deleted = await deleteItemRow(itemId);
+
+    if (!deleted) {
+      // Somebody else's item reads exactly like one that does not exist.
+      return { success: false, error: 'That item could not be found.' };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Could not delete the item:', error);
+
+    return { success: false, error: 'Could not delete this item. Please try again.' };
   }
 }

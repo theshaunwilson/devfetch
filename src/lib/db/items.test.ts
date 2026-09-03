@@ -11,14 +11,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
 
 vi.mock('@/lib/prisma', () => ({
-  prisma: { item: { findFirst: vi.fn(), update: vi.fn() } },
+  prisma: { item: { findFirst: vi.fn(), update: vi.fn(), delete: vi.fn() } },
 }));
 
 vi.mock('@/lib/db/user', () => ({ getCurrentUserId: vi.fn() }));
 
 const { prisma } = await import('@/lib/prisma');
 const { getCurrentUserId } = await import('@/lib/db/user');
-const { getItemDetail, updateItem } = await import('./items');
+const { deleteItem, getItemDetail, updateItem } = await import('./items');
 const { Prisma } = await import('@/generated/prisma/client');
 
 /** What `ITEM_DETAIL_SELECT` narrows an `Item` row down to. */
@@ -46,6 +46,7 @@ const findFirst = prisma.item.findFirst as unknown as Mock<
   (args: unknown) => Promise<DetailRow | null>
 >;
 const update = prisma.item.update as unknown as Mock<(args: unknown) => Promise<DetailRow>>;
+const destroy = prisma.item.delete as unknown as Mock<(args: unknown) => Promise<{ id: string }>>;
 const currentUserId = vi.mocked(getCurrentUserId);
 
 const USER_ID = 'user_1';
@@ -235,5 +236,49 @@ describe('updateItem', () => {
       updatedAt: '2026-08-18T21:56:33.193Z',
       createdAt: '2026-08-17T10:00:00.000Z',
     });
+  });
+});
+
+describe('deleteItem', () => {
+  beforeEach(() => {
+    destroy.mockResolvedValue({ id: ITEM_ID });
+  });
+
+  it('scopes the delete itself to the signed-in user, not just the id', async () => {
+    await deleteItem(ITEM_ID);
+
+    // The same reason `updateItem` does it: the id comes from the client, and
+    // a read-then-delete would leave a window between the check and the write.
+    expect(destroy).toHaveBeenCalledTimes(1);
+    expect(destroy.mock.calls[0][0]).toEqual({ where: { id: ITEM_ID, userId: USER_ID } });
+  });
+
+  it('reports success when the row was removed', async () => {
+    await expect(deleteItem(ITEM_ID)).resolves.toBe(true);
+  });
+
+  it('returns false without deleting anything when nobody is signed in', async () => {
+    currentUserId.mockResolvedValue(null);
+
+    await expect(deleteItem(ITEM_ID)).resolves.toBe(false);
+    expect(destroy).not.toHaveBeenCalled();
+  });
+
+  it('returns false when the row does not match, rather than throwing', async () => {
+    destroy.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('not found', {
+        code: 'P2025',
+        clientVersion: 'test',
+      }),
+    );
+
+    // An unknown id and somebody else's id are the same answer.
+    await expect(deleteItem(ITEM_ID)).resolves.toBe(false);
+  });
+
+  it('rethrows anything that is not a missing row', async () => {
+    destroy.mockRejectedValue(new Error('connection lost'));
+
+    await expect(deleteItem(ITEM_ID)).rejects.toThrow('connection lost');
   });
 });

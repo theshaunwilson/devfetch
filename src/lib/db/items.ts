@@ -235,6 +235,37 @@ export async function updateItem(id: string, data: UpdateItemData): Promise<Item
   }
 }
 
+/**
+ * Deletes one item, returning whether it was this user's to delete.
+ *
+ * Scoped in the `where` of the delete itself, exactly like `updateItem`: the id
+ * comes from the client, and putting the owner in the filter is what stops it
+ * reaching another user's row — a read-then-delete would leave a window between
+ * the two.
+ *
+ * `ItemTag` cascades from `Item`, so the join rows go with it. The `Tag` rows
+ * themselves stay, which is the same orphan the edit feature left behind.
+ */
+export async function deleteItem(id: string): Promise<boolean> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) return false;
+
+  try {
+    await prisma.item.delete({ where: { id, userId } });
+
+    return true;
+  } catch (error) {
+    // P2025: nothing matched. An unknown id and somebody else's id both land
+    // here, and the caller cannot tell them apart — which is the point.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
 /** Item counts for the dashboard stat tiles. */
 export async function getItemStats(): Promise<ItemStats> {
   const userId = await getCurrentUserId();

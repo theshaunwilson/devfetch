@@ -1,20 +1,45 @@
-# Current Feature
-
-<!-- Feature Name -->
+# Current Feature: Delete Item
 
 ## Status
 
 <!-- Not Started|In Progress|Completed -->
 
-Not Started
+In Progress
 
 ## Goals
 
 <!-- Goals & requirements -->
 
+- Make the drawer's Trash button live — it has rendered inert since the Item Drawer feature.
+- Confirm before deleting with a shadcn `AlertDialog`, naming the item so the click is deliberate. Cancel leaves the item untouched.
+- Delete through a `deleteItem` server action that returns the `{ success, error }` shape the codebase already uses, scoped to the signed-in user.
+- Show a success toast (`sonner`, already installed) after the item is gone, and an error toast when the delete fails.
+- Close the drawer on success and `router.refresh()` so the card disappears from the list behind it.
+- Unit-test the new server action and the new `src/lib/db/items` function, per `coding-standards.md`.
+
 ## Notes
 
 <!-- Any extra notes -->
+
+**Where the pieces already are.**
+
+- `ItemDrawerActions` (`src/components/items/ItemDrawerActions.tsx:55`) holds the Trash button. It takes `onEdit`/`canEdit` today; delete needs the same treatment — the drawer cannot delete an item whose detail has not loaded, though the id is known from the card, so `canDelete` may be looser than `canEdit`.
+- `ItemDrawerProvider` owns `open`, `item`, `detail`, `status`, `mode` and already calls `router.refresh()` in `handleSaved`. A `handleDeleted` belongs beside it: close, refresh, and let the existing slide-out keep drawing the stale item.
+- `alert-dialog.tsx` and `sonner.tsx` are both already in `src/components/ui/`, and `<Toaster />` mounts in `AppShell`. No new dependency, no `shadcn add`.
+
+**Ownership and the delete itself.**
+
+- Follow `updateItem`'s pattern exactly: `prisma.item.delete({ where: { id, userId } })` — Prisma permits the extra scalar in the filter, and that is what stops one user deleting another's row. Catch `P2025` and return `null`, so somebody else's item reads identically to one that never existed.
+- **No manual tag cleanup is needed**: `ItemTag.item` is `onDelete: Cascade` (`prisma/schema.prisma:187`), so the join rows go with the item. Orphaned `Tag` rows will remain — the same gap the edit feature left open, and out of scope here unless we decide otherwise.
+- `Item` has no children beyond `ItemTag`, so nothing else blocks the delete.
+
+**Deliberate decisions to make at `start`.**
+
+- Where the `AlertDialog` lives: inside `ItemDrawerActions` beside the button it guards, or hoisted into the drawer. Note the Auth Phase 3 / profile lesson — a submit control must not unmount mid-flight, so the confirm button should not be a bare `AlertDialogAction` that closes the dialog on click.
+- Whether Escape/close during a pending delete is blocked.
+- The confirmation copy: naming the item title makes the dialog specific, but the title is user text and needs to wrap (the profile page's overflow bug came from exactly this).
+
+**Out of scope.** Favourite, pin and copy stay inert. No bulk delete, no undo, no soft delete/trash — the row goes.
 
 ## History
 

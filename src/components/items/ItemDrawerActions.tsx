@@ -1,30 +1,39 @@
 'use client';
 
-import { Copy, Pencil, Pin, Star, Trash2 } from 'lucide-react';
+import { Copy, Pencil, Pin, Star } from 'lucide-react';
 
+import { DeleteItemDialog } from '@/components/items/DeleteItemDialog';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 interface ItemDrawerActionsProps {
+  itemId: string;
+  /** Named in the delete confirmation. */
+  title: string;
   isFavorite: boolean;
   isPinned: boolean;
   onEdit: () => void;
   /** False until the full item has loaded — there is nothing to edit yet. */
   canEdit: boolean;
+  /** Called once the item has been deleted. */
+  onDeleted: () => void;
 }
 
 /**
  * The drawer's action bar.
  *
- * Edit is live. Favouriting, pinning, copying and deleting still need mutations
- * that do not exist yet, so those four stay inert; their state still renders,
- * since it comes from the item itself.
+ * Edit and delete are live. Favouriting, pinning and copying still need
+ * mutations that do not exist yet, so those three stay inert; their state still
+ * renders, since it comes from the item itself.
  */
 export function ItemDrawerActions({
+  itemId,
+  title,
   isFavorite,
   isPinned,
   onEdit,
   canEdit,
+  onDeleted,
 }: ItemDrawerActionsProps) {
   return (
     // Wraps rather than overflows: buttons are `shrink-0`, so on a narrow
@@ -53,10 +62,9 @@ export function ItemDrawerActions({
           Edit
         </Button>
 
-        <Button variant="ghost" size="icon-sm" className="text-destructive hover:text-destructive">
-          <Trash2 className="size-4" />
-          <span className="sr-only">Delete</span>
-        </Button>
+        {/* Not gated on `canEdit`: deleting needs only the id, which the card
+            already carried in. */}
+        <DeleteItemDialog itemId={itemId} title={title} onDeleted={onDeleted} />
       </div>
     </div>
   );

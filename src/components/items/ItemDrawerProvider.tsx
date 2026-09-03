@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 
 import { ItemDrawer } from '@/components/items/ItemDrawer';
+import { MAIN_CONTENT_ID } from '@/lib/constants';
 import type { DashboardItem, ItemDetail, ItemDetailResponse } from '@/types/item';
 
 /** What the drawer knows while its detail request is in flight. */
@@ -125,6 +126,17 @@ export function ItemDrawerProvider({ children }: { children: React.ReactNode }) 
     [router],
   );
 
+  /**
+   * The item is gone, so there is nothing left to draw: close, and let the
+   * lists behind catch up. `item` is deliberately left in place, as it is on
+   * any other close, so the drawer still has something to show while it slides
+   * out.
+   */
+  const handleDeleted = useCallback(() => {
+    setOpen(false);
+    router.refresh();
+  }, [router]);
+
   return (
     <ItemDrawerContext.Provider value={{ openItem }}>
       {children}
@@ -134,12 +146,20 @@ export function ItemDrawerProvider({ children }: { children: React.ReactNode }) 
         // has something to draw through its slide-out animation.
         onOpenChange={setOpen}
         onCloseAutoFocus={(event) => {
-          if (!triggerRef.current) return;
+          const trigger = triggerRef.current;
 
-          // Without this the focus ring lands on the body and a keyboard user
-          // loses their place in the list.
+          // After a delete the card that opened the drawer no longer exists,
+          // and focusing a detached node silently does nothing — so fall back
+          // to the main region. Either way this has to be explicit: left to
+          // itself the focus ring lands on the body and a keyboard user
+          // restarts from the top of the document.
+          const target =
+            trigger?.isConnected === true ? trigger : document.getElementById(MAIN_CONTENT_ID);
+
+          if (!target) return;
+
           event.preventDefault();
-          triggerRef.current.focus();
+          target.focus();
         }}
         item={item}
         detail={detail}
@@ -147,6 +167,7 @@ export function ItemDrawerProvider({ children }: { children: React.ReactNode }) 
         mode={mode}
         onModeChange={setMode}
         onSaved={handleSaved}
+        onDeleted={handleDeleted}
       />
     </ItemDrawerContext.Provider>
   );

@@ -87,3 +87,9 @@ export type ItemDetailResponse =
 export type UpdateItemResult =
   | { success: true; data: ItemDetail }
   | { success: false; error: string; fieldErrors?: Record<string, string[]> };
+
+/**
+ * What `deleteItem` returns. Nothing comes back on success — the row is gone,
+ * and the drawer closes rather than redrawing anything.
+ */
+export type DeleteItemResult = { success: true } | { success: false; error: string };
