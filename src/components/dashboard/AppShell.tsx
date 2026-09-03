@@ -1,6 +1,7 @@
 import { Sidebar } from '@/components/dashboard/Sidebar';
 import { SidebarProvider } from '@/components/dashboard/SidebarProvider';
 import { Topbar } from '@/components/dashboard/Topbar';
+import { ItemDrawerProvider } from '@/components/items/ItemDrawerProvider';
 import { getSidebarCollections } from '@/lib/db/collections';
 import { getItemTypes } from '@/lib/db/items';
 import { getCurrentUser } from '@/lib/db/user';
@@ -25,7 +26,11 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
         <Sidebar itemTypes={itemTypes} collections={collections} user={user} />
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar />
-          <main className="flex-1 overflow-y-auto">{children}</main>
+          <main className="flex-1 overflow-y-auto">
+            {/* Wraps the pages rather than each list, so the one drawer serves
+                the dashboard's two lists and the items grid alike. */}
+            <ItemDrawerProvider>{children}</ItemDrawerProvider>
+          </main>
         </div>
       </div>
     </SidebarProvider>

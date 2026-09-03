@@ -42,3 +42,26 @@ export interface ItemsByType {
   type: DashboardItemType;
   items: DashboardItem[];
 }
+
+/** Collection an item belongs to, drawn as a badge in the detail drawer. */
+export interface ItemDetailCollection {
+  id: string;
+  name: string;
+}
+
+/**
+ * An item as rendered in the detail drawer: everything a card already knows,
+ * plus the fields only the drawer shows.
+ */
+export interface ItemDetail extends DashboardItem {
+  content: string | null;
+  language: string | null;
+  collection: ItemDetailCollection | null;
+  /** ISO string, like `updatedAt` */
+  createdAt: string;
+}
+
+/** What `GET /api/items/[id]` returns. Shared by the route and the drawer. */
+export type ItemDetailResponse =
+  | { success: true; data: ItemDetail }
+  | { success: false; error: string };

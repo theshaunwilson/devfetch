@@ -1,4 +1,5 @@
 import { Pin, Star } from 'lucide-react';
+import { OpenItemButton } from '@/components/items/OpenItemButton';
 import { TypeIconTile } from '@/components/items/TypeIconTile';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,7 +15,7 @@ interface ItemCardProps {
 
 /**
  * Item tile in the `/items/[type]` grid, bordered by its item type's color.
- * Not a link yet — no item detail route exists.
+ * Clicking anywhere on it opens the detail drawer.
  */
 export function ItemCard({ item }: ItemCardProps) {
   const { type } = item;
@@ -23,7 +24,14 @@ export function ItemCard({ item }: ItemCardProps) {
   const hasBody = Boolean(item.description) || item.tags.length > 0;
 
   return (
-    <Card className={cn('h-full border-l-4', borderColorClass(type.color))}>
+    <Card
+      className={cn(
+        'relative h-full border-l-4 transition-colors hover:bg-muted/40',
+        borderColorClass(type.color)
+      )}
+    >
+      <OpenItemButton item={item} />
+
       <CardHeader>
         <div className="flex items-start gap-3">
           <TypeIconTile icon={getIcon(type.icon)} color={type.color} />

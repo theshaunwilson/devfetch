@@ -1,4 +1,5 @@
 import { Pin, Star } from 'lucide-react';
+import { OpenItemButton } from '@/components/items/OpenItemButton';
 import { TypeIconTile } from '@/components/items/TypeIconTile';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -12,12 +13,22 @@ interface ItemRowProps {
   item: DashboardItem;
 }
 
-/** Item row used by the Pinned and Recent lists. */
+/**
+ * Item row used by the Pinned and Recent lists. Clicking anywhere on it opens
+ * the detail drawer.
+ */
 export function ItemRow({ item }: ItemRowProps) {
   const { type } = item;
 
   return (
-    <Card className={cn('border-l-4', borderColorClass(type.color))}>
+    <Card
+      className={cn(
+        'relative border-l-4 transition-colors hover:bg-muted/40',
+        borderColorClass(type.color)
+      )}
+    >
+      <OpenItemButton item={item} />
+
       <div className="flex items-start gap-3 px-(--card-spacing)">
         <TypeIconTile icon={getIcon(type.icon)} color={type.color} />
 
