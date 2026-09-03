@@ -7,7 +7,13 @@ import { cache } from 'react';
 import { getCurrentUserId } from '@/lib/db/user';
 import { prisma } from '@/lib/prisma';
 import type { Prisma } from '@/generated/prisma/client';
-import type { DashboardItem, ItemsByType, ItemStats, SidebarItemType } from '@/types/item';
+import type {
+  DashboardItem,
+  ItemDetail,
+  ItemsByType,
+  ItemStats,
+  SidebarItemType,
+} from '@/types/item';
 
 /** Everything an item row renders: type for the icon and border, plus tags. */
 const ITEM_SELECT = {
@@ -108,6 +114,51 @@ export const getItemsByTypeSlug = cache(async (slug: string): Promise<ItemsByTyp
 
   return { type, items: items.map(toDashboardItem) };
 });
+
+/** Everything the detail drawer renders on top of what a card already holds. */
+const ITEM_DETAIL_SELECT = {
+  ...ITEM_SELECT,
+  content: true,
+  language: true,
+  createdAt: true,
+  collection: { select: { id: true, name: true } },
+} satisfies Prisma.ItemSelect;
+
+type ItemDetailPayload = Prisma.ItemGetPayload<{ select: typeof ITEM_DETAIL_SELECT }>;
+
+function toItemDetail(item: ItemDetailPayload): ItemDetail {
+  return {
+    ...toDashboardItem(item),
+    content: item.content,
+    language: item.language,
+    collection: item.collection,
+    createdAt: item.createdAt.toISOString(),
+  };
+}
+
+/**
+ * One item in full, for the detail drawer.
+ *
+ * Scoped to the signed-in user, so an id belonging to somebody else reads the
+ * same as an id that does not exist. Returns null in both cases, and when
+ * nobody is signed in.
+ */
+export async function getItemDetail(id: string): Promise<ItemDetail | null> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) return null;
+
+  // findFirst, not findUnique: the userId filter is what makes this safe, and
+  // findUnique would only accept the id.
+  const item = await prisma.item.findFirst({
+    where: { id, userId },
+    select: ITEM_DETAIL_SELECT,
+  });
+
+  if (!item) return null;
+
+  return toItemDetail(item);
+}
 
 /** Item counts for the dashboard stat tiles. */
 export async function getItemStats(): Promise<ItemStats> {

@@ -1,20 +1,35 @@
 # Current Feature
 
-<!-- Feature Name -->
+Item Drawer
 
 ## Status
 
 <!-- Not Started|In Progress|Completed -->
 
-Not Started
+In Progress
 
 ## Goals
 
-<!-- Goals & requirements -->
+- Right-side slide-in drawer (shadcn `Sheet`, `side="right"`) that serves as the item detail view — there is no separate item page
+- Clicking an `ItemCard` opens the drawer populated with that item's full data
+- Works on both `/dashboard` and `/items/[type]`
+- Action bar: Favorite (star, yellow when active), Pin, Copy, Edit (pencil), and Delete (trash, right-aligned) — layout per the screenshot
+- Client wrapper component owns drawer state, since both pages are server components
+- Card data (title, description, tags) keeps coming from the server component as it does today
+- Full detail (content, collections, language) is fetched on click from a new API route `GET /api/items/[id]`
+- The query function lives in `src/lib/db/items.ts`; the API route calls it behind an auth check
+- Drawer shows a skeleton/loading state while the fetch is in flight
+- Snappy: fetch on click, no page navigation
 
 ## Notes
 
-<!-- Any extra notes -->
+- Scope is the **details display only**. The code editor and other item-type-specific rendering come later; the action bar buttons are layout for now, not wired behaviours.
+- `src/components/ui/sheet.tsx` is already installed — no `shadcn add` needed.
+- Drawer contents per `docs/images/item-drawer.png`, top to bottom: type icon tile + title, type badge and language badge, action bar, then Description, Content (code block), Tags, Collections, and a Details block with Created / Updated dates.
+- Two card components exist — `ItemCard` (items list) and `ItemRow` (dashboard Pinned/Recent). The spec names `ItemCard`; the "works on both pages" requirement means the dashboard rows need to open it too.
+- The API route is the right call over a server action here: it is a read with a specific status code (401/404) and is the pattern `coding-standards.md` reserves for endpoints.
+- Auth check must scope the item to the signed-in user, not just require a session — otherwise any id is readable.
+- No migration expected: `Item.content`, `language`, and the `Collection` relation have been in the schema since the Prisma feature.
 
 ## History
 
