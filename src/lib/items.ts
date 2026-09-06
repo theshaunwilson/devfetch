@@ -101,3 +101,16 @@ export function initialTypeId<T extends { id: string; slug: string }>(
 ): string {
   return types.find((type) => type.slug === slug)?.id ?? types[0].id;
 }
+
+/**
+ * Whether this type's content is prose, and so gets the markdown editor rather
+ * than a plain textarea.
+ *
+ * Derived rather than listed, for the same reason `usesCodeEditor` is: a type
+ * with content that is not code is a type whose content is prose, so the two
+ * cannot drift into a type that gets both editors or neither. Snippets and
+ * commands keep Monaco; links have no content at all.
+ */
+export function usesMarkdownEditor(slug: string): boolean {
+  return TYPES_WITH_CONTENT.has(slug) && !TYPES_WITH_LANGUAGE.has(slug);
+}

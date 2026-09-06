@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 
 import { createItem } from '@/actions/items';
 import { CodeEditor } from '@/components/items/CodeEditor';
+import { MarkdownEditor } from '@/components/items/MarkdownEditor';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -36,6 +37,7 @@ import {
   parseTagInput,
   requiredFieldsFor,
   usesCodeEditor,
+  usesMarkdownEditor,
 } from '@/lib/items';
 import { isProType } from '@/lib/pro';
 import { cn } from '@/lib/utils';
@@ -148,6 +150,7 @@ function NewItemForm({ types, defaultTypeSlug, onCreated, onCancel }: NewItemFor
   const fields = editableFieldsFor(selected.slug);
   const required = requiredFieldsFor(selected.slug);
   const codeContent = usesCodeEditor(selected.slug);
+  const markdownContent = usesMarkdownEditor(selected.slug);
 
   // A guard for the button only — the action re-checks both, and trims before
   // it measures just as this does.
@@ -238,9 +241,9 @@ function NewItemForm({ types, defaultTypeSlug, onCreated, onCancel }: NewItemFor
 
         {fields.content && (
           <div className="flex flex-col gap-2">
-            {/* Monaco has no element to point a <label for> at, so the code
-                branch names itself through `ariaLabel` instead. */}
-            {codeContent ? (
+            {/* Neither editor has an element to point a <label for> at, so
+                both name themselves through `ariaLabel` instead. */}
+            {codeContent || markdownContent ? (
               <Label>Content</Label>
             ) : (
               <Label htmlFor="new-item-content">Content</Label>
@@ -252,6 +255,14 @@ function NewItemForm({ types, defaultTypeSlug, onCreated, onCancel }: NewItemFor
                 onChange={setContent}
                 language={language}
                 minHeight={140}
+                ariaLabel="Content"
+                aria-invalid={Boolean(fieldErrors.content)}
+              />
+            ) : markdownContent ? (
+              <MarkdownEditor
+                value={content}
+                onChange={setContent}
+                minHeight={220}
                 ariaLabel="Content"
                 aria-invalid={Boolean(fieldErrors.content)}
               />

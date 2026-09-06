@@ -6,9 +6,7 @@ import type { OnMount } from '@monaco-editor/react';
 
 import { EDITOR_THEME, configureMonaco } from '@/lib/monaco';
 import { monacoLanguage } from '@/lib/code-language';
-
-/** The spec's ceiling. Past this the editor scrolls instead of growing. */
-const MAX_HEIGHT = 400;
+import { EDITOR_MAX_HEIGHT } from '@/lib/constants';
 
 interface CodeEditorPaneProps {
   value: string;
@@ -44,7 +42,7 @@ export function CodeEditorPane({
   const path = `inmemory://item/${useId()}`;
 
   const clamp = useCallback(
-    (contentHeight: number) => Math.min(Math.max(contentHeight, minHeight), MAX_HEIGHT),
+    (contentHeight: number) => Math.min(Math.max(contentHeight, minHeight), EDITOR_MAX_HEIGHT),
     [minHeight],
   );
 

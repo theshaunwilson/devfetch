@@ -1,20 +1,121 @@
-# Current Feature
-
-<!-- Feature Name -->
+# Current Feature: Markdown Editor
 
 ## Status
 
-<!-- Not Started|In Progress|Completed -->
-
-Not Started
+In Progress
 
 ## Goals
 
-<!-- Goals & requirements -->
+- New `MarkdownEditor` component with a Write/Preview tabbed interface
+- Render and edit note and prompt content through it, replacing the plain `Textarea`
+- Snippets and commands keep `CodeEditor` — no change to the Monaco path
+- `react-markdown` + `remark-gfm` for GitHub Flavored Markdown
+- Chrome matching `CodeEditor`: same container/header treatment, same copy button
+- One component for both modes — read-only shows Preview only, edit opens on Write with Preview available
+- Fluid height capped at 400px, matching `CodeEditor`
+- Preview styling via a custom `.markdown-preview` class: distinct h1–h6, fenced code blocks, inline code, ordered/unordered lists, blockquotes with a left accent, blue links with hover, bordered tables with a header background
+- Wired into all three places notes and prompts render content:
+  - `NewItemDialog` content field
+  - `ItemEditForm` content field
+  - `ItemDrawer` view mode, read-only
 
 ## Notes
 
-<!-- Any extra notes -->
+### Where the code stands
+
+- Three integration points, the same three the Code Editor feature wired — the
+  spec lists them and they match what is in the tree: `ItemDrawer.tsx:180` (the
+  `<pre>` fallback), `ItemEditForm.tsx:149` (the `Textarea` branch) and
+  `NewItemDialog.tsx:250`. Each already branches on `usesCodeEditor(slug)`, so
+  each gains a second branch rather than a rewrite.
+- No migration and no schema change. `Item.content` is the same column; nothing
+  about how it is stored or validated changes.
+
+### Which types are markdown should be derived, not listed
+
+`src/lib/items.ts` holds `TYPES_WITH_CONTENT` = {snippet, prompt, command, note}
+and `TYPES_WITH_LANGUAGE` = {snippet, command}. Notes and prompts are exactly
+the difference — content but no language. `usesCodeEditor` is already read off
+`TYPES_WITH_LANGUAGE` for this reason, as `requiredFieldsFor` is read off
+`TYPES_WITH_URL`. A `usesMarkdownEditor(slug)` should follow the same rule
+(content and not code) rather than becoming a fifth hardcoded set, so a type
+cannot end up with both editors or neither.
+
+### The spec's hex values disagree with the codebase — RESOLVED: semantic tokens
+
+The spec asks for `bg-[#1e1e1e]` container and `bg-[#2d2d2d]` header to "match
+existing dark theme styling". `CodeEditor` uses neither — it is `bg-card` with a
+`bg-muted/40` header, and `--card` resolves to `#171717` in dark mode. Taking
+the hex literally would have made the markdown editor visibly *not* match the
+code editor beside it, which is the opposite of the requirement's intent, and
+would have broken light mode.
+
+Settled with the user before implementing: use the tokens. Verified by
+measuring both editors in the browser — root background, border colour, border
+width, radius and header background are byte-identical strings between the two.
+
+### New dependencies
+
+`react-markdown` and `remark-gfm` are both new — the first runtime additions
+since Monaco. `shadcn add tabs` is also needed (`src/components/ui/tabs.tsx`
+does not exist); like `select`, it should add no package, since the unified
+`radix-ui` package is already a dependency.
+
+### Security
+
+`react-markdown` escapes raw HTML by default. Content is user-supplied, so
+`rehype-raw` must stay out — adding it would turn a stored note into stored XSS.
+
+### Worth reusing rather than copying
+
+- `MAX_HEIGHT = 400` lives in `CodeEditorPane.tsx`. Both editors now share the
+  ceiling, so it wants to be one constant.
+- The copy button in `CodeEditor` is ~30 lines — clipboard `try`/`catch`, the
+  `COPIED_FEEDBACK_MS` timer, the `aria-label` swap on confirm. The spec asks
+  for the "same style" button; extracting beats a second copy that can drift.
+
+### Testing
+
+`usesMarkdownEditor` is a utility in `src/lib/items.ts`, so it gets unit tests
+alongside the existing `usesCodeEditor` ones. `MarkdownEditor` itself is a
+component and is verified in the browser, per `coding-standards.md`.
+
+### Found while implementing
+
+- **`shadcn add tabs` added a stray `cn` package.** The generated `tabs.tsx`
+  imported `cn` from a third-party npm package rather than `@/lib/utils`, which
+  the other 16 ui components use. Import repointed and the package uninstalled;
+  `package.json` is byte-identical to before the install, matching what
+  `shadcn add select` did.
+- **`node="[object Object]"` on every rendered link.** Spreading
+  `react-markdown`'s props onto the anchor wrote its internal hast `node` out as
+  a DOM attribute. The anchor's props are now named explicitly rather than
+  spread. Caught in the browser, not by lint or `tsc`.
+- **Default heights were too small.** All three call sites had inherited their
+  `minHeight` from the `CodeEditor` calls beside them (80 / 140 / 160), which
+  suit a short code fragment but not paragraphs of prose. Raised to 140 (drawer
+  read-only), 220 (create dialog) and 240 (edit form), with the component's own
+  default at 200. The create dialog's short-viewport cap was re-tested rather
+  than assumed, since a taller editor is exactly what would break it: at
+  1280x620 and 390x667 the dialog still caps, the fields still scroll, and the
+  Create button stays visible with nothing clipped off the top.
+- **Scrollbars did not match the code editor.** The two scroll containers were
+  left with the browser default. `.editor-scrollbars` in `globals.css` now
+  matches Monaco, with the values read off `scrollbarSlider.*` in
+  `src/lib/monaco.ts` rather than eyeballed: 10px, transparent track, thumb at
+  white 10% stepping to 18% hover and 25% active. A first pass gave the thumb a
+  2px inset and a 5px radius, which looked tidier but did not match — measuring
+  Monaco's own rendered slider showed `border-radius: 0` at the full 10px, so
+  the inset was dropped. Deliberately `::-webkit-scrollbar` only: Chrome ignores
+  those pseudo-elements on any element that also sets `scrollbar-width` or
+  `scrollbar-color`, which would have cost the hover and active steps. Firefox
+  keeps its own thin scrollbar. Light mode inverts the thumb, which Monaco
+  never needs since it is a fixed dark surface.
+- **Table cells broke mid-word at 390px.** `overflow-wrap: anywhere` on the
+  container collapses a cell's min-content width to one character, so the table
+  shrank to fit instead of scrolling and headings read "Colum n one headin g".
+  Cells now keep word-level wrapping and the table scrolls, like the code block.
+  Caught by looking at a screenshot, not by measuring.
 
 ## History
 

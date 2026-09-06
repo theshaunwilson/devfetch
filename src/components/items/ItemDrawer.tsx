@@ -4,6 +4,7 @@ import { CalendarDays, FolderOpen, Link2, Tag } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import { CodeEditor } from '@/components/items/CodeEditor';
+import { MarkdownEditor } from '@/components/items/MarkdownEditor';
 import { TypeIconTile } from '@/components/items/TypeIconTile';
 import { ItemDrawerActions } from '@/components/items/ItemDrawerActions';
 import { ItemEditForm } from '@/components/items/ItemEditForm';
@@ -13,7 +14,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Skeleton } from '@/components/ui/skeleton';
 import { capitalize, formatLongDate } from '@/lib/format';
 import { getIcon } from '@/lib/icons';
-import { usesCodeEditor } from '@/lib/items';
+import { usesCodeEditor, usesMarkdownEditor } from '@/lib/items';
 import type { ItemDetailStatus, ItemDrawerMode } from '@/components/items/ItemDrawerProvider';
 import type { DashboardItem, ItemDetail } from '@/types/item';
 
@@ -161,14 +162,23 @@ export function ItemDrawer({
                     {detail?.content && (
                       <section className="flex flex-col gap-2">
                         <SectionLabel>Content</SectionLabel>
-                        {/* Code types get the real editor, read-only; a note
-                            or a prompt is prose and stays a plain block. */}
+                        {/* Code types get Monaco read-only, prose types get
+                            the rendered markdown. The <pre> is the fallback
+                            for a custom type, which has content but neither
+                            editor. */}
                         {usesCodeEditor(detail.type.slug) ? (
                           <CodeEditor
                             value={detail.content}
                             language={detail.language}
                             readOnly
                             minHeight={80}
+                            ariaLabel={`${detail.title} content`}
+                          />
+                        ) : usesMarkdownEditor(detail.type.slug) ? (
+                          <MarkdownEditor
+                            value={detail.content}
+                            readOnly
+                            minHeight={140}
                             ariaLabel={`${detail.title} content`}
                           />
                         ) : (
