@@ -357,8 +357,12 @@ export async function getItemStats(): Promise<ItemStats> {
  *
  * Ordered by creation so the built-in types keep the order they were seeded in,
  * with custom types appended after them.
+ *
+ * `cache`d because more than one place needs the list per request: `AppShell`
+ * for the sidebar, and the items page for its own create button. Without it
+ * they would each pay for the findMany and the groupBy.
  */
-export async function getItemTypes(): Promise<SidebarItemType[]> {
+export const getItemTypes = cache(async (): Promise<SidebarItemType[]> => {
   const userId = await getCurrentUserId();
 
   if (!userId) return [];
@@ -385,4 +389,4 @@ export async function getItemTypes(): Promise<SidebarItemType[]> {
     ...type,
     itemCount: countByType.get(type.id) ?? 0,
   }));
-}
+});

@@ -1,20 +1,69 @@
-# Current Feature
-
-<!-- Feature Name -->
+# Current Feature: Code Editor
 
 ## Status
 
 <!-- Not Started|In Progress|Completed -->
 
-Not Started
+In Progress
 
 ## Goals
 
 <!-- Goals & requirements -->
 
+- Add a `CodeEditor` component built on Monaco Editor, using a dark theme that matches the app
+- Use `CodeEditor` in place of the plain `Textarea` for the **content** field of **snippets and commands only**
+- Leave the `Textarea` in place for notes, prompts and every other non-code type — and for the description field on all types
+- Give the editor a macOS-style window chrome: red / yellow / green dots along the top
+- Put a quick copy button in the editor header
+- Show the item's language in the editor header, next to the copy button
+- Support both modes from one component: read-only for the drawer's display view, editable for the edit form and the new-item dialog
+- Make the height fluid — it grows with the content — but cap it at 400px, with a scrollbar styled to match the theme
+
 ## Notes
 
 <!-- Any extra notes -->
+
+Source spec: `context/features/code-editor-spec.md`
+
+### Where this lands
+
+Content is rendered or edited in three places today, and "display + edit modes"
+covers all three:
+
+- `src/components/items/ItemDrawer.tsx` — display only, currently a
+  `<pre><code>` block (read-only mode)
+- `src/components/items/ItemEditForm.tsx:130` — the content `Textarea` in the
+  drawer's edit mode
+- `src/components/items/NewItemDialog.tsx:211` — the content `Textarea` in the
+  create dialog
+
+The description `Textarea` in both forms stays exactly as it is.
+
+### Which types are "code"
+
+`editableFieldsFor` / `requiredFieldsFor` in `src/lib/items.ts` already encode
+the per-type field mapping on the type **slug**, and `TYPES_WITH_LANGUAGE` is
+already exactly `{ snippet, command }` — the same two types this spec calls
+code. That set is the natural place for the decision, so the editor choice
+should read off it rather than a fourth hard-coded list.
+
+### Open questions to settle at `start`
+
+- **Which Monaco wrapper.** `monaco-editor` is not installed; nothing Monaco is.
+  `@monaco-editor/react` is the usual React binding and loads the editor from a
+  CDN by default — worth checking against how this app is deployed, and against
+  the fact that no other dependency here reaches out at runtime.
+- **Bundle cost.** Monaco is large and this app is otherwise light. It will need
+  `next/dynamic` with `ssr: false`, since Monaco is browser-only.
+- **Language mapping.** `Item.language` is free text typed by the user
+  ("typescript", "TypeScript", "bash"), not a Monaco language id. Something has
+  to map it, and fall back gracefully when it does not match.
+- **The `language` field is not required.** A snippet can be saved with no
+  language at all — the header has to read sensibly when it is empty.
+- **What the copy button copies** while the content is being edited: the saved
+  value or the in-progress buffer.
+- **Theme.** The app hardcodes `dark` on `<html>` with no `next-themes`
+  provider, so the editor theme is a constant, not a hook.
 
 ## History
 

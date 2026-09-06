@@ -6,6 +6,7 @@ import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
 import { createItem } from '@/actions/items';
+import { CodeEditor } from '@/components/items/CodeEditor';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -29,7 +30,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { textColorClass } from '@/lib/colors';
 import { capitalize } from '@/lib/format';
 import { getIcon } from '@/lib/icons';
-import { editableFieldsFor, parseTagInput, requiredFieldsFor } from '@/lib/items';
+import {
+  editableFieldsFor,
+  initialTypeId,
+  parseTagInput,
+  requiredFieldsFor,
+  usesCodeEditor,
+} from '@/lib/items';
 import { isProType } from '@/lib/pro';
 import { cn } from '@/lib/utils';
 import type { CreateItemInput } from '@/lib/validation/items';
@@ -38,6 +45,14 @@ import type { SidebarItemType } from '@/types/item';
 interface NewItemDialogProps {
   /** Every type the user can see, Pro ones included — filtered here. */
   itemTypes: SidebarItemType[];
+  /**
+   * Which type the form opens on. Falls back to the first offered type when
+   * absent or when the slug names a type that cannot be created — so a caller
+   * cannot leave the selector on nothing.
+   */
+  defaultTypeSlug?: string;
+  /** The trigger's text, for a caller that creates one specific type. */
+  triggerLabel?: string;
 }
 
 function FieldError({ messages }: { messages?: string[] }) {
@@ -49,10 +64,19 @@ function FieldError({ messages }: { messages?: string[] }) {
 /**
  * "New Item" in the top bar, and the dialog behind it.
  *
+ * Also used by the items page, which passes the type it is showing so the form
+ * opens on it — one dialog rather than a second, near-identical one.
+ *
  * The form lives in a child so it unmounts with the dialog: a half-typed item
  * and its errors belong to the attempt that was abandoned, not to the next one.
+ * That is also what re-applies `defaultTypeSlug` on every open, rather than
+ * leaving the selector wherever the last abandoned attempt left it.
  */
-export function NewItemDialog({ itemTypes }: NewItemDialogProps) {
+export function NewItemDialog({
+  itemTypes,
+  defaultTypeSlug,
+  triggerLabel = 'New Item',
+}: NewItemDialogProps) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
 
@@ -72,7 +96,7 @@ export function NewItemDialog({ itemTypes }: NewItemDialogProps) {
       <DialogTrigger asChild>
         <Button className="h-10" disabled={types.length === 0}>
           <Plus className="size-4" />
-          New Item
+          {triggerLabel}
         </Button>
       </DialogTrigger>
 
@@ -87,7 +111,12 @@ export function NewItemDialog({ itemTypes }: NewItemDialogProps) {
           <DialogDescription>Pick a type — the fields below follow from it.</DialogDescription>
         </DialogHeader>
 
-        <NewItemForm types={types} onCreated={handleCreated} onCancel={() => setOpen(false)} />
+        <NewItemForm
+          types={types}
+          defaultTypeSlug={defaultTypeSlug}
+          onCreated={handleCreated}
+          onCancel={() => setOpen(false)}
+        />
       </DialogContent>
     </Dialog>
   );
@@ -96,12 +125,13 @@ export function NewItemDialog({ itemTypes }: NewItemDialogProps) {
 interface NewItemFormProps {
   /** Never empty: the trigger is disabled when there is nothing to pick. */
   types: SidebarItemType[];
+  defaultTypeSlug?: string;
   onCreated: () => void;
   onCancel: () => void;
 }
 
-function NewItemForm({ types, onCreated, onCancel }: NewItemFormProps) {
-  const [typeId, setTypeId] = useState(types[0].id);
+function NewItemForm({ types, defaultTypeSlug, onCreated, onCancel }: NewItemFormProps) {
+  const [typeId, setTypeId] = useState(() => initialTypeId(types, defaultTypeSlug));
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [content, setContent] = useState('');
@@ -117,6 +147,7 @@ function NewItemForm({ types, onCreated, onCancel }: NewItemFormProps) {
   const selected = types.find((type) => type.id === typeId) ?? types[0];
   const fields = editableFieldsFor(selected.slug);
   const required = requiredFieldsFor(selected.slug);
+  const codeContent = usesCodeEditor(selected.slug);
 
   // A guard for the button only — the action re-checks both, and trims before
   // it measures just as this does.
@@ -207,14 +238,32 @@ function NewItemForm({ types, onCreated, onCancel }: NewItemFormProps) {
 
         {fields.content && (
           <div className="flex flex-col gap-2">
-            <Label htmlFor="new-item-content">Content</Label>
-            <Textarea
-              id="new-item-content"
-              value={content}
-              onChange={(event) => setContent(event.target.value)}
-              aria-invalid={Boolean(fieldErrors.content)}
-              className="min-h-32 font-mono text-xs leading-relaxed"
-            />
+            {/* Monaco has no element to point a <label for> at, so the code
+                branch names itself through `ariaLabel` instead. */}
+            {codeContent ? (
+              <Label>Content</Label>
+            ) : (
+              <Label htmlFor="new-item-content">Content</Label>
+            )}
+
+            {codeContent ? (
+              <CodeEditor
+                value={content}
+                onChange={setContent}
+                language={language}
+                minHeight={140}
+                ariaLabel="Content"
+                aria-invalid={Boolean(fieldErrors.content)}
+              />
+            ) : (
+              <Textarea
+                id="new-item-content"
+                value={content}
+                onChange={(event) => setContent(event.target.value)}
+                aria-invalid={Boolean(fieldErrors.content)}
+                className="min-h-32 font-mono text-xs leading-relaxed"
+              />
+            )}
             <FieldError messages={fieldErrors.content} />
           </div>
         )}
