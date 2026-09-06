@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   editableFieldsFor,
   formatTagInput,
+  initialTypeId,
   parseTagInput,
   requiredFieldsFor,
   usesCodeEditor,
@@ -131,5 +132,51 @@ describe('usesCodeEditor', () => {
     for (const slug of ['snippet', 'command', 'note', 'prompt', 'link', 'recipe']) {
       if (usesCodeEditor(slug)) expect(editableFieldsFor(slug).content).toBe(true);
     }
+  });
+});
+
+describe('initialTypeId', () => {
+  const TYPES = [
+    { id: 'type_snippet', slug: 'snippet' },
+    { id: 'type_prompt', slug: 'prompt' },
+    { id: 'type_link', slug: 'link' },
+  ];
+
+  it('opens on the requested type', () => {
+    expect(initialTypeId(TYPES, 'link')).toBe('type_link');
+    expect(initialTypeId(TYPES, 'prompt')).toBe('type_prompt');
+  });
+
+  // The case that makes this worth a function: the items page passes its own
+  // slug, and /items/file names a Pro type the dialog does not offer.
+  it('falls back to the first type when the slug is not on offer', () => {
+    expect(initialTypeId(TYPES, 'file')).toBe('type_snippet');
+    expect(initialTypeId(TYPES, 'image')).toBe('type_snippet');
+  });
+
+  it('falls back when no slug is given at all, as the top bar does', () => {
+    expect(initialTypeId(TYPES)).toBe('type_snippet');
+    expect(initialTypeId(TYPES, undefined)).toBe('type_snippet');
+  });
+
+  it('falls back rather than matching loosely on case or padding', () => {
+    // The slug arrives from the URL and is compared to stored slugs; neither
+    // is normalized here, so a near-miss must not resolve.
+    expect(initialTypeId(TYPES, 'Link')).toBe('type_snippet');
+    expect(initialTypeId(TYPES, ' link ')).toBe('type_snippet');
+  });
+
+  it('always returns an id that is actually on offer', () => {
+    for (const slug of ['snippet', 'link', 'file', '', undefined, 'nonsense']) {
+      expect(TYPES.map((type) => type.id)).toContain(initialTypeId(TYPES, slug));
+    }
+  });
+
+  // A custom type may reuse a system slug, and the list is ordered so the
+  // user's own comes first; the first match is therefore the right one.
+  it('takes the first match when two types share a slug', () => {
+    const shadowed = [{ id: 'custom_snippet', slug: 'snippet' }, ...TYPES];
+
+    expect(initialTypeId(shadowed, 'snippet')).toBe('custom_snippet');
   });
 });

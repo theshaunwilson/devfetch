@@ -84,3 +84,20 @@ export function usesCodeEditor(slug: string): boolean {
   return TYPES_WITH_LANGUAGE.has(slug);
 }
 
+/**
+ * Which type a new-item form opens on.
+ *
+ * `slug` is a preference, not a guarantee: the items page passes the type it
+ * is showing, but the offered list excludes the Pro types and could not
+ * include a type that has since been deleted. Anything unmatched falls back to
+ * the first offered type, so the selector can never open on nothing.
+ *
+ * `types` must not be empty — the caller disables its trigger when there is
+ * nothing to pick.
+ */
+export function initialTypeId<T extends { id: string; slug: string }>(
+  types: readonly T[],
+  slug?: string,
+): string {
+  return types.find((type) => type.slug === slug)?.id ?? types[0].id;
+}

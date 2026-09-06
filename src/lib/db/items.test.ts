@@ -12,8 +12,14 @@ import type { Mock } from 'vitest';
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    item: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
-    itemType: { findFirst: vi.fn() },
+    item: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      groupBy: vi.fn(),
+    },
+    itemType: { findFirst: vi.fn(), findMany: vi.fn() },
   },
 }));
 
@@ -21,7 +27,7 @@ vi.mock('@/lib/db/user', () => ({ getCurrentUserId: vi.fn() }));
 
 const { prisma } = await import('@/lib/prisma');
 const { getCurrentUserId } = await import('@/lib/db/user');
-const { createItem, deleteItem, getItemDetail, getItemTypeById, updateItem } =
+const { createItem, deleteItem, getItemDetail, getItemTypeById, getItemTypes, updateItem } =
   await import('./items');
 const { Prisma } = await import('@/generated/prisma/client');
 
@@ -56,6 +62,22 @@ const findType = prisma.itemType.findFirst as unknown as Mock<
   (args: unknown) => Promise<{ id: string; slug: string } | null>
 >;
 const currentUserId = vi.mocked(getCurrentUserId);
+
+/** What `getItemTypes` selects from `ItemType`, and what it counts. */
+interface TypeRow {
+  id: string;
+  name: string;
+  slug: string;
+  icon: string | null;
+  color: string | null;
+}
+
+const findManyTypes = prisma.itemType.findMany as unknown as Mock<
+  (args: unknown) => Promise<TypeRow[]>
+>;
+const groupByType = prisma.item.groupBy as unknown as Mock<
+  (args: unknown) => Promise<{ typeId: string; _count: { _all: number } }[]>
+>;
 
 const USER_ID = 'user_1';
 const ITEM_ID = 'item_1';
@@ -408,5 +430,91 @@ describe('createItem', () => {
       updatedAt: '2026-08-18T21:56:33.193Z',
       createdAt: '2026-08-17T10:00:00.000Z',
     });
+  });
+});
+
+/**
+ * `getItemTypes` feeds both the sidebar and the items page's create button.
+ * The property worth pinning is the global-types join: the seven built-ins are
+ * `userId: null`, so a plain `userId` filter would return none of them.
+ */
+describe('getItemTypes', () => {
+  const SYSTEM_TYPE: TypeRow = {
+    id: 'type_snippet',
+    name: 'snippet',
+    slug: 'snippet',
+    icon: 'Code',
+    color: '#3b82f6',
+  };
+  const CUSTOM_TYPE: TypeRow = {
+    id: 'type_recipe',
+    name: 'recipe',
+    slug: 'recipe',
+    icon: null,
+    color: null,
+  };
+
+  beforeEach(() => {
+    findManyTypes.mockResolvedValue([SYSTEM_TYPE]);
+    groupByType.mockResolvedValue([]);
+  });
+
+  it('asks for the global system types as well as the user\'s own', async () => {
+    await getItemTypes();
+
+    expect(findManyTypes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { OR: [{ userId: null }, { userId: USER_ID }] },
+      }),
+    );
+  });
+
+  it('orders by creation, so the built-ins keep their seeded order', async () => {
+    await getItemTypes();
+
+    expect(findManyTypes).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: { createdAt: 'asc' } }),
+    );
+  });
+
+  it('counts only the signed-in user\'s items, though the types are shared', async () => {
+    await getItemTypes();
+
+    expect(groupByType).toHaveBeenCalledWith(
+      expect.objectContaining({ by: ['typeId'], where: { userId: USER_ID } }),
+    );
+  });
+
+  it('attaches each type its own count', async () => {
+    findManyTypes.mockResolvedValue([SYSTEM_TYPE, CUSTOM_TYPE]);
+    groupByType.mockResolvedValue([
+      { typeId: 'type_recipe', _count: { _all: 2 } },
+      { typeId: 'type_snippet', _count: { _all: 4 } },
+    ]);
+
+    expect(await getItemTypes()).toEqual([
+      { ...SYSTEM_TYPE, itemCount: 4 },
+      { ...CUSTOM_TYPE, itemCount: 2 },
+    ]);
+  });
+
+  // An unused type has no groupBy row at all, so the count has to come from
+  // somewhere — the sidebar shows 0 for File and Image, not a blank.
+  it('reports zero for a type no item uses, rather than dropping it', async () => {
+    findManyTypes.mockResolvedValue([SYSTEM_TYPE, CUSTOM_TYPE]);
+    groupByType.mockResolvedValue([{ typeId: 'type_snippet', _count: { _all: 4 } }]);
+
+    const types = await getItemTypes();
+
+    expect(types).toHaveLength(2);
+    expect(types[1]).toEqual({ ...CUSTOM_TYPE, itemCount: 0 });
+  });
+
+  it('returns nothing without querying when nobody is signed in', async () => {
+    currentUserId.mockResolvedValue(null);
+
+    expect(await getItemTypes()).toEqual([]);
+    expect(findManyTypes).not.toHaveBeenCalled();
+    expect(groupByType).not.toHaveBeenCalled();
   });
 });

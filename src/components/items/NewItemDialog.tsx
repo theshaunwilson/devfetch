@@ -32,6 +32,7 @@ import { capitalize } from '@/lib/format';
 import { getIcon } from '@/lib/icons';
 import {
   editableFieldsFor,
+  initialTypeId,
   parseTagInput,
   requiredFieldsFor,
   usesCodeEditor,
@@ -44,6 +45,14 @@ import type { SidebarItemType } from '@/types/item';
 interface NewItemDialogProps {
   /** Every type the user can see, Pro ones included — filtered here. */
   itemTypes: SidebarItemType[];
+  /**
+   * Which type the form opens on. Falls back to the first offered type when
+   * absent or when the slug names a type that cannot be created — so a caller
+   * cannot leave the selector on nothing.
+   */
+  defaultTypeSlug?: string;
+  /** The trigger's text, for a caller that creates one specific type. */
+  triggerLabel?: string;
 }
 
 function FieldError({ messages }: { messages?: string[] }) {
@@ -55,10 +64,19 @@ function FieldError({ messages }: { messages?: string[] }) {
 /**
  * "New Item" in the top bar, and the dialog behind it.
  *
+ * Also used by the items page, which passes the type it is showing so the form
+ * opens on it — one dialog rather than a second, near-identical one.
+ *
  * The form lives in a child so it unmounts with the dialog: a half-typed item
  * and its errors belong to the attempt that was abandoned, not to the next one.
+ * That is also what re-applies `defaultTypeSlug` on every open, rather than
+ * leaving the selector wherever the last abandoned attempt left it.
  */
-export function NewItemDialog({ itemTypes }: NewItemDialogProps) {
+export function NewItemDialog({
+  itemTypes,
+  defaultTypeSlug,
+  triggerLabel = 'New Item',
+}: NewItemDialogProps) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
 
@@ -78,7 +96,7 @@ export function NewItemDialog({ itemTypes }: NewItemDialogProps) {
       <DialogTrigger asChild>
         <Button className="h-10" disabled={types.length === 0}>
           <Plus className="size-4" />
-          New Item
+          {triggerLabel}
         </Button>
       </DialogTrigger>
 
@@ -93,7 +111,12 @@ export function NewItemDialog({ itemTypes }: NewItemDialogProps) {
           <DialogDescription>Pick a type — the fields below follow from it.</DialogDescription>
         </DialogHeader>
 
-        <NewItemForm types={types} onCreated={handleCreated} onCancel={() => setOpen(false)} />
+        <NewItemForm
+          types={types}
+          defaultTypeSlug={defaultTypeSlug}
+          onCreated={handleCreated}
+          onCancel={() => setOpen(false)}
+        />
       </DialogContent>
     </Dialog>
   );
@@ -102,12 +125,13 @@ export function NewItemDialog({ itemTypes }: NewItemDialogProps) {
 interface NewItemFormProps {
   /** Never empty: the trigger is disabled when there is nothing to pick. */
   types: SidebarItemType[];
+  defaultTypeSlug?: string;
   onCreated: () => void;
   onCancel: () => void;
 }
 
-function NewItemForm({ types, onCreated, onCancel }: NewItemFormProps) {
-  const [typeId, setTypeId] = useState(types[0].id);
+function NewItemForm({ types, defaultTypeSlug, onCreated, onCancel }: NewItemFormProps) {
+  const [typeId, setTypeId] = useState(() => initialTypeId(types, defaultTypeSlug));
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [content, setContent] = useState('');
