@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { editableFieldsFor, formatTagInput, parseTagInput, requiredFieldsFor } from './items';
+import {
+  editableFieldsFor,
+  formatTagInput,
+  parseTagInput,
+  requiredFieldsFor,
+  usesCodeEditor,
+} from './items';
 
 describe('editableFieldsFor', () => {
   it('gives snippet and command a language, and the other content types none', () => {
@@ -89,6 +95,41 @@ describe('requiredFieldsFor', () => {
       const editable = editableFieldsFor(slug);
 
       expect(required.url && !editable.url).toBe(false);
+    }
+  });
+});
+
+describe('usesCodeEditor', () => {
+  it('is true for exactly the code types', () => {
+    expect(usesCodeEditor('snippet')).toBe(true);
+    expect(usesCodeEditor('command')).toBe(true);
+  });
+
+  it('is false for prose and for the types with no content at all', () => {
+    expect(usesCodeEditor('note')).toBe(false);
+    expect(usesCodeEditor('prompt')).toBe(false);
+    expect(usesCodeEditor('link')).toBe(false);
+    expect(usesCodeEditor('file')).toBe(false);
+    expect(usesCodeEditor('image')).toBe(false);
+  });
+
+  it('is false for a custom type, which gets the plain textarea', () => {
+    expect(usesCodeEditor('recipe')).toBe(false);
+    expect(usesCodeEditor('')).toBe(false);
+  });
+
+  // The pairing that stops the two lists drifting: a type gets the code editor
+  // precisely when it has a language field to drive the highlighting.
+  it('agrees with the language field on every type', () => {
+    for (const slug of ['snippet', 'command', 'note', 'prompt', 'link', 'recipe']) {
+      expect(usesCodeEditor(slug)).toBe(editableFieldsFor(slug).language);
+    }
+  });
+
+  // A type with no content field has nothing to put in an editor.
+  it('never claims a type that has no content field', () => {
+    for (const slug of ['snippet', 'command', 'note', 'prompt', 'link', 'recipe']) {
+      if (usesCodeEditor(slug)) expect(editableFieldsFor(slug).content).toBe(true);
     }
   });
 });

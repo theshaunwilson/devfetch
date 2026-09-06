@@ -69,3 +69,18 @@ export function parseTagInput(value: string): string[] {
 export function formatTagInput(tags: string[]): string {
   return tags.join(', ');
 }
+
+/**
+ * Whether this type's content is code, and so gets the Monaco editor rather
+ * than a plain textarea.
+ *
+ * Read off `TYPES_WITH_LANGUAGE` rather than a list of its own, for the same
+ * reason `requiredFieldsFor` is: a type whose content has a language is a type
+ * whose content is code, so the two cannot drift apart. Notes and prompts keep
+ * the textarea — prose is not improved by a gutter and a cursor that snaps to
+ * tokens.
+ */
+export function usesCodeEditor(slug: string): boolean {
+  return TYPES_WITH_LANGUAGE.has(slug);
+}
+

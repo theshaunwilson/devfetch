@@ -6,6 +6,7 @@ import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
 import { createItem } from '@/actions/items';
+import { CodeEditor } from '@/components/items/CodeEditor';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -29,7 +30,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { textColorClass } from '@/lib/colors';
 import { capitalize } from '@/lib/format';
 import { getIcon } from '@/lib/icons';
-import { editableFieldsFor, parseTagInput, requiredFieldsFor } from '@/lib/items';
+import {
+  editableFieldsFor,
+  parseTagInput,
+  requiredFieldsFor,
+  usesCodeEditor,
+} from '@/lib/items';
 import { isProType } from '@/lib/pro';
 import { cn } from '@/lib/utils';
 import type { CreateItemInput } from '@/lib/validation/items';
@@ -117,6 +123,7 @@ function NewItemForm({ types, onCreated, onCancel }: NewItemFormProps) {
   const selected = types.find((type) => type.id === typeId) ?? types[0];
   const fields = editableFieldsFor(selected.slug);
   const required = requiredFieldsFor(selected.slug);
+  const codeContent = usesCodeEditor(selected.slug);
 
   // A guard for the button only — the action re-checks both, and trims before
   // it measures just as this does.
@@ -207,14 +214,32 @@ function NewItemForm({ types, onCreated, onCancel }: NewItemFormProps) {
 
         {fields.content && (
           <div className="flex flex-col gap-2">
-            <Label htmlFor="new-item-content">Content</Label>
-            <Textarea
-              id="new-item-content"
-              value={content}
-              onChange={(event) => setContent(event.target.value)}
-              aria-invalid={Boolean(fieldErrors.content)}
-              className="min-h-32 font-mono text-xs leading-relaxed"
-            />
+            {/* Monaco has no element to point a <label for> at, so the code
+                branch names itself through `ariaLabel` instead. */}
+            {codeContent ? (
+              <Label>Content</Label>
+            ) : (
+              <Label htmlFor="new-item-content">Content</Label>
+            )}
+
+            {codeContent ? (
+              <CodeEditor
+                value={content}
+                onChange={setContent}
+                language={language}
+                minHeight={140}
+                ariaLabel="Content"
+                aria-invalid={Boolean(fieldErrors.content)}
+              />
+            ) : (
+              <Textarea
+                id="new-item-content"
+                value={content}
+                onChange={(event) => setContent(event.target.value)}
+                aria-invalid={Boolean(fieldErrors.content)}
+                className="min-h-32 font-mono text-xs leading-relaxed"
+              />
+            )}
             <FieldError messages={fieldErrors.content} />
           </div>
         )}

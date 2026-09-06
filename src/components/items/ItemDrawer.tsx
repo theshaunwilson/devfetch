@@ -3,6 +3,7 @@
 import { CalendarDays, FolderOpen, Link2, Tag } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
+import { CodeEditor } from '@/components/items/CodeEditor';
 import { TypeIconTile } from '@/components/items/TypeIconTile';
 import { ItemDrawerActions } from '@/components/items/ItemDrawerActions';
 import { ItemEditForm } from '@/components/items/ItemEditForm';
@@ -12,6 +13,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Skeleton } from '@/components/ui/skeleton';
 import { capitalize, formatLongDate } from '@/lib/format';
 import { getIcon } from '@/lib/icons';
+import { usesCodeEditor } from '@/lib/items';
 import type { ItemDetailStatus, ItemDrawerMode } from '@/components/items/ItemDrawerProvider';
 import type { DashboardItem, ItemDetail } from '@/types/item';
 
@@ -159,9 +161,21 @@ export function ItemDrawer({
                     {detail?.content && (
                       <section className="flex flex-col gap-2">
                         <SectionLabel>Content</SectionLabel>
-                        <pre className="overflow-x-auto rounded-lg border bg-muted/40 p-4 font-mono text-xs leading-relaxed">
-                          <code>{detail.content}</code>
-                        </pre>
+                        {/* Code types get the real editor, read-only; a note
+                            or a prompt is prose and stays a plain block. */}
+                        {usesCodeEditor(detail.type.slug) ? (
+                          <CodeEditor
+                            value={detail.content}
+                            language={detail.language}
+                            readOnly
+                            minHeight={80}
+                            ariaLabel={`${detail.title} content`}
+                          />
+                        ) : (
+                          <pre className="overflow-x-auto rounded-lg border bg-muted/40 p-4 font-mono text-xs leading-relaxed">
+                            <code>{detail.content}</code>
+                          </pre>
+                        )}
                       </section>
                     )}
 

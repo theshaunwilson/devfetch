@@ -16,6 +16,10 @@ const eslintConfig = defineConfig([
     "src/generated/**",
     // Vitest coverage report
     "coverage/**",
+    // Monaco's prebuilt bundle, copied in by scripts/copy-monaco.ts. Flat
+    // config does not read .gitignore, and linting 27MB of minified AMD
+    // modules exhausts the heap rather than merely wasting time.
+    "public/monaco/**",
   ]),
 ]);
 
