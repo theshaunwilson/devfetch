@@ -5,12 +5,19 @@ import { toast } from 'sonner';
 
 import { updateItem } from '@/actions/items';
 import { CodeEditor } from '@/components/items/CodeEditor';
+import { MarkdownEditor } from '@/components/items/MarkdownEditor';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SheetHeader } from '@/components/ui/sheet';
 import { Textarea } from '@/components/ui/textarea';
-import { editableFieldsFor, formatTagInput, parseTagInput, usesCodeEditor } from '@/lib/items';
+import {
+  editableFieldsFor,
+  formatTagInput,
+  parseTagInput,
+  usesCodeEditor,
+  usesMarkdownEditor,
+} from '@/lib/items';
 import type { UpdateItemInput } from '@/lib/validation/items';
 import type { ItemDetail } from '@/types/item';
 
@@ -43,6 +50,7 @@ function FieldError({ messages }: { messages?: string[] }) {
 export function ItemEditForm({ item, heading, onSaved, onCancel }: ItemEditFormProps) {
   const fields = editableFieldsFor(item.type.slug);
   const codeContent = usesCodeEditor(item.type.slug);
+  const markdownContent = usesMarkdownEditor(item.type.slug);
 
   const [title, setTitle] = useState(item.title);
   const [description, setDescription] = useState(item.description ?? '');
@@ -128,9 +136,9 @@ export function ItemEditForm({ item, heading, onSaved, onCancel }: ItemEditFormP
 
         {fields.content && (
           <div className="flex flex-col gap-2">
-            {/* Monaco has no element to point a <label for> at, so the code
-                branch names itself through `ariaLabel` instead. */}
-            {codeContent ? (
+            {/* Neither editor has an element to point a <label for> at, so
+                both name themselves through `ariaLabel` instead. */}
+            {codeContent || markdownContent ? (
               <Label>Content</Label>
             ) : (
               <Label htmlFor="item-content">Content</Label>
@@ -142,6 +150,14 @@ export function ItemEditForm({ item, heading, onSaved, onCancel }: ItemEditFormP
                 onChange={setContent}
                 language={language}
                 minHeight={160}
+                ariaLabel="Content"
+                aria-invalid={Boolean(fieldErrors.content)}
+              />
+            ) : markdownContent ? (
+              <MarkdownEditor
+                value={content}
+                onChange={setContent}
+                minHeight={240}
                 ariaLabel="Content"
                 aria-invalid={Boolean(fieldErrors.content)}
               />

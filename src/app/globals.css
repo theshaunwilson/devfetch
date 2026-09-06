@@ -128,3 +128,280 @@
     @apply font-sans;
     }
 }
+/*
+ * Rendered markdown, for `MarkdownPreview`.
+ *
+ * A custom class rather than utility classes on a `components` map: markdown
+ * produces elements this app never writes by hand, and every one of them needs
+ * a rule. Written against the theme's own variables so both themes work, with
+ * links the one exception — `--primary` is grayscale in this theme, and a link
+ * has to read as a link.
+ */
+@layer components {
+  .markdown-preview {
+    --markdown-link: oklch(0.55 0.19 255);
+
+    font-size: 0.8125rem;
+    line-height: 1.7;
+    color: var(--foreground);
+    overflow-wrap: anywhere;
+  }
+
+  .dark .markdown-preview {
+    --markdown-link: oklch(0.75 0.14 245);
+  }
+
+  .markdown-preview > :first-child {
+    margin-top: 0;
+  }
+
+  .markdown-preview > :last-child {
+    margin-bottom: 0;
+  }
+
+  .markdown-preview p,
+  .markdown-preview ul,
+  .markdown-preview ol,
+  .markdown-preview blockquote,
+  .markdown-preview pre,
+  .markdown-preview table {
+    margin-block: 0.75em;
+  }
+
+  /* Headings: sized and weighted apart so an outline is readable at a glance. */
+  .markdown-preview h1,
+  .markdown-preview h2,
+  .markdown-preview h3,
+  .markdown-preview h4,
+  .markdown-preview h5,
+  .markdown-preview h6 {
+    margin-block: 1.4em 0.6em;
+    font-weight: 600;
+    line-height: 1.3;
+    text-wrap: balance;
+  }
+
+  .markdown-preview h1 {
+    font-size: 1.6em;
+    font-weight: 700;
+  }
+
+  .markdown-preview h2 {
+    font-size: 1.35em;
+    font-weight: 700;
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .markdown-preview h3 {
+    font-size: 1.15em;
+  }
+
+  .markdown-preview h4 {
+    font-size: 1em;
+  }
+
+  .markdown-preview h5,
+  .markdown-preview h6 {
+    font-size: 0.9em;
+    color: var(--muted-foreground);
+  }
+
+  .markdown-preview strong {
+    font-weight: 600;
+  }
+
+  .markdown-preview a {
+    color: var(--markdown-link);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .markdown-preview a:hover {
+    text-decoration-thickness: 2px;
+    opacity: 0.85;
+  }
+
+  /* Inline code: a subtle plate, distinct from the block treatment below. */
+  .markdown-preview :not(pre) > code {
+    padding: 0.15em 0.4em;
+    border-radius: 0.3rem;
+    background: color-mix(in oklab, var(--muted-foreground) 18%, transparent);
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: 0.9em;
+  }
+
+  .markdown-preview pre {
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    background: var(--background);
+    overflow-x: auto;
+  }
+
+  .markdown-preview pre code {
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: 0.9em;
+    line-height: 1.6;
+    /* The <pre> scrolls; the code inside it must not wrap or re-break. */
+    overflow-wrap: normal;
+    white-space: pre;
+  }
+
+  .markdown-preview ul,
+  .markdown-preview ol {
+    padding-inline-start: 1.5em;
+  }
+
+  .markdown-preview ul {
+    list-style: disc;
+  }
+
+  .markdown-preview ul ul {
+    list-style: circle;
+  }
+
+  .markdown-preview ol {
+    list-style: decimal;
+  }
+
+  .markdown-preview li {
+    margin-block: 0.25em;
+  }
+
+  .markdown-preview li::marker {
+    color: var(--muted-foreground);
+  }
+
+  /* GFM task lists carry their own bullet, so the disc would be a second one. */
+  .markdown-preview li:has(> input[type='checkbox']) {
+    list-style: none;
+    margin-inline-start: -1.35em;
+  }
+
+  .markdown-preview input[type='checkbox'] {
+    margin-inline-end: 0.5em;
+    accent-color: var(--markdown-link);
+  }
+
+  .markdown-preview blockquote {
+    padding-inline-start: 1em;
+    border-inline-start: 3px solid var(--border);
+    color: var(--muted-foreground);
+  }
+
+  .markdown-preview blockquote > :first-child {
+    margin-top: 0;
+  }
+
+  .markdown-preview blockquote > :last-child {
+    margin-bottom: 0;
+  }
+
+  .markdown-preview table {
+    display: block;
+    width: max-content;
+    max-width: 100%;
+    border-collapse: collapse;
+    overflow-x: auto;
+  }
+
+  .markdown-preview th,
+  .markdown-preview td {
+    padding: 0.4em 0.75em;
+    border: 1px solid var(--border);
+    text-align: start;
+    /* The container breaks anywhere so a long unbroken word cannot push the
+       panel wide. A cell must not: with `anywhere` its min-content width is a
+       single character, so the table shrinks to fit instead of scrolling and
+       every heading breaks mid-word. Cells wrap between words and the table
+       scrolls, the same way the code block does. */
+    overflow-wrap: normal;
+  }
+
+  .markdown-preview th {
+    background: color-mix(in oklab, var(--muted-foreground) 15%, transparent);
+    font-weight: 600;
+  }
+
+  .markdown-preview hr {
+    margin-block: 1.5em;
+    border: 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .markdown-preview img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 0.5rem;
+  }
+
+  .markdown-preview del {
+    color: var(--muted-foreground);
+  }
+}
+
+/*
+ * Scrollbars for the markdown editor, matching Monaco's.
+ *
+ * The values are read straight off `scrollbarSlider.*` in `src/lib/monaco.ts`
+ * — white at 10%, stepping to 18% on hover and 25% while dragging, over a
+ * transparent track at 10px — so a note and a snippet scroll identically.
+ * Light mode inverts the thumb, which Monaco itself never needs: it is a
+ * fixed dark surface, while the preview follows the theme.
+ *
+ * Deliberately `::-webkit-scrollbar` only, with no `scrollbar-width` or
+ * `scrollbar-color` alongside it: Chrome ignores these pseudo-elements on any
+ * element that sets the standard properties, which would cost the hover and
+ * active steps. Firefox keeps its own thin scrollbar, which is unobtrusive
+ * already.
+ *
+ * The bare descendant selectors cover the code block and the table, which
+ * scroll inside the preview rather than being the scroll container themselves.
+ */
+@layer components {
+  .editor-scrollbars {
+    --scrollbar-thumb: oklch(0.145 0 0 / 0.22);
+    --scrollbar-thumb-hover: oklch(0.145 0 0 / 0.34);
+    --scrollbar-thumb-active: oklch(0.145 0 0 / 0.46);
+  }
+
+  .dark .editor-scrollbars {
+    --scrollbar-thumb: oklch(1 0 0 / 0.1);
+    --scrollbar-thumb-hover: oklch(1 0 0 / 0.18);
+    --scrollbar-thumb-active: oklch(1 0 0 / 0.25);
+  }
+
+  .editor-scrollbars::-webkit-scrollbar,
+  .editor-scrollbars ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .editor-scrollbars::-webkit-scrollbar-track,
+  .editor-scrollbars ::-webkit-scrollbar-track,
+  .editor-scrollbars::-webkit-scrollbar-corner,
+  .editor-scrollbars ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* Square and the full width of the track, because that is what Monaco's
+     slider measures in the browser: 10px, no radius, white at 10%. An inset
+     rounded thumb looks tidier on its own but reads as a different control
+     next to a snippet. */
+  .editor-scrollbars::-webkit-scrollbar-thumb,
+  .editor-scrollbars ::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 0;
+  }
+
+  .editor-scrollbars::-webkit-scrollbar-thumb:hover,
+  .editor-scrollbars ::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+  }
+
+  .editor-scrollbars::-webkit-scrollbar-thumb:active,
+  .editor-scrollbars ::-webkit-scrollbar-thumb:active {
+    background: var(--scrollbar-thumb-active);
+  }
+}

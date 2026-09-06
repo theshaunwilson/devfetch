@@ -7,6 +7,7 @@ import {
   parseTagInput,
   requiredFieldsFor,
   usesCodeEditor,
+  usesMarkdownEditor,
 } from './items';
 
 describe('editableFieldsFor', () => {
@@ -178,5 +179,51 @@ describe('initialTypeId', () => {
     const shadowed = [{ id: 'custom_snippet', slug: 'snippet' }, ...TYPES];
 
     expect(initialTypeId(shadowed, 'snippet')).toBe('custom_snippet');
+  });
+});
+
+describe('usesMarkdownEditor', () => {
+  it('is true for exactly the prose types', () => {
+    expect(usesMarkdownEditor('note')).toBe(true);
+    expect(usesMarkdownEditor('prompt')).toBe(true);
+  });
+
+  it('is false for the code types, which keep Monaco', () => {
+    expect(usesMarkdownEditor('snippet')).toBe(false);
+    expect(usesMarkdownEditor('command')).toBe(false);
+  });
+
+  it('is false for the types with no content at all', () => {
+    expect(usesMarkdownEditor('link')).toBe(false);
+    expect(usesMarkdownEditor('file')).toBe(false);
+    expect(usesMarkdownEditor('image')).toBe(false);
+  });
+
+  it('is false for a custom type, which gets the plain textarea', () => {
+    expect(usesMarkdownEditor('recipe')).toBe(false);
+    expect(usesMarkdownEditor('')).toBe(false);
+  });
+
+  // The property the derivation exists to guarantee: the two editors partition
+  // the content types rather than overlapping, so no type can end up rendering
+  // both editors at once or falling through to the textarea by accident.
+  it('never overlaps with the code editor', () => {
+    for (const slug of ['snippet', 'command', 'note', 'prompt', 'link', 'file', 'image', 'recipe']) {
+      expect(usesCodeEditor(slug) && usesMarkdownEditor(slug)).toBe(false);
+    }
+  });
+
+  it('covers every content type between the two editors', () => {
+    for (const slug of ['snippet', 'command', 'note', 'prompt']) {
+      expect(usesCodeEditor(slug) || usesMarkdownEditor(slug)).toBe(true);
+    }
+  });
+
+  // A type with no content field has nothing for either editor to render.
+  it('offers no editor to a type that has no content field', () => {
+    for (const slug of ['link', 'file', 'image', 'recipe']) {
+      expect(editableFieldsFor(slug).content).toBe(false);
+      expect(usesCodeEditor(slug) || usesMarkdownEditor(slug)).toBe(false);
+    }
   });
 });
