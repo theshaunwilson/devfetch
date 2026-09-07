@@ -26,6 +26,14 @@ export interface DashboardItem {
   fileUrl: string | null;
   /** The uploader's own filename, shown and used as the download name. */
   fileName: string | null;
+  /** Bytes. Present only on file and image items. */
+  fileSize: number | null;
+  /**
+   * ISO string. The row was created when its file was uploaded — an item's
+   * file cannot be replaced later — so this is the upload date a file list
+   * shows, which `updatedAt` is not: that moves on every title or tag edit.
+   */
+  createdAt: string;
   type: DashboardItemType;
   /** Tag names, alphabetical */
   tags: string[];
@@ -78,11 +86,8 @@ export interface ItemDetail extends DashboardItem {
   content: string | null;
   language: string | null;
   url: string | null;
-  /** `fileUrl` and `fileName` are inherited — every card carries them. */
-  fileSize: number | null;
+  /** `fileUrl`, `fileName`, `fileSize` and `createdAt` are all inherited. */
   collection: ItemDetailCollection | null;
-  /** ISO string, like `updatedAt` */
-  createdAt: string;
 }
 
 /** What `GET /api/items/[id]` returns. Shared by the route and the drawer. */

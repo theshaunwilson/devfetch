@@ -1,11 +1,12 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { FileRow } from '@/components/items/FileRow';
 import { ImageCard } from '@/components/items/ImageCard';
 import { ItemCard } from '@/components/items/ItemCard';
 import { NewItemDialog } from '@/components/items/NewItemDialog';
 import { getItemsByTypeSlug, getItemTypes } from '@/lib/db/items';
 import { capitalize } from '@/lib/format';
-import { isImageUploadType } from '@/lib/uploads';
+import { isImageUploadType, usesFileList } from '@/lib/uploads';
 import { cn } from '@/lib/utils';
 
 // Reads the signed-in user's items per request, so it cannot be prerendered.
@@ -39,9 +40,10 @@ export default async function ItemsByTypePage({ params }: PageProps<'/items/[typ
   // the only two the dialog would not have opened on.
   const itemTypes = await getItemTypes();
 
-  // Image items are a gallery of thumbnails rather than a list of cards. The
-  // resolved slug decides, not the requested one.
+  // Uploads get their own layouts: images a gallery of thumbnails, files a
+  // single column of rows. The resolved slug decides, not the requested one.
   const isGallery = isImageUploadType(type);
+  const isFileList = usesFileList(type);
 
   return (
     <div className="px-6 py-8">
@@ -67,19 +69,23 @@ export default async function ItemsByTypePage({ params }: PageProps<'/items/[typ
         <div
           className={cn(
             'mt-8 grid gap-4',
+            // Files stay one column at every width: a row is a line of
+            // metadata, and two of them side by side reads as a table nobody
+            // asked for.
+            isFileList && 'gap-2',
             // A thumbnail carries a narrower card than a title-and-tags one
             // does, so the gallery reaches three columns a breakpoint earlier
             // than the item grid.
-            isGallery ? 'sm:grid-cols-2 lg:grid-cols-3' : 'md:grid-cols-2 xl:grid-cols-3'
+            isGallery && 'sm:grid-cols-2 lg:grid-cols-3',
+            !isGallery && !isFileList && 'md:grid-cols-2 xl:grid-cols-3'
           )}
         >
-          {items.map((item) =>
-            isGallery ? (
-              <ImageCard key={item.id} item={item} />
-            ) : (
-              <ItemCard key={item.id} item={item} />
-            )
-          )}
+          {items.map((item) => {
+            if (isGallery) return <ImageCard key={item.id} item={item} />;
+            if (isFileList) return <FileRow key={item.id} item={item} />;
+
+            return <ItemCard key={item.id} item={item} />;
+          })}
         </div>
       ) : (
         <p className="mt-8 text-sm text-muted-foreground">No items of this type yet.</p>

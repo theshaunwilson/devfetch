@@ -1,20 +1,61 @@
-# Current Feature
-
-<!-- Feature Name -->
+# Current Feature: File List View
 
 ## Status
 
-<!-- Not Started|In Progress|Completed -->
-
-Not Started
+In Progress
 
 ## Goals
 
-<!-- Goals & requirements -->
+- `/items/file` renders its items as a single-column list of rows, not the grid of `ItemCard`s every non-image type shares
+- Each row shows: a file icon chosen by extension, the file name, the file size, the upload date, and a Download button
+- Rows highlight on hover
+- Clicking a row opens the existing `ItemDrawer`
+- The Download button downloads directly without opening the drawer
+- Below `sm`, the row's metadata stacks vertically instead of sitting on one line
 
 ## Notes
 
-<!-- Any extra notes -->
+Spec: `context/features/file-display-spec.md`
+
+**The spec's URL 404s.** It says `/items/files`, but the seeded slugs are singular
+and the sidebar has always linked to `/items/file` — the same mismatch the Items
+List View entry recorded for `/items/snippets`. Going plural would mean a seed
+change plus rewriting the sidebar link, so `/items/file` is the page.
+
+**Two fields the spec needs are not on a card.** `ITEM_SELECT` carries `fileUrl`
+and `fileName` (the Image Gallery feature added them) but not `fileSize`, and a
+card carries `updatedAt`, never `createdAt`. So:
+
+- `fileSize` has to move up from `ItemDetail` onto `DashboardItem`, the same
+  widening the gallery did — one column every list pays for.
+- "Upload date" is `createdAt`, which no card has. Either widen the select again
+  or show `updatedAt` and call it what it is. Decide at `start`; do not silently
+  label `updatedAt` as an upload date.
+
+**Which types are a file list must be derived, not listed.** `usesFileUpload`
+minus `isImageUploadType` in `src/lib/uploads.ts`, the same anti-drift rule
+`usesCodeEditor`, `usesMarkdownEditor` and `requiredFieldsFor` already follow, so
+the gallery and the list partition the upload types rather than overlapping.
+
+**"Stop propagation" is not the mechanic.** `OpenItemButton` is an overlay
+(`absolute inset-0`), not a wrapper — a `<button>` takes phrasing content only.
+So the Download link is not nested inside the trigger and there is no click to
+stop; it has to sit *above* the overlay in the stacking order (`relative z-10` or
+equivalent) or the overlay will simply cover it. Check it is reachable by keyboard
+too, and that the row's `ring-inset` focus ring still works.
+
+Reuse rather than rebuild: `formatFileSize` and `extensionOf` are already in
+`src/lib/uploads.ts`, and the download URL is `/api/files/<item id>?download`
+exactly as `ItemFilePanel` builds it — never a bucket URL, since uploads are
+private. An extension→icon map is the one genuinely new piece of logic and, being
+pure, is the part worth unit tests; components are not tested, per
+`context/coding-standards.md`.
+
+A file item with no stored object is representable (`fileUrl` null) and should
+degrade to the type icon rather than a broken row, as `ImageCard` does.
+
+`src/app/items/[type]/page.tsx` already branches on `isGallery`; this adds a
+third layout branch to the same page.
 
 ## History
 

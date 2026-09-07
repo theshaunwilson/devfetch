@@ -736,6 +736,28 @@ describe('getItemsByTypeSlug', () => {
     });
   });
 
+  it('carries the size and the upload date onto a card, which the file list shows', async () => {
+    findMany.mockResolvedValue([
+      row({
+        fileUrl: `users/${USER_ID}/abc-123.pdf`,
+        fileName: 'spec.pdf',
+        fileSize: 1_048_576,
+        createdAt: new Date('2026-08-17T10:00:00.000Z'),
+      }),
+    ]);
+
+    const result = await getItemsByTypeSlug('file');
+
+    expect(result?.items[0]).toMatchObject({
+      fileSize: 1_048_576,
+      // Serialized in the db layer, like `updatedAt`, so nothing downstream
+      // handles a Date. `createdAt` is the upload date: an item's file cannot
+      // be replaced, while `updatedAt` moves on every title or tag edit.
+      createdAt: '2026-08-17T10:00:00.000Z',
+    });
+    expect(result?.items[0].createdAt).not.toBe(result?.items[0].updatedAt);
+  });
+
   it('keeps the file columns null on an item with no object', async () => {
     findMany.mockResolvedValue([row()]);
 
@@ -745,6 +767,7 @@ describe('getItemsByTypeSlug', () => {
     // typechecked would draw a placeholder for every item.
     expect(result?.items[0].fileUrl).toBeNull();
     expect(result?.items[0].fileName).toBeNull();
+    expect(result?.items[0].fileSize).toBeNull();
   });
 
   it('returns null when the slug names no type the user can see', async () => {

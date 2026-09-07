@@ -34,6 +34,11 @@ const ITEM_SELECT = {
   // /api/files/[id], which takes the item's id — only its presence is.
   fileUrl: true,
   fileName: true,
+  // The file list shows the size, and shows `createdAt` as the upload date:
+  // an item's file cannot be replaced, so the row was created when the object
+  // arrived, while `updatedAt` moves on every title or tag edit.
+  fileSize: true,
+  createdAt: true,
   type: { select: { id: true, name: true, icon: true, color: true } },
   tags: {
     select: { tag: { select: { name: true } } },
@@ -54,6 +59,8 @@ function toDashboardItem(item: ItemPayload): DashboardItem {
     updatedAt: item.updatedAt.toISOString(),
     fileUrl: item.fileUrl,
     fileName: item.fileName,
+    fileSize: item.fileSize,
+    createdAt: item.createdAt.toISOString(),
     type: item.type,
     tags: item.tags.map((itemTag) => itemTag.tag.name),
   };
@@ -137,9 +144,7 @@ const ITEM_DETAIL_SELECT = {
   content: true,
   language: true,
   url: true,
-  // fileUrl and fileName come through the spread above.
-  fileSize: true,
-  createdAt: true,
+  // Every file field and createdAt come through the spread above.
   collection: { select: { id: true, name: true } },
 } satisfies Prisma.ItemSelect;
 
@@ -152,9 +157,7 @@ function toItemDetail(item: ItemDetailPayload): ItemDetail {
     content: item.content,
     language: item.language,
     url: item.url,
-    fileSize: item.fileSize,
     collection: item.collection,
-    createdAt: item.createdAt.toISOString(),
   };
 }
 

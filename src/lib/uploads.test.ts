@@ -15,6 +15,7 @@ import {
   isImageUploadType,
   keyBelongsTo,
   uploadConstraintsFor,
+  usesFileList,
   usesFileUpload,
   validateUpload,
 } from './uploads';
@@ -43,6 +44,28 @@ describe('isImageUploadType', () => {
   it('separates the two file types, which have different limits', () => {
     expect(isImageUploadType('image')).toBe(true);
     expect(isImageUploadType('file')).toBe(false);
+  });
+});
+
+describe('usesFileList', () => {
+  it('is true for file, which is listed as rows', () => {
+    expect(usesFileList('file')).toBe(true);
+  });
+
+  it('is false for image, which is a gallery instead', () => {
+    expect(usesFileList('image')).toBe(false);
+  });
+
+  it('partitions the upload types, so no type gets both layouts', () => {
+    for (const slug of ['file', 'image']) {
+      expect(usesFileList(slug)).toBe(!isImageUploadType(slug));
+    }
+  });
+
+  it('is false for every type that holds typed content, which gets cards', () => {
+    for (const slug of ['snippet', 'prompt', 'command', 'note', 'link', 'recipe']) {
+      expect(usesFileList(slug)).toBe(false);
+    }
   });
 });
 
