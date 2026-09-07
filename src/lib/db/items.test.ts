@@ -14,6 +14,7 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     item: {
       findFirst: vi.fn(),
+      findMany: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
@@ -32,6 +33,7 @@ const {
   deleteItem,
   getItemDetail,
   getItemFile,
+  getItemsByTypeSlug,
   getItemTypeById,
   getItemTypes,
   updateItem,
@@ -666,5 +668,98 @@ describe('deleteItem, with a file', () => {
 
     expect(destroy.mock.calls[0][0]).toMatchObject({ select: { fileUrl: true } });
     expect(findFirst).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Backs `/items/[type]`, including the image gallery. The gallery decides
+ * between a thumbnail and a placeholder from `fileUrl`, so a card row that
+ * does not carry it renders an empty gallery with nothing failing anywhere —
+ * which is what these pin down.
+ */
+describe('getItemsByTypeSlug', () => {
+  const findMany = prisma.item.findMany as unknown as Mock<
+    (args: unknown) => Promise<DetailRow[]>
+  >;
+  const lookupType = prisma.itemType.findFirst as unknown as Mock<
+    (args: unknown) => Promise<{
+      id: string;
+      name: string;
+      icon: string | null;
+      color: string | null;
+    } | null>
+  >;
+
+  const imageType = { id: 'type_img', name: 'image', icon: 'Image', color: '#ec4899' };
+
+  beforeEach(() => {
+    lookupType.mockResolvedValue(imageType);
+    findMany.mockResolvedValue([]);
+  });
+
+  it('accepts a global system type as well as one of the user\'s own', async () => {
+    await getItemsByTypeSlug('image');
+
+    // The seven built-ins are userId: null, so a plain userId filter would
+    // match none of them.
+    expect(lookupType.mock.calls[0][0]).toMatchObject({
+      where: { slug: 'image', OR: [{ userId: null }, { userId: USER_ID }] },
+    });
+  });
+
+  it('scopes the items to the signed-in user and the resolved type', async () => {
+    await getItemsByTypeSlug('image');
+
+    expect(findMany.mock.calls[0][0]).toMatchObject({
+      where: { userId: USER_ID, typeId: imageType.id },
+    });
+  });
+
+  it('selects the file columns, without which no thumbnail could ever resolve', async () => {
+    await getItemsByTypeSlug('image');
+
+    expect(findMany.mock.calls[0][0]).toMatchObject({
+      select: { fileUrl: true, fileName: true },
+    });
+  });
+
+  it('carries the file columns onto a card, so a gallery can find the thumbnail', async () => {
+    findMany.mockResolvedValue([
+      row({ fileUrl: `users/${USER_ID}/abc-123.png`, fileName: 'diagram.png' }),
+    ]);
+
+    const result = await getItemsByTypeSlug('image');
+
+    expect(result?.items[0]).toMatchObject({
+      fileUrl: `users/${USER_ID}/abc-123.png`,
+      fileName: 'diagram.png',
+    });
+  });
+
+  it('keeps the file columns null on an item with no object', async () => {
+    findMany.mockResolvedValue([row()]);
+
+    const result = await getItemsByTypeSlug('image');
+
+    // Null rather than absent: the card branches on it, and an undefined that
+    // typechecked would draw a placeholder for every item.
+    expect(result?.items[0].fileUrl).toBeNull();
+    expect(result?.items[0].fileName).toBeNull();
+  });
+
+  it('returns null when the slug names no type the user can see', async () => {
+    lookupType.mockResolvedValue(null);
+
+    // A typo is a 404, which reads differently from a type holding nothing.
+    expect(await getItemsByTypeSlug('nonsense')).toBeNull();
+    expect(findMany).not.toHaveBeenCalled();
+  });
+
+  it('returns null without querying when nobody is signed in', async () => {
+    currentUserId.mockResolvedValue(null);
+
+    expect(await getItemsByTypeSlug('image')).toBeNull();
+    expect(lookupType).not.toHaveBeenCalled();
+    expect(findMany).not.toHaveBeenCalled();
   });
 });

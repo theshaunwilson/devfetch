@@ -15,6 +15,17 @@ export interface DashboardItem {
   isPinned: boolean;
   /** ISO string — the row formats it with `formatShortDate` */
   updatedAt: string;
+  /**
+   * The stored object's key, not a URL, despite the column's name: uploads are
+   * private, so they are read back through `/api/files/[id]` rather than from
+   * the bucket. Present only on file and image items.
+   *
+   * A card never uses the key itself, only whether there is one — which is
+   * what tells an image gallery to draw a thumbnail rather than a placeholder.
+   */
+  fileUrl: string | null;
+  /** The uploader's own filename, shown and used as the download name. */
+  fileName: string | null;
   type: DashboardItemType;
   /** Tag names, alphabetical */
   tags: string[];
@@ -67,14 +78,7 @@ export interface ItemDetail extends DashboardItem {
   content: string | null;
   language: string | null;
   url: string | null;
-  /**
-   * The stored object's key, not a URL, despite the column's name: uploads are
-   * private, so they are read back through `/api/files/[id]` rather than from
-   * the bucket. Present only on file and image items.
-   */
-  fileUrl: string | null;
-  /** The uploader's own filename, shown and used as the download name. */
-  fileName: string | null;
+  /** `fileUrl` and `fileName` are inherited — every card carries them. */
   fileSize: number | null;
   collection: ItemDetailCollection | null;
   /** ISO string, like `updatedAt` */

@@ -28,6 +28,12 @@ const ITEM_SELECT = {
   isFavorite: true,
   isPinned: true,
   updatedAt: true,
+  // Two columns every list pays for, so that an image card can tell an item
+  // that has an object from one that does not before it renders an <img>. The
+  // key itself is never used by a card — the object is fetched through
+  // /api/files/[id], which takes the item's id — only its presence is.
+  fileUrl: true,
+  fileName: true,
   type: { select: { id: true, name: true, icon: true, color: true } },
   tags: {
     select: { tag: { select: { name: true } } },
@@ -46,6 +52,8 @@ function toDashboardItem(item: ItemPayload): DashboardItem {
     isFavorite: item.isFavorite,
     isPinned: item.isPinned,
     updatedAt: item.updatedAt.toISOString(),
+    fileUrl: item.fileUrl,
+    fileName: item.fileName,
     type: item.type,
     tags: item.tags.map((itemTag) => itemTag.tag.name),
   };
@@ -129,8 +137,7 @@ const ITEM_DETAIL_SELECT = {
   content: true,
   language: true,
   url: true,
-  fileUrl: true,
-  fileName: true,
+  // fileUrl and fileName come through the spread above.
   fileSize: true,
   createdAt: true,
   collection: { select: { id: true, name: true } },
@@ -145,8 +152,6 @@ function toItemDetail(item: ItemDetailPayload): ItemDetail {
     content: item.content,
     language: item.language,
     url: item.url,
-    fileUrl: item.fileUrl,
-    fileName: item.fileName,
     fileSize: item.fileSize,
     collection: item.collection,
     createdAt: item.createdAt.toISOString(),
