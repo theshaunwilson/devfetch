@@ -1,22 +1,77 @@
-# Current Feature
-
-<!-- Feature Name -->
+# Current Feature: Image Gallery View
 
 ## Status
 
 <!-- Not Started|In Progress|Completed -->
 
-Not Started
+In Progress
 
 ## Goals
 
 <!-- Goals & requirements -->
 
+- Add an image thumbnail card that replaces `ItemCard` for image items
+- Render image items as a grid/gallery of 3 columns
+- Thumbnail is 16:9 (`aspect-video`)
+- Thumbnail fills the card with `object-cover`, cropping edges as needed
+- Subtle hover zoom — 5% scale over a 300ms transition
+
 ## Notes
 
 <!-- Any extra notes -->
 
+- Spec: `context/features/image-display-spec.md`
+- The gallery is `/items/image`, the page File Upload with Cloudflare R2 made
+  reachable. That page today renders every type through
+  `src/components/items/ItemCard.tsx` in a `md:grid-cols-2 xl:grid-cols-3` grid,
+  so the new card is a branch on the resolved type slug, not a rewrite
+- **Settled at `start`:** the gallery breaks `sm:grid-cols-2 lg:grid-cols-3`,
+  reaching three columns a breakpoint earlier than the item grid's
+  `md` / `xl`, because a thumbnail carries a narrower card than a
+  title-and-tags one. Measured 342 / 288 / 224 / 229 / 368 px at
+  390 / 640 / 768 / 1024 / 1440, image ratio 1.778 at every width. A literal
+  fixed `grid-cols-3` was rejected: 103px cards at 390px
+- **Uploads are private**: `Item.fileUrl` holds the R2 object *key*, not a URL,
+  and images are read back through `GET /api/files/[id]`, which authorises on
+  owning the item. So a thumbnail's `src` is `/api/files/<item id>`, never a
+  bucket URL
+- `DashboardItem` — what a card is given — carries no `fileUrl` or `fileName`,
+  and `ITEM_SELECT` does not select them. A thumbnail card needs to know the
+  item *has* an object before it renders an `<img>`, so either the select
+  widens or the card falls back when it does not. An image item with no file
+  is possible in the data even if the create dialog requires one
+- `DashboardItemType` carries no `slug` either (only the detail type does), but
+  the page already knows the resolved slug from `result.type` / the URL param
+- Clicking a card must keep opening the detail drawer: `OpenItemButton` is an
+  `absolute inset-0` overlay, so the new card has to leave it room and keep the
+  focus ring visible (`ring-inset`, since `Card` clips overflow)
+- Hover zoom scales the image inside a clipping wrapper, so the card's own
+  bounds must not grow
+- No migration and no new dependency expected
+
+### Found while building
+
+- **Defect, fixed:** a long title ran **248px past the card's right edge** with
+  no ellipsis. `truncate` cannot work on a `CardTitle` whose min-width is auto
+  — it is a grid item of `CardHeader` — so the title grew to its content width
+  and was clipped by the card. `min-w-0` on `CardTitle` is the whole fix;
+  `min-w-0` on the inner span alone does nothing. Both candidates were measured
+  in the live DOM before choosing
+- **Pre-existing, fixed with permission:** `ItemCard` had the identical fault
+  (296px past the edge, no ellipsis). This also corrects the note in the
+  "Items grid, three columns at `xl`" history entry, which said `ItemCard`
+  "truncates titles today" — it clips them
+- **Pre-existing, reported not fixed:** after a delete, focus lands on `<body>`
+  rather than the `<main>` fallback the Delete Item feature added. Polling
+  through a real delete showed focus correctly on the card trigger at 448ms,
+  then detached by `router.refresh()` at 481ms — a race in
+  `ItemDrawerProvider`, identical for `ItemCard`, untouched by this feature
+- **Measurement artifact, not a bug:** one card click via an `:nth-child`
+  selector did not open the drawer; the same button clicks fine by accessible
+  name. A re-render race in the harness, not the component
+
 ## History
+
 
 <!-- Keep this updated. Earliest to latest -->
 

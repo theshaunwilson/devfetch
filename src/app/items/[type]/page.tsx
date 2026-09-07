@@ -1,9 +1,12 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { ImageCard } from '@/components/items/ImageCard';
 import { ItemCard } from '@/components/items/ItemCard';
 import { NewItemDialog } from '@/components/items/NewItemDialog';
 import { getItemsByTypeSlug, getItemTypes } from '@/lib/db/items';
 import { capitalize } from '@/lib/format';
+import { isImageUploadType } from '@/lib/uploads';
+import { cn } from '@/lib/utils';
 
 // Reads the signed-in user's items per request, so it cannot be prerendered.
 export const dynamic = 'force-dynamic';
@@ -36,6 +39,10 @@ export default async function ItemsByTypePage({ params }: PageProps<'/items/[typ
   // the only two the dialog would not have opened on.
   const itemTypes = await getItemTypes();
 
+  // Image items are a gallery of thumbnails rather than a list of cards. The
+  // resolved slug decides, not the requested one.
+  const isGallery = isImageUploadType(type);
+
   return (
     <div className="px-6 py-8">
       <div className="flex items-start justify-between gap-4">
@@ -57,10 +64,22 @@ export default async function ItemsByTypePage({ params }: PageProps<'/items/[typ
       </div>
 
       {items.length > 0 ? (
-        <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {items.map((item) => (
-            <ItemCard key={item.id} item={item} />
-          ))}
+        <div
+          className={cn(
+            'mt-8 grid gap-4',
+            // A thumbnail carries a narrower card than a title-and-tags one
+            // does, so the gallery reaches three columns a breakpoint earlier
+            // than the item grid.
+            isGallery ? 'sm:grid-cols-2 lg:grid-cols-3' : 'md:grid-cols-2 xl:grid-cols-3'
+          )}
+        >
+          {items.map((item) =>
+            isGallery ? (
+              <ImageCard key={item.id} item={item} />
+            ) : (
+              <ItemCard key={item.id} item={item} />
+            )
+          )}
         </div>
       ) : (
         <p className="mt-8 text-sm text-muted-foreground">No items of this type yet.</p>

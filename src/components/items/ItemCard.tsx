@@ -37,7 +37,11 @@ export function ItemCard({ item }: ItemCardProps) {
           <TypeIconTile icon={getIcon(type.icon)} color={type.color} />
 
           <div className="min-w-0 flex-1">
-            <CardTitle className="flex items-center gap-2">
+            {/* min-w-0 is what makes `truncate` below do anything: the title
+                is a flex container in a grid item, both of which take a min
+                width of auto, so without it a long title grows to its content
+                width and is clipped by the card with no ellipsis. */}
+            <CardTitle className="flex min-w-0 items-center gap-2">
               <span className="truncate">{item.title}</span>
               {item.isPinned && <Pin className="size-3.5 shrink-0 text-muted-foreground" />}
               {item.isFavorite && (
