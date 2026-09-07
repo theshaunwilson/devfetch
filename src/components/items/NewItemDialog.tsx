@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 
 import { createItem } from '@/actions/items';
 import { CodeEditor } from '@/components/items/CodeEditor';
+import { FileUpload } from '@/components/items/FileUpload';
 import { MarkdownEditor } from '@/components/items/MarkdownEditor';
 import { Button } from '@/components/ui/button';
 import {
@@ -39,10 +40,11 @@ import {
   usesCodeEditor,
   usesMarkdownEditor,
 } from '@/lib/items';
-import { isProType } from '@/lib/pro';
+import { isImageUploadType } from '@/lib/uploads';
 import { cn } from '@/lib/utils';
 import type { CreateItemInput } from '@/lib/validation/items';
 import type { SidebarItemType } from '@/types/item';
+import type { UploadedFile } from '@/types/upload';
 
 interface NewItemDialogProps {
   /** Every type the user can see, Pro ones included — filtered here. */
@@ -82,9 +84,10 @@ export function NewItemDialog({
   const [open, setOpen] = useState(false);
   const router = useRouter();
 
-  // The Pro types are File and Image, which need uploads that do not exist
-  // yet — so they are browsable in the sidebar but not offered here.
-  const types = itemTypes.filter((type) => !isProType(type.slug));
+  // Every type is offered. File and Image were held back only because uploads
+  // did not exist; `isProType` still marks them in the sidebar, and enforcing
+  // that marking is a job for billing, which does not exist either.
+  const types = itemTypes;
 
   function handleCreated() {
     setOpen(false);
@@ -140,6 +143,7 @@ function NewItemForm({ types, defaultTypeSlug, onCreated, onCancel }: NewItemFor
   const [language, setLanguage] = useState('');
   const [url, setUrl] = useState('');
   const [tags, setTags] = useState('');
+  const [file, setFile] = useState<UploadedFile | null>(null);
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [isPending, startTransition] = useTransition();
@@ -154,7 +158,10 @@ function NewItemForm({ types, defaultTypeSlug, onCreated, onCancel }: NewItemFor
 
   // A guard for the button only — the action re-checks both, and trims before
   // it measures just as this does.
-  const canSave = title.trim().length > 0 && (!required.url || url.trim().length > 0);
+  const canSave =
+    title.trim().length > 0 &&
+    (!required.url || url.trim().length > 0) &&
+    (!required.file || file !== null);
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -171,6 +178,14 @@ function NewItemForm({ types, defaultTypeSlug, onCreated, onCancel }: NewItemFor
     if (fields.content) payload.content = content;
     if (fields.language) payload.language = language;
     if (fields.url) payload.url = url;
+
+    if (required.file && file) {
+      // `fileUrl` holds the object's key, not a URL — uploads are private and
+      // are read back through `/api/files/[id]`.
+      payload.fileUrl = file.key;
+      payload.fileName = file.fileName;
+      payload.fileSize = file.fileSize;
+    }
 
     startTransition(async () => {
       const result = await createItem(payload);
@@ -194,7 +209,15 @@ function NewItemForm({ types, defaultTypeSlug, onCreated, onCancel }: NewItemFor
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-1">
         <div className="flex flex-col gap-2">
           <Label htmlFor="new-item-type">Type</Label>
-          <Select value={typeId} onValueChange={setTypeId}>
+          <Select
+            value={typeId}
+            onValueChange={(next) => {
+              setTypeId(next);
+              // The upload belongs to the type it was made for: an image
+              // already sent is not a valid file item, and the limits differ.
+              setFile(null);
+            }}
+          >
             <SelectTrigger id="new-item-type" className="w-full">
               <SelectValue />
             </SelectTrigger>
@@ -306,6 +329,25 @@ function NewItemForm({ types, defaultTypeSlug, onCreated, onCancel }: NewItemFor
               required={required.url}
             />
             <FieldError messages={fieldErrors.url} />
+          </div>
+        )}
+
+        {required.file && (
+          <div className="flex flex-col gap-2">
+            {/* The input is visually hidden and the drop target is a button,
+                so neither is a `<label for>` target — it names itself. */}
+            <Label>{isImageUploadType(selected.slug) ? 'Image' : 'File'}</Label>
+            <FileUpload
+              // Remounts on a type change, so the previous type's picker state
+              // does not carry over with its limits and accepted extensions.
+              key={selected.slug}
+              slug={selected.slug}
+              value={file}
+              onChange={setFile}
+              disabled={isPending}
+              ariaLabel={isImageUploadType(selected.slug) ? 'Image' : 'File'}
+            />
+            <FieldError messages={fieldErrors.fileUrl} />
           </div>
         )}
 

@@ -1,3 +1,5 @@
+import { usesFileUpload } from '@/lib/uploads';
+
 /**
  * Which of the type-specific fields the edit form shows, keyed on the item
  * type's slug.
@@ -28,18 +30,24 @@ export function editableFieldsFor(slug: string): EditableFields {
 
 export interface RequiredFields {
   url: boolean;
+  file: boolean;
 }
 
 /**
  * The type-specific fields an item of this type cannot be created without, on
  * top of the title every item needs.
  *
- * Read off the same set as `editableFieldsFor` rather than a second list, so
- * the two cannot drift: a link with no URL is not a link, so a type that shows
- * the URL field is a type that requires it.
+ * Read off the same sets the fields themselves come from rather than lists of
+ * its own, so the two cannot drift: a link with no URL is not a link and a file
+ * item with no file is nothing at all, so a type that shows one of those inputs
+ * is a type that requires it.
+ *
+ * `file` is not in `EditableFields` alongside it, because an uploaded file is
+ * not editable — a file item's edit form shows the title, description and tags
+ * every item has, and replacing the file is not something this feature does.
  */
 export function requiredFieldsFor(slug: string): RequiredFields {
-  return { url: TYPES_WITH_URL.has(slug) };
+  return { url: TYPES_WITH_URL.has(slug), file: usesFileUpload(slug) };
 }
 
 /**

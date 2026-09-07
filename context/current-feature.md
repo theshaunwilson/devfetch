@@ -1,20 +1,76 @@
-# Current Feature
-
-<!-- Feature Name -->
+# Current Feature: File Upload with Cloudflare R2
 
 ## Status
 
-<!-- Not Started|In Progress|Completed -->
-
-Not Started
+In Progress
 
 ## Goals
 
-<!-- Goals & requirements -->
+- Add an upload API route that streams a validated file into Cloudflare R2 and returns the stored object's key/URL, filename and size
+- Keep every Prisma/database function in `src/lib/db/items.ts`, per the spec — no new db module
+- Build a `FileUpload` component with drag-and-drop plus a click-to-browse fallback, showing an upload progress indicator
+- Wire `FileUpload` into the New Item dialog for the File and Image types, replacing the content editor for those types
+- Display an image preview for Image items and file info (name, size, type) for File items, in the drawer and in the upload component itself
+- Add a download proxy API route so downloads come from this app's own origin, avoiding CORS
+- Add a Download button to `ItemDrawer` for file types
+- Delete the R2 object when its item is deleted, so storage does not leak
 
 ## Notes
 
-<!-- Any extra notes -->
+### File constraints
+
+| Type   | Max size | Extensions                                                                        |
+| ------ | -------- | --------------------------------------------------------------------------------- |
+| Images | 5 MB     | `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`                                    |
+| Files  | 10 MB    | `.pdf`, `.txt`, `.md`, `.json`, `.yaml`, `.yml`, `.xml`, `.csv`, `.toml`, `.ini`    |
+
+Allowed MIME types — images: `image/png`, `image/jpeg`, `image/gif`, `image/webp`,
+`image/svg+xml`. Files: `application/pdf`, `text/plain`, `text/markdown`,
+`application/json`, `application/x-yaml`, `text/yaml`, `application/xml`,
+`text/xml`, `text/csv`, `application/toml` (`.ini` also arrives as `text/plain`).
+
+### Context from the codebase (not in the spec)
+
+- **The schema already has the columns.** `Item.contentType`, `fileUrl`, `fileName`
+  and `fileSize` have been in place since the Prisma feature, and `contentType`
+  has always defaulted to `text` — file items set it to `file`. Expect **no
+  migration**, to be confirmed at `start`.
+- **File and Image are Pro types and are currently filtered out of the New Item
+  dialog** by `isProType` in `src/lib/pro.ts` — the Item Create feature excluded
+  them precisely because uploads did not exist. This feature has to unfilter them,
+  which is also the point at which the `PRO` sidebar badges start marking types a
+  user can actually reach. Whether Pro gating is *enforced* is a separate question
+  from whether the types are selectable; billing does not exist yet.
+- Both types currently render no create button on `/items/[type]` for the same
+  reason (Type-specific create button feature), so those two pages should gain
+  one once the types are creatable.
+- `.env.example` already carries `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
+  `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` and `R2_PUBLIC_URL` (added in c1e8fd3).
+  No S3/R2 SDK is installed yet, so a dependency decision is pending — likely
+  `@aws-sdk/client-s3` against R2's S3-compatible API.
+- `editableFieldsFor`/`requiredFieldsFor` in `src/lib/items.ts` are where
+  per-type field decisions live; `usesCodeEditor`/`usesMarkdownEditor` partition
+  the content types. File and Image have no content at all, so they need their
+  own branch rather than an editor.
+- Uploads are a new unauthenticated-abuse surface: the upload route must check
+  the session itself, since `src/proxy.ts` deliberately does not match `/api`
+  and answers with a redirect rather than a 401 (the lesson `GET /api/items/[id]`
+  recorded). Rate limiting currently covers auth endpoints only.
+- Deletion already runs through `deleteItem` in `src/actions/items.ts` with
+  ownership in the `where` clause; the R2 delete has to hang off that without
+  letting a storage failure strip the user's ability to delete a row.
+
+### Open questions for `start`
+
+- Direct browser → R2 presigned PUT, or proxy the bytes through the Next route?
+  The spec says "upload API route for R2", which reads as the proxy; presigning
+  would keep the app off the upload path but complicates progress and validation.
+- Progress needs `XMLHttpRequest` or a streamed body — `fetch` has no upload
+  progress event — so the client cannot simply `await fetch`.
+- Whether uploads happen before the item row exists (upload first, then create
+  with the returned URL) or after; the former can orphan objects if the create
+  is abandoned.
+- Whether the edit form lets a file be replaced, which the spec does not mention.
 
 ## History
 

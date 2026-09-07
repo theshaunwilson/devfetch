@@ -10,7 +10,10 @@ import type { CreateItemData, UpdateItemData } from '@/lib/validation/items';
 import { Prisma } from '@/generated/prisma/client';
 import type {
   DashboardItem,
+  DeletedItem,
+  ItemContentType,
   ItemDetail,
+  ItemFile,
   ItemsByType,
   ItemStats,
   ItemTypeRef,
@@ -126,6 +129,9 @@ const ITEM_DETAIL_SELECT = {
   content: true,
   language: true,
   url: true,
+  fileUrl: true,
+  fileName: true,
+  fileSize: true,
   createdAt: true,
   collection: { select: { id: true, name: true } },
 } satisfies Prisma.ItemSelect;
@@ -139,6 +145,9 @@ function toItemDetail(item: ItemDetailPayload): ItemDetail {
     content: item.content,
     language: item.language,
     url: item.url,
+    fileUrl: item.fileUrl,
+    fileName: item.fileName,
+    fileSize: item.fileSize,
     collection: item.collection,
     createdAt: item.createdAt.toISOString(),
   };
@@ -166,6 +175,41 @@ export async function getItemDetail(id: string): Promise<ItemDetail | null> {
   if (!item) return null;
 
   return toItemDetail(item);
+}
+
+/**
+ * The stored object behind one item, for the download proxy.
+ *
+ * Its own query rather than `getItemDetail`, because the proxy runs on every
+ * image an items page draws and has no use for content, tags or collections —
+ * and because this is the check that authorises the read: the object key is
+ * only ever reached through an item the signed-in user owns. Returns null for
+ * an unknown id, somebody else's id, and an item with no file alike.
+ */
+export async function getItemFile(id: string): Promise<ItemFile | null> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) return null;
+
+  // findFirst, not findUnique: the ownership filter is what makes this safe.
+  const item = await prisma.item.findFirst({
+    where: { id, userId },
+    select: {
+      fileUrl: true,
+      fileName: true,
+      fileSize: true,
+      type: { select: { slug: true } },
+    },
+  });
+
+  if (!item?.fileUrl || !item.fileName) return null;
+
+  return {
+    key: item.fileUrl,
+    fileName: item.fileName,
+    fileSize: item.fileSize,
+    typeSlug: item.type.slug,
+  };
 }
 
 /**
@@ -204,21 +248,34 @@ export async function getItemTypeById(id: string): Promise<ItemTypeRef | null> {
  * create there is nothing behind a field to preserve, so unlike `updateItem`
  * there is no need to keep `undefined` and `null` apart, and an omitted field
  * and a cleared one both mean an empty column.
+ *
+ * `contentType` is a parameter rather than part of `data` because it is not the
+ * caller's to choose: it follows from the resolved type, and taking it from the
+ * payload would let a text item claim to hold a file.
  */
-export async function createItem(data: CreateItemData): Promise<ItemDetail | null> {
+export async function createItem(
+  data: CreateItemData,
+  contentType: ItemContentType,
+): Promise<ItemDetail | null> {
   const userId = await getCurrentUserId();
 
   if (!userId) return null;
 
   const { typeId, title, description, content, language, url, tags } = data;
+  const { fileUrl, fileName, fileSize } = data;
 
   const item = await prisma.item.create({
     data: {
       title,
+      // Decided by the caller from the resolved type, never sent by the client.
+      contentType,
       description: description ?? null,
       content: content ?? null,
       language: language ?? null,
       url: url ?? null,
+      fileUrl: fileUrl ?? null,
+      fileName: fileName ?? null,
+      fileSize: fileSize ?? null,
       user: { connect: { id: userId } },
       type: { connect: { id: typeId } },
       tags: {
@@ -316,21 +373,32 @@ export async function updateItem(id: string, data: UpdateItemData): Promise<Item
  *
  * `ItemTag` cascades from `Item`, so the join rows go with it. The `Tag` rows
  * themselves stay, which is the same orphan the edit feature left behind.
+ *
+ * The deleted row's `fileUrl` comes back so the caller can remove the stored
+ * object. Removing it here instead would put storage inside a database module,
+ * and the row is authoritative: it goes first, and a failed object delete
+ * leaves a harmless orphan rather than an item pointing at nothing.
  */
-export async function deleteItem(id: string): Promise<boolean> {
+export async function deleteItem(id: string): Promise<DeletedItem> {
   const userId = await getCurrentUserId();
 
-  if (!userId) return false;
+  if (!userId) return { deleted: false, fileKey: null };
 
   try {
-    await prisma.item.delete({ where: { id, userId } });
+    // Prisma returns the row it deleted, so the object's key comes back without
+    // a read of its own — and it comes from the same statement that proved the
+    // item was this user's, so there is no window in which the two disagree.
+    const item = await prisma.item.delete({
+      where: { id, userId },
+      select: { fileUrl: true },
+    });
 
-    return true;
+    return { deleted: true, fileKey: item.fileUrl };
   } catch (error) {
     // P2025: nothing matched. An unknown id and somebody else's id both land
     // here, and the caller cannot tell them apart — which is the point.
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
-      return false;
+      return { deleted: false, fileKey: null };
     }
 
     throw error;

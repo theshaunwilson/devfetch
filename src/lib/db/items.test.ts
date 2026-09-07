@@ -27,8 +27,15 @@ vi.mock('@/lib/db/user', () => ({ getCurrentUserId: vi.fn() }));
 
 const { prisma } = await import('@/lib/prisma');
 const { getCurrentUserId } = await import('@/lib/db/user');
-const { createItem, deleteItem, getItemDetail, getItemTypeById, getItemTypes, updateItem } =
-  await import('./items');
+const {
+  createItem,
+  deleteItem,
+  getItemDetail,
+  getItemFile,
+  getItemTypeById,
+  getItemTypes,
+  updateItem,
+} = await import('./items');
 const { Prisma } = await import('@/generated/prisma/client');
 
 /** What `ITEM_DETAIL_SELECT` narrows an `Item` row down to. */
@@ -45,6 +52,9 @@ interface DetailRow {
   content: string | null;
   language: string | null;
   url: string | null;
+  fileUrl: string | null;
+  fileName: string | null;
+  fileSize: number | null;
   collection: { id: string; name: string } | null;
 }
 
@@ -56,7 +66,9 @@ const findFirst = prisma.item.findFirst as unknown as Mock<
   (args: unknown) => Promise<DetailRow | null>
 >;
 const update = prisma.item.update as unknown as Mock<(args: unknown) => Promise<DetailRow>>;
-const destroy = prisma.item.delete as unknown as Mock<(args: unknown) => Promise<{ id: string }>>;
+const destroy = prisma.item.delete as unknown as Mock<
+  (args: unknown) => Promise<{ fileUrl: string | null }>
+>;
 const create = prisma.item.create as unknown as Mock<(args: unknown) => Promise<DetailRow>>;
 const findType = prisma.itemType.findFirst as unknown as Mock<
   (args: unknown) => Promise<{ id: string; slug: string } | null>
@@ -95,6 +107,9 @@ const row = (overrides: Partial<DetailRow> = {}): DetailRow => ({
   content: 'export function useDebounce() {}',
   language: 'typescript',
   url: null,
+  fileUrl: null,
+  fileName: null,
+  fileSize: null,
   collection: { id: 'coll_1', name: 'React Patterns' },
   ...overrides,
 });
@@ -271,7 +286,7 @@ describe('updateItem', () => {
 
 describe('deleteItem', () => {
   beforeEach(() => {
-    destroy.mockResolvedValue({ id: ITEM_ID });
+    destroy.mockResolvedValue({ fileUrl: null });
   });
 
   it('scopes the delete itself to the signed-in user, not just the id', async () => {
@@ -280,17 +295,17 @@ describe('deleteItem', () => {
     // The same reason `updateItem` does it: the id comes from the client, and
     // a read-then-delete would leave a window between the check and the write.
     expect(destroy).toHaveBeenCalledTimes(1);
-    expect(destroy.mock.calls[0][0]).toEqual({ where: { id: ITEM_ID, userId: USER_ID } });
+    expect(destroy.mock.calls[0][0]).toMatchObject({ where: { id: ITEM_ID, userId: USER_ID } });
   });
 
   it('reports success when the row was removed', async () => {
-    await expect(deleteItem(ITEM_ID)).resolves.toBe(true);
+    await expect(deleteItem(ITEM_ID)).resolves.toEqual({ deleted: true, fileKey: null });
   });
 
   it('returns false without deleting anything when nobody is signed in', async () => {
     currentUserId.mockResolvedValue(null);
 
-    await expect(deleteItem(ITEM_ID)).resolves.toBe(false);
+    await expect(deleteItem(ITEM_ID)).resolves.toEqual({ deleted: false, fileKey: null });
     expect(destroy).not.toHaveBeenCalled();
   });
 
@@ -303,7 +318,7 @@ describe('deleteItem', () => {
     );
 
     // An unknown id and somebody else's id are the same answer.
-    await expect(deleteItem(ITEM_ID)).resolves.toBe(false);
+    await expect(deleteItem(ITEM_ID)).resolves.toEqual({ deleted: false, fileKey: null });
   });
 
   it('rethrows anything that is not a missing row', async () => {
@@ -365,7 +380,7 @@ describe('createItem', () => {
 
     // A `userId` in the payload would be the whole attack: it must not reach
     // the write.
-    await createItem({ ...data, userId: 'someone_else' } as never);
+    await createItem({ ...data, userId: 'someone_else' } as never, 'text');
 
     expect(createArgs().data.user).toEqual({ connect: { id: USER_ID } });
     expect(createArgs().data).not.toHaveProperty('userId');
@@ -374,7 +389,7 @@ describe('createItem', () => {
   it('files the item under the type it was given', async () => {
     create.mockResolvedValue(row());
 
-    await createItem(data);
+    await createItem(data, 'text');
 
     expect(createArgs().data.type).toEqual({ connect: { id: 'type_1' } });
   });
@@ -382,7 +397,7 @@ describe('createItem', () => {
   it('returns null without writing when nobody is signed in', async () => {
     currentUserId.mockResolvedValue(null);
 
-    await expect(createItem(data)).resolves.toBeNull();
+    await expect(createItem(data, 'text')).resolves.toBeNull();
     expect(create).not.toHaveBeenCalled();
   });
 
@@ -391,7 +406,7 @@ describe('createItem', () => {
 
     // A link item sends no content or language at all. On a create there is
     // nothing behind those columns to preserve, so both mean empty.
-    await createItem({ typeId: 'type_1', title: 'A link', url: 'https://example.com' });
+    await createItem({ typeId: 'type_1', title: 'A link', url: 'https://example.com' }, 'text');
 
     expect(createArgs().data).toMatchObject({
       description: null,
@@ -404,7 +419,7 @@ describe('createItem', () => {
   it('connects an existing tag rather than creating a second one for the same user', async () => {
     create.mockResolvedValue(row());
 
-    await createItem(data);
+    await createItem(data, 'text');
 
     const tags = createArgs().data.tags.create;
 
@@ -418,7 +433,7 @@ describe('createItem', () => {
   it('writes no tag rows when none were sent', async () => {
     create.mockResolvedValue(row());
 
-    await createItem({ typeId: 'type_1', title: 'Untagged' });
+    await createItem({ typeId: 'type_1', title: 'Untagged' }, 'text');
 
     expect(createArgs().data.tags.create).toEqual([]);
   });
@@ -426,7 +441,7 @@ describe('createItem', () => {
   it('serializes both dates, so the dialog gets the same shape a card holds', async () => {
     create.mockResolvedValue(row());
 
-    await expect(createItem(data)).resolves.toMatchObject({
+    await expect(createItem(data, 'text')).resolves.toMatchObject({
       updatedAt: '2026-08-18T21:56:33.193Z',
       createdAt: '2026-08-17T10:00:00.000Z',
     });
@@ -516,5 +531,140 @@ describe('getItemTypes', () => {
     expect(await getItemTypes()).toEqual([]);
     expect(findManyTypes).not.toHaveBeenCalled();
     expect(groupByType).not.toHaveBeenCalled();
+  });
+});
+
+describe('getItemFile', () => {
+  /** What the download proxy's own narrower select returns. */
+  interface FileRow {
+    fileUrl: string | null;
+    fileName: string | null;
+    fileSize: number | null;
+    type: { slug: string };
+  }
+
+  const fileRow = (overrides: Partial<FileRow> = {}): FileRow => ({
+    fileUrl: `users/${USER_ID}/abc-123.pdf`,
+    fileName: 'runbook.pdf',
+    fileSize: 2048,
+    type: { slug: 'file' },
+    ...overrides,
+  });
+
+  const lookup = findFirst as unknown as Mock<(args: unknown) => Promise<FileRow | null>>;
+
+  it('scopes the lookup to the signed-in user, which is what authorises the read', async () => {
+    lookup.mockResolvedValue(fileRow());
+
+    await getItemFile(ITEM_ID);
+
+    // The object key is only ever reached through an item this user owns, so
+    // this filter is the whole of the download proxy's access control.
+    expect(findFirst.mock.calls[0][0]).toMatchObject({
+      where: { id: ITEM_ID, userId: USER_ID },
+    });
+  });
+
+  it('returns the key, name and type slug the proxy needs', async () => {
+    lookup.mockResolvedValue(fileRow());
+
+    await expect(getItemFile(ITEM_ID)).resolves.toEqual({
+      key: `users/${USER_ID}/abc-123.pdf`,
+      fileName: 'runbook.pdf',
+      fileSize: 2048,
+      typeSlug: 'file',
+    });
+  });
+
+  it('returns null without querying when nobody is signed in', async () => {
+    currentUserId.mockResolvedValue(null);
+
+    await expect(getItemFile(ITEM_ID)).resolves.toBeNull();
+    expect(findFirst).not.toHaveBeenCalled();
+  });
+
+  it('returns null for an item that has no file', async () => {
+    // A snippet is a perfectly real item of this user's, and still not
+    // something the proxy can serve.
+    lookup.mockResolvedValue(fileRow({ fileUrl: null }));
+
+    await expect(getItemFile(ITEM_ID)).resolves.toBeNull();
+  });
+
+  it('returns null for a row with a key but no name to serve it under', async () => {
+    lookup.mockResolvedValue(fileRow({ fileName: null }));
+
+    await expect(getItemFile(ITEM_ID)).resolves.toBeNull();
+  });
+
+  it('returns null when nothing matched, so another user’s id reads as absent', async () => {
+    lookup.mockResolvedValue(null);
+
+    await expect(getItemFile(ITEM_ID)).resolves.toBeNull();
+  });
+});
+
+describe('createItem, with a file', () => {
+  const data = {
+    typeId: 'type_2',
+    title: 'Deployment runbook',
+    fileUrl: `users/${USER_ID}/abc-123.pdf`,
+    fileName: 'runbook.pdf',
+    fileSize: 2048,
+  };
+
+  it('writes the content type the caller decided, not one from the payload', async () => {
+    create.mockResolvedValue(row());
+
+    await createItem(data, 'file');
+
+    expect(createArgs().data.contentType).toBe('file');
+  });
+
+  it('writes the three file columns together', async () => {
+    create.mockResolvedValue(row());
+
+    await createItem(data, 'file');
+
+    expect(createArgs().data).toMatchObject({
+      fileUrl: `users/${USER_ID}/abc-123.pdf`,
+      fileName: 'runbook.pdf',
+      fileSize: 2048,
+    });
+  });
+
+  it('leaves the file columns null on a text item', async () => {
+    create.mockResolvedValue(row());
+
+    await createItem({ typeId: 'type_1', title: 'A note' }, 'text');
+
+    expect(createArgs().data).toMatchObject({
+      contentType: 'text',
+      fileUrl: null,
+      fileName: null,
+      fileSize: null,
+    });
+  });
+});
+
+describe('deleteItem, with a file', () => {
+  it('hands back the deleted row’s key, so the caller can remove the object', async () => {
+    destroy.mockResolvedValue({ fileUrl: `users/${USER_ID}/abc-123.pdf` });
+
+    // From the same statement that proved the item was this user's, so there
+    // is no window in which the two could disagree.
+    await expect(deleteItem(ITEM_ID)).resolves.toEqual({
+      deleted: true,
+      fileKey: `users/${USER_ID}/abc-123.pdf`,
+    });
+  });
+
+  it('selects the key rather than reading the row first', async () => {
+    destroy.mockResolvedValue({ fileUrl: null });
+
+    await deleteItem(ITEM_ID);
+
+    expect(destroy.mock.calls[0][0]).toMatchObject({ select: { fileUrl: true } });
+    expect(findFirst).not.toHaveBeenCalled();
   });
 });
