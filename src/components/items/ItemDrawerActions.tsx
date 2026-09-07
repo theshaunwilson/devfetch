@@ -54,9 +54,11 @@ export function ItemDrawerActions({
         Copy
       </Button>
 
-      {/* One group, so the pair stays together when the bar wraps and the
-          auto margin only pushes them right while they share a line. */}
-      <div className="ml-auto flex items-center gap-1">
+      {/* One group, so the pair stays together when the bar wraps rather than
+          Delete stranding alone on the second line. No auto margin: pushing
+          the pair to the far right left a 102px hole beside Copy, which read
+          as a layout fault rather than as grouping. */}
+      <div className="flex items-center gap-1">
         <Button variant="ghost" size="sm" onClick={onEdit} disabled={!canEdit}>
           <Pencil className="size-4" />
           Edit
