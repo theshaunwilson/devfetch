@@ -20,6 +20,17 @@ export function isImageUploadType(slug: string): boolean {
   return slug === 'image';
 }
 
+/**
+ * Whether this type's items are listed as file rows rather than cards.
+ *
+ * Read off the two helpers above rather than a list of its own, so the gallery
+ * and the file list partition the upload types instead of overlapping: an
+ * upload type is one or the other, and a type that takes no upload is neither.
+ */
+export function usesFileList(slug: string): boolean {
+  return usesFileUpload(slug) && !isImageUploadType(slug);
+}
+
 export interface UploadConstraints {
   /** Bytes. */
   maxSize: number;
