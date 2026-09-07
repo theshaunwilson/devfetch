@@ -11,6 +11,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/auth', () => ({ auth: vi.fn() }));
+vi.mock('@/lib/r2', () => ({ deleteObject: vi.fn() }));
 vi.mock('@/lib/db/items', () => ({
   createItem: vi.fn(),
   getItemTypeById: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock('@/lib/db/items', () => ({
 }));
 
 const { auth } = await import('@/auth');
+const { deleteObject } = await import('@/lib/r2');
 const {
   createItem: createItemRow,
   getItemTypeById,
@@ -32,6 +34,7 @@ const writeRow = vi.mocked(updateItemRow);
 const deleteRow = vi.mocked(deleteItemRow);
 const createRow = vi.mocked(createItemRow);
 const findType = vi.mocked(getItemTypeById);
+const removeObject = vi.mocked(deleteObject);
 
 const USER_ID = 'user_1';
 const ITEM_ID = 'item_1';
@@ -49,6 +52,9 @@ const saved = {
   content: null,
   language: null,
   url: null,
+  fileUrl: null,
+  fileName: null,
+  fileSize: null,
   collection: null,
 };
 
@@ -58,7 +64,7 @@ beforeEach(() => {
   // asserted through unknown rather than reconstructed in full.
   session.mockResolvedValue({ user: { id: USER_ID } } as unknown as never);
   writeRow.mockResolvedValue(saved);
-  deleteRow.mockResolvedValue(true);
+  deleteRow.mockResolvedValue({ deleted: true, fileKey: null });
   createRow.mockResolvedValue(saved);
   findType.mockResolvedValue({ id: 'type_1', slug: 'snippet' });
 });
@@ -182,7 +188,7 @@ describe('deleteItem', () => {
   });
 
   it('reads a row that did not match as not found rather than as a failure', async () => {
-    deleteRow.mockResolvedValue(false);
+    deleteRow.mockResolvedValue({ deleted: false, fileKey: null });
 
     // Somebody else's item and an unknown id are the same answer.
     await expect(deleteItem(ITEM_ID)).resolves.toEqual({
@@ -303,5 +309,115 @@ describe('createItem', () => {
       success: false,
       error: 'Could not create this item. Please try again.',
     });
+  });
+});
+
+describe('createItem, with a file', () => {
+  const file = {
+    typeId: 'type_2',
+    title: 'Deployment runbook',
+    fileUrl: `users/${USER_ID}/abc-123.pdf`,
+    fileName: 'runbook.pdf',
+    fileSize: 2048,
+  };
+
+  beforeEach(() => {
+    findType.mockResolvedValue({ id: 'type_2', slug: 'file' });
+  });
+
+  it('marks the row as holding a file, decided from the resolved type', async () => {
+    await createItem(file);
+
+    // Second argument, not part of the payload: a caller must not be able to
+    // claim a text item holds a file, or the reverse.
+    expect(createRow.mock.calls[0][1]).toBe('file');
+  });
+
+  it('marks a text type as text even when a file was sent alongside', async () => {
+    findType.mockResolvedValue({ id: 'type_1', slug: 'snippet' });
+
+    await createItem({ ...file, typeId: 'type_1' });
+
+    expect(createRow.mock.calls[0][1]).toBe('text');
+  });
+
+  it('refuses a file item with no file, which is nothing at all', async () => {
+    const result = await createItem({ typeId: 'type_2', title: 'Empty' });
+
+    expect(result).toMatchObject({
+      success: false,
+      fieldErrors: { fileUrl: ['Upload a file'] },
+    });
+    expect(createRow).not.toHaveBeenCalled();
+  });
+
+  it('refuses a file item missing only its size, since the three go together', async () => {
+    const result = await createItem({ ...file, fileSize: undefined });
+
+    expect(result).toMatchObject({ success: false });
+    expect(createRow).not.toHaveBeenCalled();
+  });
+
+  it('refuses a key belonging to another user, which would be a read of their file', async () => {
+    // Every later read of that object is authorised by owning the item that
+    // names it, so accepting this key would hand over somebody else's upload.
+    const result = await createItem({ ...file, fileUrl: 'users/user_2/abc-123.pdf' });
+
+    expect(result).toMatchObject({
+      success: false,
+      fieldErrors: { fileUrl: ['Upload the file again'] },
+    });
+    expect(createRow).not.toHaveBeenCalled();
+  });
+
+  it('refuses a key that traverses back out of the user’s own prefix', async () => {
+    const result = await createItem({
+      ...file,
+      fileUrl: `users/${USER_ID}/../user_2/abc-123.pdf`,
+    });
+
+    expect(result).toMatchObject({ success: false });
+    expect(createRow).not.toHaveBeenCalled();
+  });
+
+  it('passes the file through once it is this user’s', async () => {
+    await createItem(file);
+
+    expect(createRow.mock.calls[0][0]).toMatchObject({
+      fileUrl: `users/${USER_ID}/abc-123.pdf`,
+      fileName: 'runbook.pdf',
+      fileSize: 2048,
+    });
+  });
+});
+
+describe('deleteItem, with a file', () => {
+  it('removes the stored object once the row is gone', async () => {
+    deleteRow.mockResolvedValue({ deleted: true, fileKey: 'users/user_1/abc.pdf' });
+
+    await expect(deleteItem(ITEM_ID)).resolves.toEqual({ success: true });
+    expect(removeObject).toHaveBeenCalledWith('users/user_1/abc.pdf');
+  });
+
+  it('touches storage at all only when the item had a file', async () => {
+    await expect(deleteItem(ITEM_ID)).resolves.toEqual({ success: true });
+    expect(removeObject).not.toHaveBeenCalled();
+  });
+
+  it('still reports success when the object could not be removed', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    deleteRow.mockResolvedValue({ deleted: true, fileKey: 'users/user_1/abc.pdf' });
+    removeObject.mockRejectedValue(new Error('bucket unreachable'));
+
+    // The row is already gone, which is what was asked for. Reporting a
+    // failure would invite a retry against an item that no longer exists.
+    await expect(deleteItem(ITEM_ID)).resolves.toEqual({ success: true });
+  });
+
+  it('leaves storage alone when the row was not this user’s', async () => {
+    deleteRow.mockResolvedValue({ deleted: false, fileKey: null });
+
+    await expect(deleteItem(ITEM_ID)).resolves.toMatchObject({ success: false });
+    expect(removeObject).not.toHaveBeenCalled();
   });
 });

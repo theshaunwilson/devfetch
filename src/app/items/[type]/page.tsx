@@ -4,7 +4,6 @@ import { ItemCard } from '@/components/items/ItemCard';
 import { NewItemDialog } from '@/components/items/NewItemDialog';
 import { getItemsByTypeSlug, getItemTypes } from '@/lib/db/items';
 import { capitalize } from '@/lib/format';
-import { isProType } from '@/lib/pro';
 
 // Reads the signed-in user's items per request, so it cannot be prerendered.
 export const dynamic = 'force-dynamic';
@@ -30,17 +29,12 @@ export default async function ItemsByTypePage({ params }: PageProps<'/items/[typ
   const { items } = result;
   const typeName = capitalize(result.type.name);
 
-  // `type` is the resolved type's own slug, not just what was requested: the
-  // lookup filters on it, so a row that came back matched it exactly.
-  //
-  // File and Image cannot be created until uploads exist, so this page offers
-  // no button rather than one that would open on a different type than the
-  // page it sits on.
-  const canCreate = !isProType(type);
-
   // Free: `getItemTypes` is request-cached and `AppShell` has already called
   // it for the sidebar.
-  const itemTypes = canCreate ? await getItemTypes() : [];
+  //
+  // Every type gets a button now that File and Image can be uploaded; they were
+  // the only two the dialog would not have opened on.
+  const itemTypes = await getItemTypes();
 
   return (
     <div className="px-6 py-8">
@@ -52,13 +46,14 @@ export default async function ItemsByTypePage({ params }: PageProps<'/items/[typ
           </p>
         </div>
 
-        {canCreate && (
-          <NewItemDialog
-            itemTypes={itemTypes}
-            defaultTypeSlug={type}
-            triggerLabel={`New ${typeName}`}
-          />
-        )}
+        {/* `type` is the resolved type's own slug, not just what was
+            requested: the lookup filters on it, so a row that came back
+            matched it exactly. */}
+        <NewItemDialog
+          itemTypes={itemTypes}
+          defaultTypeSlug={type}
+          triggerLabel={`New ${typeName}`}
+        />
       </div>
 
       {items.length > 0 ? (

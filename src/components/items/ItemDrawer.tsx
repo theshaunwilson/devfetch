@@ -1,6 +1,6 @@
 'use client';
 
-import { CalendarDays, FolderOpen, Link2, Tag } from 'lucide-react';
+import { CalendarDays, FolderOpen, Link2, Paperclip, Tag } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import { CodeEditor } from '@/components/items/CodeEditor';
@@ -8,6 +8,7 @@ import { MarkdownEditor } from '@/components/items/MarkdownEditor';
 import { TypeIconTile } from '@/components/items/TypeIconTile';
 import { ItemDrawerActions } from '@/components/items/ItemDrawerActions';
 import { ItemEditForm } from '@/components/items/ItemEditForm';
+import { ItemFilePanel } from '@/components/items/ItemFilePanel';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -15,6 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { capitalize, formatLongDate } from '@/lib/format';
 import { getIcon } from '@/lib/icons';
 import { usesCodeEditor, usesMarkdownEditor } from '@/lib/items';
+import { isImageUploadType } from '@/lib/uploads';
 import type { ItemDetailStatus, ItemDrawerMode } from '@/components/items/ItemDrawerProvider';
 import type { DashboardItem, ItemDetail } from '@/types/item';
 
@@ -186,6 +188,15 @@ export function ItemDrawer({
                             <code>{detail.content}</code>
                           </pre>
                         )}
+                      </section>
+                    )}
+
+                    {detail?.fileUrl && (
+                      <section className="flex flex-col gap-2">
+                        <SectionLabel icon={Paperclip}>
+                          {isImageUploadType(detail.type.slug) ? 'Image' : 'File'}
+                        </SectionLabel>
+                        <ItemFilePanel item={detail} />
                       </section>
                     )}
 

@@ -10,6 +10,8 @@ import {
   updateItem as updateItemRow,
 } from '@/lib/db/items';
 import { requiredFieldsFor } from '@/lib/items';
+import { deleteObject } from '@/lib/r2';
+import { keyBelongsTo } from '@/lib/uploads';
 import { createItemSchema, updateItemSchema } from '@/lib/validation/items';
 import type { CreateItemInput, UpdateItemInput } from '@/lib/validation/items';
 import type { CreateItemResult, DeleteItemResult, UpdateItemResult } from '@/types/item';
@@ -56,7 +58,9 @@ export async function createItem(data: CreateItemInput): Promise<CreateItemResul
       };
     }
 
-    if (requiredFieldsFor(type.slug).url && !parsed.data.url) {
+    const required = requiredFieldsFor(type.slug);
+
+    if (required.url && !parsed.data.url) {
       return {
         success: false,
         error: 'Check the highlighted fields and try again.',
@@ -64,9 +68,42 @@ export async function createItem(data: CreateItemInput): Promise<CreateItemResul
       };
     }
 
+    if (required.file) {
+      const { fileUrl, fileName, fileSize } = parsed.data;
+
+      if (!fileUrl || !fileName || !fileSize) {
+        return {
+          success: false,
+          error: 'Check the highlighted fields and try again.',
+          fieldErrors: { fileUrl: ['Upload a file'] },
+        };
+      }
+
+      // The key arrives from the client, and every later read of that object is
+      // authorised by owning the *item* that names it — so without this check a
+      // caller could file an item of their own against somebody else's upload
+      // and then download it through the proxy entirely legitimately.
+      //
+      // `session.user.id` is the same id the write uses: `getCurrentUserId`
+      // resolves the row by exactly this id, so the key is checked against the
+      // owner the item actually gets.
+      if (!keyBelongsTo(fileUrl, session.user.id)) {
+        return {
+          success: false,
+          error: 'Check the highlighted fields and try again.',
+          fieldErrors: { fileUrl: ['Upload the file again'] },
+        };
+      }
+    }
+
     // The resolved id rather than the one that arrived, so what is written is
-    // what was checked.
-    const item = await createItemRow({ ...parsed.data, typeId: type.id });
+    // what was checked. `contentType` is decided here from the resolved slug
+    // rather than taken from the payload, so a text item cannot claim to be a
+    // file — or the other way round.
+    const item = await createItemRow(
+      { ...parsed.data, typeId: type.id },
+      required.file ? 'file' : 'text',
+    );
 
     if (!item) {
       return { success: false, error: 'Your session has expired. Sign in again.' };
@@ -129,6 +166,9 @@ export async function updateItem(itemId: string, data: UpdateItemInput): Promise
  * Like `updateItem`, the id arrives from the client and is trusted for nothing:
  * the session says who is asking and the delete is itself scoped to that user —
  * see `deleteItem` in `@/lib/db/items`.
+ *
+ * A file item's stored object goes with it, from here rather than from the
+ * query function so that storage stays out of the database module.
  */
 export async function deleteItem(itemId: string): Promise<DeleteItemResult> {
   const session = await auth();
@@ -138,11 +178,24 @@ export async function deleteItem(itemId: string): Promise<DeleteItemResult> {
   }
 
   try {
-    const deleted = await deleteItemRow(itemId);
+    const { deleted, fileKey } = await deleteItemRow(itemId);
 
     if (!deleted) {
       // Somebody else's item reads exactly like one that does not exist.
       return { success: false, error: 'That item could not be found.' };
+    }
+
+    if (fileKey) {
+      // Deliberately after the row, and deliberately not fatal. The row is what
+      // the user asked to remove and it is already gone, so a storage failure
+      // must not report the delete as having failed — it would invite a retry
+      // against an item that no longer exists. What it leaves behind is an
+      // orphaned object, which costs storage and nothing else.
+      try {
+        await deleteObject(fileKey);
+      } catch (error) {
+        console.error('Item %s was deleted but its file %s was not:', itemId, fileKey, error);
+      }
     }
 
     return { success: true };

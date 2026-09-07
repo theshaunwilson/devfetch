@@ -78,15 +78,22 @@ describe('formatTagInput', () => {
 
 describe('requiredFieldsFor', () => {
   it('requires a URL from a link, which is nothing without one', () => {
-    expect(requiredFieldsFor('link')).toEqual({ url: true });
+    expect(requiredFieldsFor('link')).toEqual({ url: true, file: false });
   });
 
   it.each(['snippet', 'prompt', 'command', 'note'])('requires no URL from a %s', (slug) => {
-    expect(requiredFieldsFor(slug)).toEqual({ url: false });
+    expect(requiredFieldsFor(slug)).toEqual({ url: false, file: false });
   });
 
   it('requires nothing type-specific of a custom type', () => {
-    expect(requiredFieldsFor('recipe')).toEqual({ url: false });
+    expect(requiredFieldsFor('recipe')).toEqual({ url: false, file: false });
+  });
+
+  it('requires a file from the two types whose content is one', () => {
+    // Read off `usesFileUpload` rather than a list of its own, so a file item
+    // with no file cannot be created however the form is bypassed.
+    expect(requiredFieldsFor('file')).toEqual({ url: false, file: true });
+    expect(requiredFieldsFor('image')).toEqual({ url: false, file: true });
   });
 
   it('never requires a field the type does not show', () => {

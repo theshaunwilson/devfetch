@@ -67,6 +67,15 @@ export interface ItemDetail extends DashboardItem {
   content: string | null;
   language: string | null;
   url: string | null;
+  /**
+   * The stored object's key, not a URL, despite the column's name: uploads are
+   * private, so they are read back through `/api/files/[id]` rather than from
+   * the bucket. Present only on file and image items.
+   */
+  fileUrl: string | null;
+  /** The uploader's own filename, shown and used as the download name. */
+  fileName: string | null;
+  fileSize: number | null;
   collection: ItemDetailCollection | null;
   /** ISO string, like `updatedAt` */
   createdAt: string;
@@ -111,3 +120,30 @@ export interface ItemTypeRef {
 export type CreateItemResult =
   | { success: true; data: ItemDetail }
   | { success: false; error: string; fieldErrors?: Record<string, string[]> };
+
+/**
+ * What the download proxy needs: the object to fetch, the name to serve it
+ * under, and the type slug that says which media type it is.
+ */
+export interface ItemFile {
+  key: string;
+  fileName: string;
+  fileSize: number | null;
+  typeSlug: string;
+}
+
+/**
+ * How an item stores its body. Follows from the item's type — file and image
+ * items hold an uploaded object, everything else holds text — so it is decided
+ * on the server and never sent by a caller.
+ */
+export type ItemContentType = 'text' | 'file';
+
+/**
+ * What deleting an item leaves the caller to do: whether the row was theirs to
+ * delete, and the object key to remove from storage if it had one.
+ */
+export interface DeletedItem {
+  deleted: boolean;
+  fileKey: string | null;
+}

@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { MAX_UPLOAD_SIZE } from '@/lib/uploads';
+
 /**
  * Ceilings on the free-text fields. Postgres `text` has no length of its own,
  * so without these a single request could write an unbounded amount.
@@ -11,6 +13,10 @@ export const LANGUAGE_MAX_LENGTH = 50;
 export const URL_MAX_LENGTH = 2048;
 export const TAG_MAX_LENGTH = 50;
 export const TAGS_MAX_COUNT = 20;
+/** Ours to mint, so this is a sanity bound rather than a real constraint. */
+export const FILE_KEY_MAX_LENGTH = 512;
+/** Most filesystems stop at 255 bytes, so a longer name did not come from one. */
+export const FILE_NAME_MAX_LENGTH = 255;
 
 /**
  * Trims first, then checks — chained the other way a value would be measured
@@ -115,6 +121,21 @@ export type UpdateItemData = z.output<typeof updateItemSchema>;
  */
 export const createItemSchema = updateItemSchema.extend({
   typeId: z.string().min(1, 'Choose an item type'),
+
+  // The three come back together from `POST /api/uploads` and are only
+  // meaningful together, but they are validated as ordinary optional fields:
+  // whether this type needs a file at all depends on its slug, which the
+  // action resolves before it asks. `fileUrl` holds the object's key rather
+  // than a URL — see `ItemDetail` — and the action checks that the key names
+  // an object this user uploaded, which no shape check could tell.
+  fileUrl: optionalText(FILE_KEY_MAX_LENGTH, 'File'),
+  fileName: optionalText(FILE_NAME_MAX_LENGTH, 'File name'),
+  fileSize: z
+    .int('File size must be a whole number of bytes')
+    .positive('That file is empty')
+    .max(MAX_UPLOAD_SIZE, 'That file is too large')
+    .nullable()
+    .optional(),
 });
 
 /** What a caller sends. */
