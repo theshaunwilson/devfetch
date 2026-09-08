@@ -39,7 +39,11 @@ const ITEM_SELECT = {
   // arrived, while `updatedAt` moves on every title or tag edit.
   fileSize: true,
   createdAt: true,
-  type: { select: { id: true, name: true, icon: true, color: true } },
+  // The slug rather than only the name: a card decides from it whether its
+  // copy button has anything to copy, and the drawer's edit form picks its
+  // type-specific fields from it. A name is user-facing text, and
+  // @@unique([userId, slug]) lets a custom type reuse a system slug.
+  type: { select: { id: true, name: true, slug: true, icon: true, color: true } },
   tags: {
     select: { tag: { select: { name: true } } },
     // Join rows have no natural order, so sort for a stable badge order.
@@ -121,7 +125,7 @@ export const getItemsByTypeSlug = cache(async (slug: string): Promise<ItemsByTyp
     // @@unique([userId, slug]) allows a custom type to reuse a system slug, so
     // two rows can match. Prefer the user's own.
     orderBy: { userId: { sort: 'desc', nulls: 'last' } },
-    select: { id: true, name: true, icon: true, color: true },
+    select: { id: true, name: true, slug: true, icon: true, color: true },
   });
 
   if (!type) return null;
@@ -138,13 +142,10 @@ export const getItemsByTypeSlug = cache(async (slug: string): Promise<ItemsByTyp
 /** Everything the detail drawer renders on top of what a card already holds. */
 const ITEM_DETAIL_SELECT = {
   ...ITEM_SELECT,
-  // Widened rather than inherited: the edit form picks which type-specific
-  // fields to show from the slug, and a card has no use for it.
-  type: { select: { id: true, name: true, slug: true, icon: true, color: true } },
   content: true,
   language: true,
   url: true,
-  // Every file field and createdAt come through the spread above.
+  // The type, every file field and createdAt all come through the spread above.
   collection: { select: { id: true, name: true } },
 } satisfies Prisma.ItemSelect;
 
@@ -153,7 +154,6 @@ type ItemDetailPayload = Prisma.ItemGetPayload<{ select: typeof ITEM_DETAIL_SELE
 function toItemDetail(item: ItemDetailPayload): ItemDetail {
   return {
     ...toDashboardItem(item),
-    type: item.type,
     content: item.content,
     language: item.language,
     url: item.url,

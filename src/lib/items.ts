@@ -122,3 +122,26 @@ export function initialTypeId<T extends { id: string; slug: string }>(
 export function usesMarkdownEditor(slug: string): boolean {
   return TYPES_WITH_CONTENT.has(slug) && !TYPES_WITH_LANGUAGE.has(slug);
 }
+
+/** Which field a copy button puts on the clipboard, or null for a type with no body. */
+export type CopyableField = 'content' | 'url';
+
+/**
+ * What a card's copy button copies for this type, or null when there is
+ * nothing to copy and so no button.
+ *
+ * Read off `editableFieldsFor` rather than a list of its own, for the same
+ * reason `requiredFieldsFor` and `usesCodeEditor` are: a type whose body can
+ * be edited is a type whose body can be copied, so the two cannot drift into a
+ * card offering to copy a field its item never has. A link holds its URL and
+ * no content; file and image items hold an uploaded object, and a custom type
+ * holds neither — none of the three get a button.
+ */
+export function copyableFieldFor(slug: string): CopyableField | null {
+  const fields = editableFieldsFor(slug);
+
+  if (fields.url) return 'url';
+  if (fields.content) return 'content';
+
+  return null;
+}

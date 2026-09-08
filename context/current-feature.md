@@ -1,20 +1,42 @@
 # Current Feature
 
-<!-- Feature Name -->
+Quick copy button on item cards
 
 ## Status
 
 <!-- Not Started|In Progress|Completed -->
 
-Not Started
+In Progress
 
 ## Goals
 
-<!-- Goals & requirements -->
+- A copy icon on the item cards and rows that puts the item's body on the
+  clipboard in one click, without opening the detail drawer.
+- Shown only where there is something to copy: content for snippet, prompt,
+  command and note; the URL for a link. File and image items and custom types
+  get no button.
+- Confirms with a check for a couple of seconds, the same feedback the editors'
+  copy buttons already give.
 
 ## Notes
 
-<!-- Any extra notes -->
+- The card does **not** carry `content`. `CONTENT_MAX_LENGTH` is 100,000
+  characters and the items pages are unpaginated, so selecting it into
+  `ITEM_SELECT` would put every item's whole body into every list payload. The
+  button fetches `GET /api/items/[id]` on click instead — the same "fetch on
+  click" the drawer itself uses.
+- Deciding whether to show the button needs the type's **slug**, which a card
+  never carried. Adding it to `ITEM_SELECT` is one short column and collapses
+  `ItemDetailType` into `DashboardItemType`, which only existed to add it.
+- Which types are copyable is derived from the sets `editableFieldsFor` already
+  reads, not a new list — the same anti-drift rule `usesCodeEditor`,
+  `usesMarkdownEditor` and `requiredFieldsFor` follow.
+- Safari drops clipboard permission across an `await`, so the write hands
+  `ClipboardItem` the pending promise and falls back to `writeText` on the
+  same, already-started promise where that is not supported.
+- The button sits at `z-20` above `OpenItemButton`'s `absolute inset-0` overlay
+  rather than stopping propagation — the overlay is not a wrapper, so there is
+  no click to stop. `FileRow`'s Download button is the precedent.
 
 ## History
 

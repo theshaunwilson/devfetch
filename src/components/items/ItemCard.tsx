@@ -1,4 +1,5 @@
 import { Pin, Star } from 'lucide-react';
+import { CopyItemButton } from '@/components/items/CopyItemButton';
 import { OpenItemButton } from '@/components/items/OpenItemButton';
 import { TypeIconTile } from '@/components/items/TypeIconTile';
 import { Badge } from '@/components/ui/badge';
@@ -6,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { borderColorClass } from '@/lib/colors';
 import { formatShortDate } from '@/lib/format';
 import { getIcon } from '@/lib/icons';
+import { copyableFieldFor } from '@/lib/items';
 import { cn } from '@/lib/utils';
 import type { DashboardItem } from '@/types/item';
 
@@ -22,6 +24,9 @@ export function ItemCard({ item }: ItemCardProps) {
   // Both are optional, so an item with neither renders no body at all rather
   // than an empty padded block.
   const hasBody = Boolean(item.description) || item.tags.length > 0;
+  // Null for a type whose body is not text — no button rather than one that
+  // could only report having nothing to copy.
+  const copyableField = copyableFieldFor(type.slug);
 
   return (
     <Card
@@ -35,8 +40,8 @@ export function ItemCard({ item }: ItemCardProps) {
       <CardHeader>
         {/* min-w-0 for the same reason the title below carries it, one level
             up: this row is a grid item of CardHeader, so its own min width is
-            auto and a long title would grow the whole row past the card
-            rather than shrinking to fit. */}
+            auto and a long title would grow the whole row past the card —
+            taking the copy button with it — rather than shrinking to fit. */}
         <div className="flex min-w-0 items-start gap-3">
           <TypeIconTile icon={getIcon(type.icon)} color={type.color} />
 
@@ -54,6 +59,10 @@ export function ItemCard({ item }: ItemCardProps) {
             </CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">{formatShortDate(item.updatedAt)}</p>
           </div>
+
+          {copyableField && (
+            <CopyItemButton itemId={item.id} field={copyableField} title={item.title} />
+          )}
         </div>
       </CardHeader>
 
