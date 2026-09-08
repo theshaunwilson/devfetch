@@ -7,7 +7,7 @@ import { ItemDrawerProvider } from '@/components/items/ItemDrawerProvider';
 import { Toaster } from '@/components/ui/sonner';
 import { MAIN_CONTENT_ID } from '@/lib/constants';
 import { getSidebarCollections } from '@/lib/db/collections';
-import { getItemTypes } from '@/lib/db/items';
+import { getItemTypes } from '@/lib/db/item-types';
 import { getCurrentUser } from '@/lib/db/user';
 import { isSidebarOpen, SIDEBAR_COOKIE } from '@/lib/sidebar';
 

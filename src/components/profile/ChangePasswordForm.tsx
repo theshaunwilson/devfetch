@@ -5,11 +5,12 @@ import { z } from 'zod';
 
 import { changePassword, type ChangePasswordState } from '@/actions/profile';
 import { FieldError } from '@/components/auth/FieldError';
+import { PasswordFields } from '@/components/auth/PasswordFields';
 import { FormMessage } from '@/components/auth/FormMessage';
 import { SubmitButton } from '@/components/auth/SubmitButton';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PASSWORD_MIN_LENGTH, changePasswordSchema } from '@/lib/validation/auth';
+import { changePasswordSchema } from '@/lib/validation/auth';
 
 export function ChangePasswordForm() {
   const [state, formAction] = useActionState<ChangePasswordState, FormData>(
@@ -61,39 +62,13 @@ export function ChangePasswordForm() {
           <FieldError id="current-error" messages={state.fieldErrors?.currentPassword} />
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="newPassword">New password</Label>
-          <Input
-            id="newPassword"
-            name="password"
-            type="password"
-            autoComplete="new-password"
-            required
-            aria-invalid={Boolean(state.fieldErrors?.password)}
-            aria-describedby={state.fieldErrors?.password ? 'new-error' : 'new-hint'}
-          />
-          {state.fieldErrors?.password ? (
-            <FieldError id="new-error" messages={state.fieldErrors.password} />
-          ) : (
-            <p id="new-hint" className="text-xs text-muted-foreground">
-              At least {PASSWORD_MIN_LENGTH} characters.
-            </p>
-          )}
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="confirmNewPassword">Confirm new password</Label>
-          <Input
-            id="confirmNewPassword"
-            name="confirmPassword"
-            type="password"
-            autoComplete="new-password"
-            required
-            aria-invalid={Boolean(state.fieldErrors?.confirmPassword)}
-            aria-describedby={state.fieldErrors?.confirmPassword ? 'confirm-error' : undefined}
-          />
-          <FieldError id="confirm-error" messages={state.fieldErrors?.confirmPassword} />
-        </div>
+        <PasswordFields
+          passwordLabel="New password"
+          confirmLabel="Confirm new password"
+          passwordId="newPassword"
+          confirmId="confirmNewPassword"
+          fieldErrors={state.fieldErrors}
+        />
 
         <SubmitButton pendingLabel="Updating…" className="mt-1 self-start">
           Change password

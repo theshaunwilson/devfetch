@@ -10,7 +10,8 @@ import { ProfileStats } from '@/components/profile/ProfileStats';
 import { Button } from '@/components/ui/button';
 import { DEFAULT_SIGNED_IN_PATH, SIGN_IN_PATH } from '@/lib/auth-redirect';
 import { getCollectionStats } from '@/lib/db/collections';
-import { getItemStats, getItemTypes } from '@/lib/db/items';
+import { getItemTypes } from '@/lib/db/item-types';
+import { getItemStats } from '@/lib/db/items';
 import { getProfileUser } from '@/lib/db/user';
 
 export const metadata: Metadata = {

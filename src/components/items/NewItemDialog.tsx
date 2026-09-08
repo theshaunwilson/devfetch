@@ -33,10 +33,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { textColorClass } from '@/lib/colors';
 import { capitalize } from '@/lib/format';
 import { getIcon } from '@/lib/icons';
-import { editableFieldsFor, initialTypeId, parseTagInput, requiredFieldsFor } from '@/lib/items';
+import {
+  buildCreateItemPayload,
+  editableFieldsFor,
+  initialTypeId,
+  requiredFieldsFor,
+} from '@/lib/items';
 import { isImageUploadType } from '@/lib/uploads';
 import { cn } from '@/lib/utils';
-import type { CreateItemInput } from '@/lib/validation/items';
 import type { SidebarItemType } from '@/types/item';
 import type { UploadedFile } from '@/types/upload';
 
@@ -152,26 +156,17 @@ function NewItemForm({ types, defaultTypeSlug, onCreated, onCancel }: NewItemFor
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const payload: CreateItemInput = {
+    const payload = buildCreateItemPayload({
       typeId,
+      slug: selected.slug,
       title,
       description,
-      tags: parseTagInput(tags),
-    };
-
-    // Only what this type shows. A field the form never rendered is left off
-    // entirely rather than sent blank.
-    if (fields.content) payload.content = content;
-    if (fields.language) payload.language = language;
-    if (fields.url) payload.url = url;
-
-    if (required.file && file) {
-      // `fileUrl` holds the object's key, not a URL — uploads are private and
-      // are read back through `/api/files/[id]`.
-      payload.fileUrl = file.key;
-      payload.fileName = file.fileName;
-      payload.fileSize = file.fileSize;
-    }
+      content,
+      language,
+      url,
+      tags,
+      file,
+    });
 
     startTransition(async () => {
       const result = await createItem(payload);

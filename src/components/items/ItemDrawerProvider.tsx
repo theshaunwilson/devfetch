@@ -13,7 +13,8 @@ import {
 
 import { ItemDrawer } from '@/components/items/ItemDrawer';
 import { MAIN_CONTENT_ID } from '@/lib/constants';
-import type { DashboardItem, ItemDetail, ItemDetailResponse } from '@/types/item';
+import { fetchItemDetail } from '@/lib/item-detail-request';
+import type { DashboardItem, ItemDetail } from '@/types/item';
 
 /** What the drawer knows while its detail request is in flight. */
 export type ItemDetailStatus = 'loading' | 'loaded' | 'error';
@@ -91,16 +92,7 @@ export function ItemDrawerProvider({ children }: { children: React.ReactNode }) 
 
     void (async () => {
       try {
-        const response = await fetch(`/api/items/${next.id}`, { signal: controller.signal });
-        // A non-JSON body — an error page, say — rejects here and lands in the
-        // catch below like any other failure.
-        const body = (await response.json()) as ItemDetailResponse;
-
-        if (!response.ok || !body.success) {
-          throw new Error(body.success ? 'Could not load the item' : body.error);
-        }
-
-        setDetail(body.data);
+        setDetail(await fetchItemDetail(next.id, controller.signal));
         setStatus('loaded');
       } catch (error) {
         // An aborted request was replaced by a newer one, which owns the state

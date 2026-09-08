@@ -5,13 +5,11 @@ import { useActionState } from 'react';
 import { z } from 'zod';
 
 import { resetPassword, type ResetPasswordState } from '@/actions/auth';
-import { FieldError } from '@/components/auth/FieldError';
+import { PasswordFields } from '@/components/auth/PasswordFields';
 import { FormMessage } from '@/components/auth/FormMessage';
 import { SubmitButton } from '@/components/auth/SubmitButton';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { FORGOT_PASSWORD_PATH } from '@/lib/auth-redirect';
-import { PASSWORD_MIN_LENGTH, resetPasswordSchema } from '@/lib/validation/auth';
+import { resetPasswordSchema } from '@/lib/validation/auth';
 
 interface ResetPasswordFormProps {
   /**
@@ -67,39 +65,11 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
       <form action={formAction} className="flex flex-col gap-4">
         <input type="hidden" name="token" value={token} />
 
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="password">New password</Label>
-          <Input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete="new-password"
-            required
-            aria-invalid={Boolean(state.fieldErrors?.password)}
-            aria-describedby={state.fieldErrors?.password ? 'password-error' : 'password-hint'}
-          />
-          {state.fieldErrors?.password ? (
-            <FieldError id="password-error" messages={state.fieldErrors.password} />
-          ) : (
-            <p id="password-hint" className="text-xs text-muted-foreground">
-              At least {PASSWORD_MIN_LENGTH} characters.
-            </p>
-          )}
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="confirmPassword">Confirm new password</Label>
-          <Input
-            id="confirmPassword"
-            name="confirmPassword"
-            type="password"
-            autoComplete="new-password"
-            required
-            aria-invalid={Boolean(state.fieldErrors?.confirmPassword)}
-            aria-describedby={state.fieldErrors?.confirmPassword ? 'confirm-error' : undefined}
-          />
-          <FieldError id="confirm-error" messages={state.fieldErrors?.confirmPassword} />
-        </div>
+        <PasswordFields
+          passwordLabel="New password"
+          confirmLabel="Confirm new password"
+          fieldErrors={state.fieldErrors}
+        />
 
         <SubmitButton pendingLabel="Updating…" className="mt-1 w-full">
           Update password

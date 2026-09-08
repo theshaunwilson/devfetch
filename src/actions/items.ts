@@ -3,10 +3,10 @@
 import { z } from 'zod';
 
 import { auth } from '@/auth';
+import { getItemTypeById } from '@/lib/db/item-types';
 import {
   createItem as createItemRow,
   deleteItem as deleteItemRow,
-  getItemTypeById,
   updateItem as updateItemRow,
 } from '@/lib/db/items';
 import { requiredFieldsFor } from '@/lib/items';
