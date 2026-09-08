@@ -1,5 +1,5 @@
-import { Pin, Star } from 'lucide-react';
 import { CopyItemButton } from '@/components/items/CopyItemButton';
+import { ItemMarkers } from '@/components/items/ItemMarkers';
 import { OpenItemButton } from '@/components/items/OpenItemButton';
 import { TypeIconTile } from '@/components/items/TypeIconTile';
 import { Badge } from '@/components/ui/badge';
@@ -52,10 +52,7 @@ export function ItemCard({ item }: ItemCardProps) {
                 width and is clipped by the card with no ellipsis. */}
             <CardTitle className="flex min-w-0 items-center gap-2">
               <span className="truncate">{item.title}</span>
-              {item.isPinned && <Pin className="size-3.5 shrink-0 text-muted-foreground" />}
-              {item.isFavorite && (
-                <Star className="size-3.5 shrink-0 fill-yellow-500 text-yellow-500" />
-              )}
+              <ItemMarkers isPinned={item.isPinned} isFavorite={item.isFavorite} />
             </CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">{formatShortDate(item.updatedAt)}</p>
           </div>

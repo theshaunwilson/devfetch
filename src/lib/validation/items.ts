@@ -66,7 +66,19 @@ export const updateItemSchema = z.object({
     .transform((value) => (value === '' ? null : value))
     // Nullable on the inner schema too, so a cleared field passes through
     // instead of being asked to look like a URL.
-    .pipe(z.url('Enter a valid URL').nullable())
+    //
+    // Constrained to http(s): a bare `z.url()` validates with `new URL()` and
+    // accepts any scheme, so `javascript:` and `data:` would be stored and
+    // then rendered as an href by the drawer. React and the browser both
+    // defuse those today, which is the only reason this was never exploitable
+    // — the rule belongs on the server rather than borrowed from them.
+    // The hostname is deliberately left open: `http://localhost:3000/docs` is
+    // a plausible thing to save in a developer's knowledge hub.
+    .pipe(
+      z
+        .url({ error: 'Enter a valid URL starting with http:// or https://', protocol: /^https?$/ })
+        .nullable()
+    )
     .nullable()
     .optional(),
 

@@ -1,4 +1,4 @@
-import { Pin, Star } from 'lucide-react';
+import { ItemMarkers } from '@/components/items/ItemMarkers';
 import { OpenItemButton } from '@/components/items/OpenItemButton';
 import { TypeIconTile } from '@/components/items/TypeIconTile';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
@@ -73,10 +73,7 @@ export function ImageCard({ item }: ImageCardProps) {
             the card with no ellipsis rather than shrinking to fit. */}
         <CardTitle className="flex min-w-0 items-center gap-2">
           <span className="truncate">{item.title}</span>
-          {item.isPinned && <Pin className="size-3.5 shrink-0 text-muted-foreground" />}
-          {item.isFavorite && (
-            <Star className="size-3.5 shrink-0 fill-yellow-500 text-yellow-500" />
-          )}
+          <ItemMarkers isPinned={item.isPinned} isFavorite={item.isFavorite} />
         </CardTitle>
         <p className="mt-1 text-xs text-muted-foreground">{formatShortDate(item.updatedAt)}</p>
       </CardHeader>

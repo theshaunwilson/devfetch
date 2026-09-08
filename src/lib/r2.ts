@@ -42,10 +42,6 @@ function readConfig(): R2Config | null {
   return { accountId, accessKeyId, secretAccessKey, bucket };
 }
 
-export function isStorageConfigured(): boolean {
-  return readConfig() !== null;
-}
-
 let cached: { client: S3Client; bucket: string } | null = null;
 
 /**

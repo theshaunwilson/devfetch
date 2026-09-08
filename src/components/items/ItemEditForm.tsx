@@ -4,20 +4,15 @@ import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
 import { updateItem } from '@/actions/items';
-import { CodeEditor } from '@/components/items/CodeEditor';
-import { MarkdownEditor } from '@/components/items/MarkdownEditor';
+import { ItemContentField } from '@/components/items/ItemContentField';
+import { ItemFieldError } from '@/components/items/ItemFieldError';
+import { ItemTextField } from '@/components/items/ItemTextField';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SheetHeader } from '@/components/ui/sheet';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  editableFieldsFor,
-  formatTagInput,
-  parseTagInput,
-  usesCodeEditor,
-  usesMarkdownEditor,
-} from '@/lib/items';
+import { editableFieldsFor, formatTagInput, parseTagInput } from '@/lib/items';
 import type { UpdateItemInput } from '@/lib/validation/items';
 import type { ItemDetail } from '@/types/item';
 
@@ -30,11 +25,6 @@ interface ItemEditFormProps {
   onCancel: () => void;
 }
 
-function FieldError({ messages }: { messages?: string[] }) {
-  if (!messages?.length) return null;
-
-  return <p className="text-sm text-destructive">{messages.join('. ')}</p>;
-}
 
 /**
  * The drawer in edit mode.
@@ -49,8 +39,6 @@ function FieldError({ messages }: { messages?: string[] }) {
  */
 export function ItemEditForm({ item, heading, onSaved, onCancel }: ItemEditFormProps) {
   const fields = editableFieldsFor(item.type.slug);
-  const codeContent = usesCodeEditor(item.type.slug);
-  const markdownContent = usesMarkdownEditor(item.type.slug);
 
   const [title, setTitle] = useState(item.title);
   const [description, setDescription] = useState(item.description ?? '');
@@ -119,7 +107,7 @@ export function ItemEditForm({ item, heading, onSaved, onCancel }: ItemEditFormP
             autoFocus
             required
           />
-          <FieldError messages={fieldErrors.title} />
+          <ItemFieldError messages={fieldErrors.title} />
         </div>
 
         <div className="flex flex-col gap-2">
@@ -131,90 +119,55 @@ export function ItemEditForm({ item, heading, onSaved, onCancel }: ItemEditFormP
             aria-invalid={Boolean(fieldErrors.description)}
             rows={3}
           />
-          <FieldError messages={fieldErrors.description} />
+          <ItemFieldError messages={fieldErrors.description} />
         </div>
 
         {fields.content && (
-          <div className="flex flex-col gap-2">
-            {/* Neither editor has an element to point a <label for> at, so
-                both name themselves through `ariaLabel` instead. */}
-            {codeContent || markdownContent ? (
-              <Label>Content</Label>
-            ) : (
-              <Label htmlFor="item-content">Content</Label>
-            )}
-
-            {codeContent ? (
-              <CodeEditor
-                value={content}
-                onChange={setContent}
-                language={language}
-                minHeight={160}
-                ariaLabel="Content"
-                aria-invalid={Boolean(fieldErrors.content)}
-              />
-            ) : markdownContent ? (
-              <MarkdownEditor
-                value={content}
-                onChange={setContent}
-                minHeight={240}
-                ariaLabel="Content"
-                aria-invalid={Boolean(fieldErrors.content)}
-              />
-            ) : (
-              <Textarea
-                id="item-content"
-                value={content}
-                onChange={(event) => setContent(event.target.value)}
-                aria-invalid={Boolean(fieldErrors.content)}
-                className="min-h-40 font-mono text-xs leading-relaxed"
-              />
-            )}
-            <FieldError messages={fieldErrors.content} />
-          </div>
+          <ItemContentField
+            idPrefix="item"
+            slug={item.type.slug}
+            value={content}
+            onChange={setContent}
+            language={language}
+            codeMinHeight={160}
+            markdownMinHeight={240}
+            textareaClassName="min-h-40 font-mono text-xs leading-relaxed"
+            messages={fieldErrors.content}
+          />
         )}
 
         {fields.language && (
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="item-language">Language</Label>
-            <Input
-              id="item-language"
-              value={language}
-              onChange={(event) => setLanguage(event.target.value)}
-              aria-invalid={Boolean(fieldErrors.language)}
-              placeholder="typescript"
-            />
-            <FieldError messages={fieldErrors.language} />
-          </div>
+          <ItemTextField
+            id="item-language"
+            label="Language"
+            value={language}
+            onChange={setLanguage}
+            placeholder="typescript"
+            messages={fieldErrors.language}
+          />
         )}
 
         {fields.url && (
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="item-url">URL</Label>
-            <Input
-              id="item-url"
-              type="url"
-              value={url}
-              onChange={(event) => setUrl(event.target.value)}
-              aria-invalid={Boolean(fieldErrors.url)}
-              placeholder="https://example.com"
-            />
-            <FieldError messages={fieldErrors.url} />
-          </div>
+          <ItemTextField
+            id="item-url"
+            label="URL"
+            type="url"
+            value={url}
+            onChange={setUrl}
+            placeholder="https://example.com"
+            messages={fieldErrors.url}
+          />
         )}
 
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="item-tags">Tags</Label>
-          <Input
-            id="item-tags"
-            value={tags}
-            onChange={(event) => setTags(event.target.value)}
-            aria-invalid={Boolean(fieldErrors.tags)}
-            placeholder="react, hooks, typescript"
-          />
-          <p className="text-xs text-muted-foreground">Separate tags with commas.</p>
-          <FieldError messages={fieldErrors.tags} />
-        </div>
+        <ItemTextField
+          id="item-tags"
+          label="Tags"
+          value={tags}
+          onChange={setTags}
+          placeholder="react, hooks, typescript"
+          hint="Separate tags with commas."
+          messages={fieldErrors.tags}
+        />
       </div>
     </form>
   );

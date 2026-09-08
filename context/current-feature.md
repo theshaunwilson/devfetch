@@ -2,19 +2,293 @@
 
 <!-- Feature Name -->
 
+Code scan fixes — open redirect, context memoization, URL scheme, duplication
+
 ## Status
 
 <!-- Not Started|In Progress|Completed -->
 
-Not Started
+Completed
 
 ## Goals
 
 <!-- Goals & requirements -->
 
+Apply the findings from a `code-scanner` audit of the whole codebase as one
+batch. Ten findings: one exploitable open redirect, two medium, seven low.
+Nothing here adds a feature — every change closes a gap in something already
+built.
+
+Branch: `fix/code-scan-findings`.
+
+### 1. Open redirect — `safeCallbackUrl` lets a backslash through (High)
+
+`src/lib/auth-redirect.ts:20` rejects `//evil.example` but not `/\evil.example`:
+
+```ts
+if (!value.startsWith('/') || value.startsWith('//')) return DEFAULT_SIGNED_IN_PATH;
+```
+
+The WHATWG URL parser folds `\` to `/` for special schemes, and strips tabs,
+newlines and carriage returns before parsing. Verified by running it, not
+assumed — resolved against `http://app.local`:
+
+| input | guard passes | resolves to |
+| --- | --- | --- |
+| `/\evil.example` | yes | `http://evil.example/` |
+| `/\/evil.example` | yes | `http://evil.example/` |
+| `/<tab>/evil.example` | yes | `http://evil.example/` |
+| `/<LF>/evil.example` | yes | `http://evil.example/` |
+| `//evil.example` | **no** | — (already blocked) |
+
+**The tab case is narrower than it first looks and the distinction matters for
+the tests:** a bare `/<tab>evil.example` stays on-origin
+(`http://app.local/evil.example`). The control characters only escape when a
+slash follows, because stripping them leaves the `//` the guard already
+rejects. So the bypass is the backslash, plus any control character that
+*reveals* a second slash.
+
+Requirements:
+
+- Reject backslashes and C0 control characters outright, before the existing
+  `//` check, rather than stripping them — a callback URL has no legitimate
+  reason to contain either, and rejecting is one predicate instead of a
+  normalize-then-recheck loop that has to be got right twice.
+- Keep the existing `//`, absolute-URL, no-slash-scheme and non-string
+  branches exactly as they are.
+- Add the new cases to `src/lib/auth-redirect.test.ts` beside the
+  `//evil.example` case they belong with, including the on-origin
+  `/<tab>evil.example` control so the test pins the real rule rather than a
+  blanket "no weird characters" that would pass for the wrong reason.
+
+**Scope note — only one of the three call sites is a live sink**, and this was
+checked rather than assumed. `src/app/(auth)/sign-in/page.tsx:40` passes the
+value to a bare `redirect()`, which Next writes as the raw `Location` header
+(`next.config.ts` sets no `basePath`, so the prefixing is a no-op). The two
+Auth.js call sites — `src/actions/auth.ts:81` and `:170` — are **not**
+affected: `@auth/core`'s default `redirect` callback prefixes `baseUrl`, so
+`//evil.example` becomes `http://app.local//evil.example` and stays on-origin.
+The fix goes in the shared guard regardless, since that is where the control
+lives and the next sink should inherit it.
+
+This is a gap in a control the project already believes it has —
+`src/lib/auth-redirect.test.ts:11-15` asserts this exact class is closed — so
+it is a regression fix, not a new defence.
+
+### 2. `ItemDrawerProvider` passes an unmemoized context value (Medium)
+
+`src/components/items/ItemDrawerProvider.tsx:141`:
+
+```tsx
+<ItemDrawerContext.Provider value={{ openItem }}>
+```
+
+`openItem` is already stable (`useCallback` with `[]` at line 67), but the
+wrapper object is rebuilt on every provider render, and the provider holds five
+pieces of state (`open`, `item`, `detail`, `status`, `mode`). So every drawer
+transition — open, fetch resolve, edit-mode toggle, close — changes the context
+identity and re-renders every `OpenItemButton` on the page. One is rendered per
+card by `ItemCard`, `ItemRow`, `ImageCard` and `FileRow`, and the item lists are
+unpaginated, so the count is unbounded.
+
+- Wrap in `useMemo(() => ({ openItem }), [openItem])`.
+- `src/components/dashboard/SidebarProvider.tsx:55` already does exactly this,
+  so the fix is applying the codebase's own existing pattern rather than
+  importing a new one.
+
+### 3. `z.url()` accepts any scheme, and the value is rendered as an `href` (Medium)
+
+`src/lib/validation/items.ts:69`:
+
+```ts
+.pipe(z.url('Enter a valid URL').nullable())
+```
+
+Zod 4's bare `z.url()` validates with `new URL()` and constrains no protocol.
+Probed against the real schema: `javascript:alert(document.domain)`,
+`data:text/html,<script>…</script>` and `vbscript:msgbox(1)` are all accepted.
+`<Input type="url">` in `NewItemDialog.tsx:322` and `ItemEditForm.tsx:194` does
+not filter them either — HTML URL validation only requires an absolute URL. The
+stored value is rendered as an `href` in `ItemDrawer.tsx:208-215`.
+
+**State the bound honestly rather than overselling this:** it is not
+exploitable in a current browser. React 19 rewrites `javascript:` hrefs at
+render time, and Chrome and Firefox block top-level navigation to `data:`. It
+is a real input-validation gap — the app stores and renders attacker-chosen
+schemes and relies entirely on the framework and the browser to defuse them —
+and it is one argument to close.
+
+- Constrain to `http`/`https` at the schema, so the rule is enforced on the
+  server where it belongs and both forms inherit it.
+- Add cases to `src/lib/validation/items.test.ts` beside the existing URL ones.
+- **Check the existing tests and the seeded data before assuming this is
+  inert**: any test or seeded link item whose URL is not `http(s)` would start
+  failing validation on edit. The seed's six URLs are all `https`, so the
+  expectation is no change — but confirm rather than assume, and note that this
+  makes a previously-storable value unstorable.
+
+### 4. `FieldError` is defined twice, byte-identical (Low)
+
+`src/components/items/NewItemDialog.tsx:62-66` and
+`src/components/items/ItemEditForm.tsx:33-37` are the same five lines; `diff`
+of the two ranges is empty. A third, differently-shaped one lives at
+`src/components/auth/FieldError.tsx:2` — it takes an `id`, uses `text-xs` and
+renders only `messages[0]`, where the item copies use `text-sm` and
+`messages.join('. ')`.
+
+- Extract the item copies into one component and import in both.
+- **Do not merge the auth one into it in this pass.** The two genuinely differ
+  in behaviour (first message vs all messages) and in the `id` wiring that ties
+  the auth version to its input for screen readers; collapsing them means
+  choosing which behaviour wins on both sides, which is a UI decision this
+  batch should not smuggle in. Leave the divergence recorded instead.
+
+### 5. `NewItemForm` and `ItemEditForm` duplicate the type-specific field block (Low)
+
+`src/components/items/NewItemDialog.tsx:265-365` and
+`src/components/items/ItemEditForm.tsx:137-217`. The content block (the
+`codeContent ? <CodeEditor> : markdownContent ? <MarkdownEditor> : <Textarea>`
+ladder), the language input, the URL input and the tags input are the same JSX
+in both, differing only in element ids (`new-item-*` vs `item-*`), `minHeight`
+values and `rows`. Both derive from the same `editableFieldsFor` /
+`usesCodeEditor` / `usesMarkdownEditor` calls.
+
+- Extract `ItemContentField` (label + editor ladder + error) and
+  `ItemTagsField`, parameterised by `idPrefix` and `minHeight`.
+- ~100 duplicated lines across the create and edit paths. The markdown feature
+  already recorded having to set `minHeight` at three call sites for this
+  reason, so the cost is demonstrated rather than hypothetical.
+
+### 6. Three components well over the 50-line guidance (Low)
+
+`NewItemForm` (`NewItemDialog.tsx:138-384`, ~247 lines), `ItemDrawer`
+(`ItemDrawer.tsx:69-272`, ~204) and `ItemEditForm`
+(`ItemEditForm.tsx:50-221`, ~172). `context/coding-standards.md`: "Keep
+functions under 50 lines when possible" and "Keep components focused — one job
+per component."
+
+- The extractions in finding 5 cover the two forms.
+- For `ItemDrawer`, pull the read-only body into `ItemDrawerBody`, leaving the
+  drawer to own the sheet, the heading and the view/edit switch. It currently
+  renders the heading, action bar, description, content ladder, file panel,
+  URL, tags, collection and details table in one body with the edit branch
+  nested inside.
+- Under 50 lines is a target, not a contract — do not split further just to hit
+  a number if the result reads worse.
+
+### 7. The pin/favourite marker pair is copy-pasted into four cards (Low)
+
+`ItemCard.tsx:55-58`, `ItemRow.tsx:43-46`, `ImageCard.tsx:76-79`,
+`FileRow.tsx:61-64` — all four are the same two lines.
+
+The four components are legitimately different shapes, with reasoning already
+recorded in History, and that is not being revisited. But this fragment is not
+part of what differs, and pin/favourite mutations are still unbuilt, so it will
+need touching in four places when they land.
+
+- Extract `ItemMarkers` taking `{ isPinned, isFavorite }`, the same way
+  `TypeIconTile` was already extracted from `ItemCard`/`ItemRow`.
+
+### 8. Dead export: `isStorageConfigured` (Low)
+
+`src/lib/r2.ts:45-47`. `grep -rn "isStorageConfigured" src` returns only the
+definition — no caller, no test, not used inside `r2.ts` itself.
+`context/coding-standards.md`: "No unused imports or variables."
+
+- Delete it. Wiring it into `/api/uploads` for a clearer 503 when R2 is
+  unconfigured is a defensible alternative, but that is a behaviour change the
+  audit did not ask for — prefer the deletion, and note the option here.
+
+### 9. Vestigial re-assignment in `NewItemDialog` (Low)
+
+`src/components/items/NewItemDialog.tsx:90`:
+
+```tsx
+const types = itemTypes;
+```
+
+Left over from when `isProType` filtered the list; the comment above it
+explains the removal. It now only renames the prop.
+
+- Use `itemTypes` directly and keep the comment, which still records why the
+  filter went away.
+
+### 10. No security response headers (Low)
+
+`next.config.ts` sets no `headers()` and `src/proxy.ts` adds none, so app pages
+ship with no `X-Frame-Options` / `frame-ancestors`, no `Referrer-Policy` and no
+`X-Content-Type-Options`. `/api/files/[id]` sets its own strict headers
+correctly — it is the only thing that does.
+
+- Add a `headers()` entry covering `/(.*)` with `X-Frame-Options: DENY`,
+  `Referrer-Policy: strict-origin-when-cross-origin` and
+  `X-Content-Type-Options: nosniff`.
+- **A full CSP is explicitly out of scope.** Monaco's AMD loader and Next's
+  inline bootstrap both need allowances, and getting that wrong breaks the code
+  editor in production while passing every test here. It deserves its own
+  feature with its own browser verification.
+- Verify with `curl -I` against the running dev server, and confirm
+  `/api/files/[id]` still sends its own stricter set rather than being
+  overridden.
+
 ## Notes
 
 <!-- Any extra notes -->
+
+### Testing
+
+`context/coding-standards.md` scopes the suite to server actions and utilities,
+never components. That splits this batch cleanly:
+
+- **Unit tested:** findings 1 and 3 only — `safeCallbackUrl` and the item URL
+  schema are both pure utilities with existing test files to extend.
+- **Not unit tested, verified in the browser:** findings 2, 4, 5, 6, 7 and 9
+  are all components. Finding 8 is a deletion, covered by the build and lint.
+  Finding 10 is config, verified with `curl -I`.
+- Prove each new test can fail before trusting it — break the source, watch it
+  go red, restore. **Restore from a file backup, never `git checkout`**, which
+  wipes uncommitted work; that lesson is already recorded in History.
+
+### Refactor risk
+
+Findings 4–7 are pure refactors touching the create dialog, the edit form, the
+drawer and all four card components — i.e. most of the item UI at once, with no
+component test suite underneath any of it. Verify in a real browser after the
+extractions, not only via `npm run build`:
+
+- Create an item of each type, checking the fields still match the type.
+- Edit an item, checking the same.
+- Open the drawer from a card on `/dashboard`, `/items/snippet`,
+  `/items/image` and `/items/file`.
+- Pin and favourite markers still render on all four card shapes.
+- Escape still closes the drawer and returns focus to the exact card — that
+  behaviour was hard-won across two features and is exactly the kind of thing a
+  refactor of `ItemDrawer` can silently break.
+
+### Not in scope
+
+Everything the audit checked and deliberately did not report, because History
+already records it as an accepted trade-off: the duplicate `getTypeUsage` per
+dashboard render, unbounded `findMany` in `getPinnedItems` and
+`getItemsByTypeSlug`, the unindexed `findScopedToken` lookup, the three colour
+maps in `src/lib/colors.ts`, the two user queries on `/profile`, orphaned `Tag`
+rows and orphaned R2 objects, no rate limit on `/api/uploads`, and the inert
+favourite/pin/copy buttons in the drawer action bar.
+
+Also not in scope: any unbuilt feature. Search, collections CRUD, tags
+management, export, billing, AI features, Pro gating enforcement and item
+pagination are known MVP gaps, not findings.
+
+### Verified clean, worth recording
+
+The audit read every Prisma call in `src/lib/db`, `src/actions` and the four
+route handlers. **Every** item read and write carries `userId` in its `where`,
+including the `update` and `delete` filters rather than a read-then-write;
+`getItemTypeById` resolves against `OR: [{ userId: null }, { userId }]`; and
+`keyBelongsTo` matches the key exactly rather than by prefix. No missing
+ownership scoping anywhere. There is also no `any`, `as any`, `@ts-ignore` or
+`@ts-expect-error` in `src` outside `src/generated`, and `git ls-files` shows
+`.env.example` as the only tracked env file.
 
 ## History
 
@@ -58,3 +332,4 @@ Not Started
 - Image gallery view — `/items/image` renders its items as a grid of thumbnails rather than the text-oriented card every type shared until now. **No migration and no new dependency** — `Item.fileUrl`/`fileName` have been in the schema since the Prisma feature, and which types are a gallery is read off the existing `isImageUploadType` rather than a new list. `ImageCard` is a **separate component, not a branch inside `ItemCard`**, because the two are different shapes: it leads with the picture and drops the description and tags, which would push the thumbnails apart and are a click away in the drawer. Everything else is deliberately identical — the type's left border, the pin and favourite markers, and the `OpenItemButton` overlay, so click, Enter, Space and the `ring-inset` focus ring all keep working with no new key handling. **The thumbnail's `src` is `/api/files/<item id>`, never a bucket URL**: uploads are private, `Item.fileUrl` holds the object's *key*, and the route serves it only to the user who owns the item. That is why `ITEM_SELECT` gained `fileUrl` and `fileName` — a card has to know an item *has* an object before it renders an `<img>` — and why those two fields moved **up** from `ItemDetail` onto `DashboardItem` rather than being declared in both places; the key itself is never used by a card, only its presence. An image item with no object is representable even though the create dialog requires one, and gets the type's icon rather than a broken picture. **The one decision put to the user rather than assumed** was the column count: the spec says "3 columns", but a literal `grid-cols-3` gives **103px cards at 390px**, so the gallery breaks `sm:grid-cols-2 lg:grid-cols-3` — three columns a breakpoint earlier than the item grid's `md`/`xl`, because a thumbnail carries a narrower card than a title-and-tags one. Measured afterwards at **342 / 288 / 224 / 229 / 368 px** across 390 / 640 / 768 / 1024 / 1440, image ratio **1.778** at every width, zero page overflow. **Two defects were found by measuring, neither visible in the diff.** A long title ran **248px past the card's right edge with no ellipsis**: `truncate` is inert on a `CardTitle` whose min-width is `auto` — it is a grid item of `CardHeader` — so the title grew to its content width and was clipped by the card. Both candidate fixes were tested in the live DOM before choosing: `min-w-0` on `CardTitle` works (title 332px, 16px inside the edge, ellipsis present), while `min-w-0` on the inner span alone does **nothing**. `ItemCard` then turned out to have the **identical fault** at 296px — pre-existing on `main`, fixed here with permission, and it **corrects the note in the "Items grid, three columns at `xl`" entry**, which said `ItemCard` "truncates titles today": it clips them. **A third defect was found and deliberately not fixed** — after a delete, focus lands on `<body>` rather than the `<main>` fallback the Delete Item feature added. Polling through a real delete showed focus correctly on the card trigger at **448ms**, then detached by `router.refresh()` at **481ms**: a race in `ItemDrawerProvider`, identical for `ItemCard`, and nothing in this feature's diff touches it. **One reading was a measurement artifact**, recorded so it is not re-investigated: a card click through an `:nth-child` selector did not open the drawer, while the same button clicks fine by accessible name — a re-render race in the harness, not the component. Verified in a real browser against the seeded Neon dev branch and real R2. **Writing was asked for first, per `CLAUDE.md`**, and five throwaway images at deliberately awkward ratios (4:1, 2:5, 1:1, 40x40, native 16:9) were uploaded through the real dialog: `object-cover` crop confirmed on each, hover measured at exactly **1.0500** with the card unchanged at 368x279 and the wrapper unchanged at 204.8, `transition` 0.3s, `loading="lazy"`, drawer opening with the preview and download, and Escape returning focus to the exact card. The **no-file placeholder** needed a second permission — an UPDATE nulling one throwaway's `fileUrl`, since the dialog cannot produce that row — and rendered the type icon in the same 364x205 box with the card height unchanged. `/items/snippet` and `/dashboard` were re-checked for regression: original grid classes, icon tile, tags and description intact, zero images on the dashboard, so the widened select left `ItemRow` alone. **8 new tests (314 total)** — `getItemsByTypeSlug` had **none at all** despite backing every items page, so its ownership scoping and the global-types `OR` are pinned now too; four mutations (mapper dropping the file fields, `ITEM_SELECT` dropping them, the type lookup dropping the global join, the item query dropping `userId`) each turned tests red, with the source restored byte-identical. **Worth knowing:** the first mutation run used `git checkout` to revert and so wiped the *uncommitted* feature edits along with the mutation — caught, restored, and redone against a file backup; on uncommitted work a mutation harness must not use `git checkout`. Also `npx prettier` was **not** run on the new file: prettier is neither a dependency nor configured here, and running it with its own defaults is what caused 263 lines of unrelated churn during the Item create feature. **The database and bucket were left exactly as found** — 17 items, 5 collections, 35 `ItemTag`, 7 types, 2 users, **0 objects under `users/`**. All five throwaways were deleted through the real UI; the nulled item's object was orphaned by design (its delete found no key to remove) and was deleted manually, both temp scripts removed. **Worth knowing:** `Tag` reads **34**, not the 30 earlier entries record — four orphans (`career`, `resume`, `image`, `wallpaper`) carry cuids sorting *before* the first upload of this session, so they predate it and were left alone; the tag count was not baselined at the start, so that is inference from id ordering rather than a measured before/after. **Open and out of scope:** the bare `/items` index still 404s and the dashboard's Recent "View all" still points at it; the dashboard's own Pinned and Recent rows show image items as plain `ItemRow`s with no thumbnail, which the spec does not ask for; a gallery card drops the description and tags by design; a missing or 404ing object shows the browser's broken-image glyph, since `ItemFilePanel` does not handle that either; and `ImageCard` has no test of its own, as `coding-standards.md` scopes the suite to server actions and utilities. `npm run test`, `npm run lint`, `npx tsc --noEmit`, `npm run build` and `npm run db:test` all pass, with `/items/[type]` still reported as a dynamic route.
 - File list view — `/items/file` renders its items as a single column of rows rather than the card grid every non-image type shares: a file icon by extension, the file name, the size, the upload date and a Download button, with the metadata stacking below `sm`. **No migration and no new dependency** — `Item.fileSize` and `createdAt` have been in the schema since the Prisma feature, and every icon comes from the lucide package already installed. `FileRow` is a **separate component, not a branch inside `ItemCard`**, for the same reason `ImageCard` is: the shape differs. It drops the description and tags, which would push the metadata off the line it exists to sit on, while keeping the type's left border, the pin and favourite markers and the `OpenItemButton` overlay, so click, Enter, Space and the `ring-inset` focus ring all keep working with no new key handling. Which types are a file list is read off the existing helpers through `usesFileList = usesFileUpload && !isImageUploadType` rather than a fourth hardcoded list — the same anti-drift rule `usesCodeEditor`, `usesMarkdownEditor` and `requiredFieldsFor` already follow — so the gallery and the list **partition** the upload types instead of overlapping, and there is a test asserting exactly that. **Two fields the spec needs were not on a card, and both were found by reading the code at `load` rather than in the browser**: `ITEM_SELECT` carried `fileUrl` and `fileName` (the Image Gallery feature added them) but not `fileSize`, and a card carried `updatedAt`, never `createdAt`. Both moved **up** onto `DashboardItem` rather than being declared twice, so the card's shape and the drawer's still cannot drift — `ItemDetail` now inherits all four and `ITEM_DETAIL_SELECT` stops restating them. **The one decision the spec left open was the upload date**, and it was settled on the mechanics rather than on taste: an item's file **cannot be replaced when editing** — the File Upload feature left that out deliberately — so the row was created exactly when the object arrived, while `updatedAt` moves on every title or tag edit. `createdAt` is therefore the upload date and `updatedAt` would have been a lie. **Demonstrated rather than argued**, with permission for a single backdate on a throwaway row, because all five test items were created the same day and would otherwise have rendered identically: with `createdAt` set to Mar 14 and `updatedAt` at Sep 7, the row rendered **Mar 14**. **The spec's own stated mechanic was wrong, which the code said before the browser did.** It asks for the Download button to "stop propagation", but `OpenItemButton` is an `absolute inset-0` overlay at `z-10`, not a wrapper — a `<button>` takes phrasing content only, which is why the Item Drawer feature built it that way — so the link is never nested inside the trigger and there is no click to stop; it simply has to sit **above** the overlay, at `relative z-20`. Measured at `z: 20`, and proven functionally: clicking Download fired a real 193-byte download and did **not** open the drawer. **A lint rule rejected the first implementation**, which is worth recording because it is not obvious: assigning a component during render (`const Icon = getFileIcon(...)`) trips `react-hooks/static-components`. The codebase's own answer is to pass the icon as a **prop**, which `TypeIconTile` already does for exactly that reason, so the row reuses it and gains the app's tinted icon language for free rather than growing a component to satisfy a linter. **Two of my own measurements were wrong on the first pass and were re-run rather than trusted**: lucide icons also carry `aria-hidden`, so a `[aria-hidden]` selector measured an icon instead of the separator dot, and a class string always contains its responsive variants, so `includes('not-sr-only')` proved nothing about what was actually rendered. Re-measured properly: the separator is `display: none` at 390 and `block` at 768+, and the Download label is 1px (sr-only, icon-only button at 38px) at 390 and 60px (labelled, 102px button) above. Verified in a real browser against the seeded Neon dev branch and real R2 — an isolated headless Chromium, since the Playwright MCP profile was locked by a live Chrome that was left alone, the same workaround the items-grid feature used. **Writing to the branch was asked for first, per `CLAUDE.md`**, and five throwaway files were uploaded through the real New File dialog covering every icon branch: `.pdf`/`.md` → file-text, `.json` → file-braces, `.yaml` → file-code, `.csv` → file-spreadsheet. One column at 390/768/1440 (342/464/1136px rows), metadata `column` → `row` at `sm`, hover changing the background, row click opening the drawer, Escape returning focus to the exact row, and a 62-character filename truncating with an ellipsis **inside** the card (304px against 366px). Zero page overflow and zero overflowing descendants at every width. **13 new tests (327 total, 20 files)**, including the first for the new `file-icons` module, whose coverage assertion reads the accepted extensions out of `uploads.ts` rather than repeating them, so an extension added there and forgotten here fails a test instead of silently falling back to the generic icon. Four mutations — `usesFileList` dropping the image exclusion, the `.csv` entry removed, the null-filename guard removed, and the mapper serializing `updatedAt` as `createdAt` — each turned 1 to 4 tests red, with every source restored from **file backups, never `git checkout`**, which is the lesson the Image Gallery feature recorded after a revert wiped uncommitted work. **A separate pre-existing bug was fixed in its own commit** after the user reported it: the drawer's action bar carried `ml-auto` on the Edit/Delete group to right-align the destructive pair, which left a **102px** hole beside Copy while every other gap was 4px. Only the auto margin was removed — the grouping div stays, because it does a second job the Item Drawer feature added it for, keeping Edit and Delete wrapping together at 390px rather than stranding Delete alone on the second line; re-measured at 4px throughout with the wrap intact and no action-bar element outside the drawer. **Worth knowing:** the spec lists exactly five things per row and exactly those were built, which means the item's **title is not shown anywhere in the list** — two files both named `report.pdf` are indistinguishable until one is opened. That matches the Drive/Dropbox model the spec names and the title is one click away in the drawer, so the spec was followed rather than widened, but it is a real trade worth revisiting. Also, at 16px the four file glyphs are genuinely hard to tell apart, since they share a page outline and the File type's colour is muted. **Open and out of scope:** the bare `/items` index still 404s and the dashboard's Recent "View all" still points at it; the dashboard's Pinned and Recent rows show file items as plain `ItemRow`s with no size or download; a missing or 404ing object shows nothing useful, since neither this row nor `ItemFilePanel` handles that; and `FileRow` has no test of its own, as `coding-standards.md` scopes the suite to server actions and utilities — the same reason the drawer-gap fix ships on a before/after measurement rather than an assertion. **The database and bucket were left exactly as found** — 17 items, 5 collections, 34 tags, 35 `ItemTag`, 7 types, 2 users, **0 objects under `users/`** — with all five throwaways deleted through the real UI so their R2 objects went with them, and both temp scripts removed. `npm run test`, `npm run lint`, `npx tsc --noEmit`, `npm run build` and `npm run db:test` all pass, with `/items/[type]` still reported as a dynamic route.
 - Quick copy button on item cards — a copy icon on `ItemCard` and `ItemRow` puts an item's body on the clipboard in one click, without opening the drawer: the content of a snippet, prompt, command or note, and the URL of a link. **No migration and no new dependency** — `sonner` was already mounted in `AppShell` and every icon comes from the lucide package already installed. **The design decision the rest follows from:** a card deliberately does **not** carry `content`. `CONTENT_MAX_LENGTH` is 100,000 characters and the items pages are unpaginated, so selecting it into `ITEM_SELECT` would put every item's whole body into every list payload for the sake of a button most of them will never have pressed — the button fetches `GET /api/items/[id]` on click instead, which is the same "fetch on click" the drawer itself does, and which needed no new route. **A field a card never carried had to be added, and it was found by reading the code rather than in the browser**: deciding whether to show a button at all needs the item type's **slug**, since `name` is user-facing text and `@@unique([userId, slug])` lets a custom type reuse a system slug. Adding it to `ITEM_SELECT` is one short column and **collapses `ItemDetailType` into `DashboardItemType`**, which existed only to add it — so the card's shape and the drawer's stay one definition rather than two, exactly as the file and image fields did when they moved up. Which types are copyable is derived through `copyableFieldFor` from the sets `editableFieldsFor` already reads, not a new list — the same anti-drift rule `usesCodeEditor`, `usesMarkdownEditor` and `requiredFieldsFor` follow — so a card can never offer to copy a column its items never fill, and there is a test asserting exactly that in both directions. File, image and custom types get no button, which is the correct answer rather than a special case: they have no text body. **Safari drops clipboard permission across an `await`**, so the write hands `ClipboardItem` the still-pending request and lets it resolve inside the gesture, falling back to `writeText` on that same, already-started promise where that is unsupported (Firefox has `ClipboardItem` but wants a Blob) — so nothing is ever fetched twice, and a rejected fetch surfaces its real reason rather than a clipboard error. The button sits at `relative z-20` above `OpenItemButton`'s `absolute inset-0` overlay rather than stopping propagation: the overlay is not a wrapper — a `<button>` takes phrasing content only — so there is no click to stop, which is the mechanic `FileRow`'s Download button established. A failed copy **toasts**, unlike the editors' own copy buttons which simply do not confirm: those can only fail on the clipboard, while this one may have failed because the item is gone, and that is worth saying. **A pre-existing defect was found by measuring and fixed in its own commit:** an `ItemCard` title never truncated — the header row is a grid item of `CardHeader`, so its own min width is `auto`, and a 100-character title grew the whole row **872px past a 342px card** with no ellipsis, which the new button would then have been pushed off the card with. Confirmed on `main` with the feature stashed, so it predates this work, and it **corrects the note in the Image Gallery entry**, which said `ItemCard` "truncates titles today": the `min-w-0` added there landed on `CardTitle` and stopped one level short. Both candidate levels were tested in the live DOM before choosing; `min-w-0` on the header row gives a title ellipsised at 174px with nothing past the card edge and the button 16px inside it. `ItemRow` was measured for the same fault and does not have it — its inner block already carries `min-w-0 flex-1` and its row is a flex child rather than a grid item. **14 new tests (334 total, 20 files)**, including the first assertions that `getItemsByTypeSlug` selects and carries the type slug. **One mutation proved to be an equivalent mutant and was replaced rather than counted:** swapping the `url`/`content` check order in `copyableFieldFor` left the suite green, and correctly so — the two fields never co-occur on any type — so it was replaced with mutations that bite (a link copying content, and a button offered to every type), each turning 2 tests red, alongside dropping `slug` from `ITEM_SELECT` and from the mapper, which turned 1 and 2 red. Every source was restored from **file backups, never `git checkout`**, the lesson the Image Gallery feature recorded. Verified in a real browser against the seeded Neon dev branch as the demo user: real snippet content and a real link URL landed on the clipboard, read back with `clipboard.readText()`; exactly **one** request per click; the drawer stayed shut on a real mouse click and on Enter, with `elementFromPoint` confirming the button is topmost over the overlay; the confirm reverted after its 2s timer; `/items/file` showed 0 buttons with Download intact; the dashboard showed 12 buttons across 13 rows, the one without being the single file item, which a read-only query confirmed. A forced 404 toasted "Item not found" without confirming and re-enabled the button. Zero page overflow and zero overflowing descendants at 390 and 1440, and Escape still closes the drawer and returns focus to the exact card. The drawer's edit mode was re-checked for regression now that the slug comes from the shared select: a link still opens on Title/Description/URL/Tags with no Monaco. **Worth knowing:** screenshot capture timed out repeatedly, the same failure the profile, delete-item and markdown features hit, so the layout evidence is DOM measurement rather than images. Also, `context/current-feature.md` was overwritten early in the session and its accumulated History wiped; it was restored byte-identical from HEAD before committing. **Open and out of scope:** an item whose copyable field is empty toasts "That item has nothing to copy" rather than hiding the button, since a card cannot know without fetching — no seeded item is in that state; the drawer's own Copy button in the action bar is still inert, so the same page now has a working copy on the card and a dead one in the drawer; there is no copy on image or file items, not even of the download link; and `CopyItemButton` has no test of its own, since `coding-standards.md` scopes the suite to server actions and utilities. The database was left exactly as found — read-only throughout, one `SELECT`. `npm run test`, `npm run lint`, `npx tsc --noEmit`, `npm run build` and `npm run db:test` all pass, with the build's route list unchanged.
+- Code scan fixes — the ten findings from a `code-scanner` audit of the whole codebase, applied as one batch: one exploitable open redirect, two medium, seven low. **No migration, no new dependency and no route change** — nothing here adds a feature, every change closes a gap in something already built. **The one exploitable defect:** `safeCallbackUrl` rejected `//evil.example` but not `/\evil.example`. The URL parser folds `\` to `/` for special schemes and strips tabs, newlines and carriage returns before parsing, so `/\evil.example` and `/<tab>/evil.example` both resolve to `http://evil.example/` while passing a `startsWith('//')` check — and `/sign-in` hands the value to a bare `redirect()`, which Next writes as the raw `Location` header with no `basePath` to blunt it. Backslashes and C0 control characters are now refused **before** the `//` check, rather than stripped and re-checked, which keeps it one predicate instead of a normalize-then-recheck loop that has to be got right twice. **The audit's own report was corrected on one point rather than copied**: it said tab variants bypass the guard "the same way", but a bare `/<tab>evil.example` stays on-origin at `http://app.local/evil.example` — control characters only escape when a slash follows, because stripping them reveals the `//` that was already blocked. That on-origin case is pinned as a test control alongside the two that do escape, so the tests cannot pass for the wrong reason. **Only one of the three call sites was ever a live sink**, checked rather than assumed: the two Auth.js calls in `src/actions/auth.ts` are unaffected, since `@auth/core`'s default `redirect` callback prefixes `baseUrl` and `//evil.example` becomes an on-origin `http://app.local//evil.example`. The fix went in the shared guard anyway, because that is where the control lives and the next sink should inherit it. **The URL scheme rule was moved to the server:** Zod 4's bare `z.url()` validates with `new URL()` and constrains no protocol, so `javascript:`, `data:` and `vbscript:` were all storable and then rendered as an `href` by the drawer. **The bound was stated honestly rather than oversold** — React 19 rewrites `javascript:` hrefs and browsers block top-level `data:` navigation, so it was never exploitable; the point is that the app was relying entirely on the framework and the browser for a rule that belongs on the server. Now `z.url({ protocol: /^https?$/ })`, with the **hostname deliberately left open** so `http://localhost:3000/docs` still saves — a plausible thing to keep in a developer's knowledge hub. The premise was confirmed end to end in the browser: `javascript:alert(document.domain)` passed the native `<Input type="url">` check, reached the server and was refused there. `ItemDrawerProvider` was passing `{{ openItem }}` rebuilt on every render while holding five pieces of state, so every drawer transition changed the context identity and re-rendered every `OpenItemButton` on the page — one per card, on unpaginated lists; now `useMemo`d, which is the pattern `SidebarProvider` already used. **Five duplications were collapsed, all of them into components the codebase's own precedent suggested.** `FieldError` was byte-identical in `NewItemDialog` and `ItemEditForm` (`diff` of the two ranges empty) and became `ItemFieldError`; the third copy in `src/components/auth/` was **deliberately left alone**, because it renders only the first message at `text-xs` and wires an `id` to its input, so merging would have meant picking which behaviour wins on both sides — a UI decision this batch had no business smuggling in. ~100 lines of type-specific field JSX shared by the create and edit forms became `ItemContentField` and `ItemTextField`; both take the **type slug** and derive `usesCodeEditor`/`usesMarkdownEditor` internally rather than accepting booleans a caller could get out of step, and are parameterised by `idPrefix` so `new-item-*` and `item-*` stay distinct when both are mounted. The pin/favourite pair, copy-pasted into all four card shapes, became `ItemMarkers` — the cards are legitimately different shapes and that was not revisited, but this fragment is not part of what differs, and pin/favourite mutations are unbuilt, so it would have needed touching in four places when they land. `ItemDrawer`'s read-only body moved to `ItemDrawerBody`, taking `SectionLabel` and `DetailRow` with it: **272 → 123 lines**, with the drawer left owning the sheet, the heading and the view/edit switch. `ItemEditForm` went 221 → 174 and `NewItemDialog` 384 → 335. `isStorageConfigured` was deleted as a dead export (no caller, no test, unused inside `r2.ts`), and the vestigial `const types = itemTypes` in `NewItemDialog` was dropped while keeping the comment that explains why the `isProType` filter went away. Security response headers landed in `next.config.ts` — `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin` and `X-Content-Type-Options: nosniff` over `/:path*`, verified with `curl -I` on both a 200 and a 302. **A full CSP was explicitly kept out of scope**: Monaco's AMD loader and Next's inline bootstrap both need allowances, and getting that wrong breaks the code editor in production while passing every test here. `/api/files/[id]` keeps its own stricter per-response set. **Two mutation runs, both restored from file backups rather than `git checkout`** — the lesson the Image Gallery feature recorded after a revert wiped uncommitted work: removing the control-character guard turned 3 tests red, and dropping the `protocol` option turned 1 red, with both sources restored byte-identical and the mutation diff printed as proof, since an earlier feature had a mutation silently fail to apply. **A second test caught the message change on its own**, which is the suite doing its job: `src/actions/items.test.ts` asserted the old `'Enter a valid URL'` string and went red until updated. One `eslint-disable-next-line no-control-regex` was written and then removed — the project's config does not enable that rule, so ESLint reported the directive itself as unused. **Verified in a real browser** against the seeded Neon dev branch: an isolated headless Chromium driven directly, since a live Chrome held the Playwright MCP profile and was left alone — the workaround the items-grid feature established, here needing the `chromium_headless_shell-1208` path rather than the version the cached Playwright wanted. **The auth rate limit fired mid-testing** — 5 sign-ins per 15 minutes, working as designed — so the remaining runs reused one session minted with `AUTH_SECRET`, the technique Auth Phases 1 and 3 used. All seven types render exactly the right fields in the create dialog (snippet/command → Monaco plus Language, prompt/note → markdown Write/Preview and no Language, link → URL and no content, file/image → upload) and all five with items do in edit mode, with `new-item-*` and `item-*` ids correctly distinct and zero page errors anywhere. The drawer was opened from all four card shapes, each showing the right sections; Escape returned focus to the exact card every time, and after a delete it fell back to `<main id="main-content">`, so both behaviours the Item Drawer and Delete Item features fought for survived the split. Zero page overflow at 390, 1280 and 1440 on four pages; the drawer measured 390px and 512px, and the create dialog still capped inside a short 1280x620 viewport with its Create button visible, so the item-create feature's fix survived a taller field stack. **Writing to the branch was asked for first, per `CLAUDE.md`**, and the throwaway route was chosen: one disposable snippet created through the real dialog round-tripped every field the refactor touched — content typed into Monaco, `language`, and tags with a duplicate and a trailing comma absorbed into two — then edited through the drawer (content appended, language changed, tags replaced through the delete-and-recreate) and deleted through the real UI, with the row read back from Postgres at each step. Rejected saves were used wherever possible so most of the verification wrote nothing at all. **The database was left exactly as found** — 18 items, 34 tags, 35 `ItemTag`, 5 collections, 7 types, 2 users — including deleting the three orphaned `zz-` tags the delete leaves behind by design. **Worth knowing:** a file item titled "1" (`Airbnb-Resume.pdf`) and a link count of 5 rather than 6 are real user data that drifted before this session; nothing here accounts for either and both were left untouched. **Open and out of scope:** the auth `FieldError` still diverges from the item one in size and message-joining; `NewItemForm` is still ~209 lines, since splitting further to hit a number would read worse; a full CSP is unbuilt; and the seven extracted or changed components have no tests of their own, as `coding-standards.md` scopes the suite to server actions and utilities — which is why the refactor rides on browser verification rather than assertions. `npm run test` (339 tests, 20 files), `npm run lint`, `npx tsc --noEmit`, `npm run build` and `npm run db:test` all pass, with the build's route list unchanged.
