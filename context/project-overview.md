@@ -52,7 +52,7 @@ Items can belong to one of the following built‑in types:
 - Command
 - File
 - Image
-- URL
+- Link
 
 Custom types allowed for Pro users.
 
@@ -330,8 +330,13 @@ git switch -c feature/item-drawer
 
 ## 📌 Status
 
-- In planning
-- Ready for environment setup & UI scaffolding
+MVP in progress. Built so far: items (create, edit, delete, per-type views,
+detail drawer, code and markdown editors, file and image uploads to R2),
+authentication (credentials + GitHub, email verification, password reset,
+rate limiting), the dashboard and sidebar, and the profile page.
+
+Not built yet: search, collection CRUD, tags management, export, billing and
+every AI feature. See `context/current-feature.md` for the full history.
 
 ---
 

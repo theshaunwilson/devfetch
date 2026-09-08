@@ -18,6 +18,13 @@ Read the following to get the full context of the project:
 - **Production server**: `npm run start`
 - **Lint**: `npm run lint`
 - **Test**: `npm run test` (watch: `npm run test:watch`, coverage: `npm run test:coverage`)
+- **Migrations**: `npm run db:migrate` (status: `npm run db:migrate:status`, deploy:
+  `npm run db:migrate:deploy`)
+- **Seed**: `npm run db:seed` — re-runnable; deletes and rebuilds the demo user
+- **DB health check**: `npm run db:test` — read-only, safe against any branch
+- **Prisma Studio**: `npm run db:studio`
+- **Prune test users**: `npm run db:prune-users` — dry run unless passed `-- --yes`
+- **Monaco bundle**: `npm run monaco:copy` — runs from `postinstall` and `build`
 
 ## Neon MCP
 
