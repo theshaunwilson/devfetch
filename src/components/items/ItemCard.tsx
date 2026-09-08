@@ -33,7 +33,11 @@ export function ItemCard({ item }: ItemCardProps) {
       <OpenItemButton item={item} />
 
       <CardHeader>
-        <div className="flex items-start gap-3">
+        {/* min-w-0 for the same reason the title below carries it, one level
+            up: this row is a grid item of CardHeader, so its own min width is
+            auto and a long title would grow the whole row past the card
+            rather than shrinking to fit. */}
+        <div className="flex min-w-0 items-start gap-3">
           <TypeIconTile icon={getIcon(type.icon)} color={type.color} />
 
           <div className="min-w-0 flex-1">
