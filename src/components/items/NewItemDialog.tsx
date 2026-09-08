@@ -6,9 +6,10 @@ import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
 import { createItem } from '@/actions/items';
-import { CodeEditor } from '@/components/items/CodeEditor';
 import { FileUpload } from '@/components/items/FileUpload';
-import { MarkdownEditor } from '@/components/items/MarkdownEditor';
+import { ItemContentField } from '@/components/items/ItemContentField';
+import { ItemFieldError } from '@/components/items/ItemFieldError';
+import { ItemTextField } from '@/components/items/ItemTextField';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -32,14 +33,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { textColorClass } from '@/lib/colors';
 import { capitalize } from '@/lib/format';
 import { getIcon } from '@/lib/icons';
-import {
-  editableFieldsFor,
-  initialTypeId,
-  parseTagInput,
-  requiredFieldsFor,
-  usesCodeEditor,
-  usesMarkdownEditor,
-} from '@/lib/items';
+import { editableFieldsFor, initialTypeId, parseTagInput, requiredFieldsFor } from '@/lib/items';
 import { isImageUploadType } from '@/lib/uploads';
 import { cn } from '@/lib/utils';
 import type { CreateItemInput } from '@/lib/validation/items';
@@ -59,11 +53,6 @@ interface NewItemDialogProps {
   triggerLabel?: string;
 }
 
-function FieldError({ messages }: { messages?: string[] }) {
-  if (!messages?.length) return null;
-
-  return <p className="text-sm text-destructive">{messages.join('. ')}</p>;
-}
 
 /**
  * "New Item" in the top bar, and the dialog behind it.
@@ -87,7 +76,6 @@ export function NewItemDialog({
   // Every type is offered. File and Image were held back only because uploads
   // did not exist; `isProType` still marks them in the sidebar, and enforcing
   // that marking is a job for billing, which does not exist either.
-  const types = itemTypes;
 
   function handleCreated() {
     setOpen(false);
@@ -99,7 +87,7 @@ export function NewItemDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="h-10" disabled={types.length === 0}>
+        <Button className="h-10" disabled={itemTypes.length === 0}>
           <Plus className="size-4" />
           {triggerLabel}
         </Button>
@@ -117,7 +105,7 @@ export function NewItemDialog({
         </DialogHeader>
 
         <NewItemForm
-          types={types}
+          types={itemTypes}
           defaultTypeSlug={defaultTypeSlug}
           onCreated={handleCreated}
           onCancel={() => setOpen(false)}
@@ -153,8 +141,6 @@ function NewItemForm({ types, defaultTypeSlug, onCreated, onCancel }: NewItemFor
   const selected = types.find((type) => type.id === typeId) ?? types[0];
   const fields = editableFieldsFor(selected.slug);
   const required = requiredFieldsFor(selected.slug);
-  const codeContent = usesCodeEditor(selected.slug);
-  const markdownContent = usesMarkdownEditor(selected.slug);
 
   // A guard for the button only — the action re-checks both, and trims before
   // it measures just as this does.
@@ -234,7 +220,7 @@ function NewItemForm({ types, defaultTypeSlug, onCreated, onCancel }: NewItemFor
               })}
             </SelectContent>
           </Select>
-          <FieldError messages={fieldErrors.typeId} />
+          <ItemFieldError messages={fieldErrors.typeId} />
         </div>
 
         <div className="flex flex-col gap-2">
@@ -247,7 +233,7 @@ function NewItemForm({ types, defaultTypeSlug, onCreated, onCancel }: NewItemFor
             autoFocus
             required
           />
-          <FieldError messages={fieldErrors.title} />
+          <ItemFieldError messages={fieldErrors.title} />
         </div>
 
         <div className="flex flex-col gap-2">
@@ -259,77 +245,45 @@ function NewItemForm({ types, defaultTypeSlug, onCreated, onCancel }: NewItemFor
             aria-invalid={Boolean(fieldErrors.description)}
             rows={2}
           />
-          <FieldError messages={fieldErrors.description} />
+          <ItemFieldError messages={fieldErrors.description} />
         </div>
 
         {fields.content && (
-          <div className="flex flex-col gap-2">
-            {/* Neither editor has an element to point a <label for> at, so
-                both name themselves through `ariaLabel` instead. */}
-            {codeContent || markdownContent ? (
-              <Label>Content</Label>
-            ) : (
-              <Label htmlFor="new-item-content">Content</Label>
-            )}
-
-            {codeContent ? (
-              <CodeEditor
-                value={content}
-                onChange={setContent}
-                language={language}
-                minHeight={140}
-                ariaLabel="Content"
-                aria-invalid={Boolean(fieldErrors.content)}
-              />
-            ) : markdownContent ? (
-              <MarkdownEditor
-                value={content}
-                onChange={setContent}
-                minHeight={220}
-                ariaLabel="Content"
-                aria-invalid={Boolean(fieldErrors.content)}
-              />
-            ) : (
-              <Textarea
-                id="new-item-content"
-                value={content}
-                onChange={(event) => setContent(event.target.value)}
-                aria-invalid={Boolean(fieldErrors.content)}
-                className="min-h-32 font-mono text-xs leading-relaxed"
-              />
-            )}
-            <FieldError messages={fieldErrors.content} />
-          </div>
+          <ItemContentField
+            idPrefix="new-item"
+            slug={selected.slug}
+            value={content}
+            onChange={setContent}
+            language={language}
+            codeMinHeight={140}
+            markdownMinHeight={220}
+            textareaClassName="min-h-32 font-mono text-xs leading-relaxed"
+            messages={fieldErrors.content}
+          />
         )}
 
         {fields.language && (
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="new-item-language">Language</Label>
-            <Input
-              id="new-item-language"
-              value={language}
-              onChange={(event) => setLanguage(event.target.value)}
-              aria-invalid={Boolean(fieldErrors.language)}
-              placeholder="typescript"
-            />
-            <FieldError messages={fieldErrors.language} />
-          </div>
+          <ItemTextField
+            id="new-item-language"
+            label="Language"
+            value={language}
+            onChange={setLanguage}
+            placeholder="typescript"
+            messages={fieldErrors.language}
+          />
         )}
 
         {fields.url && (
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="new-item-url">URL</Label>
-            <Input
-              id="new-item-url"
-              type="url"
-              value={url}
-              onChange={(event) => setUrl(event.target.value)}
-              aria-invalid={Boolean(fieldErrors.url)}
-              placeholder="https://example.com"
-              required={required.url}
-            />
-            <FieldError messages={fieldErrors.url} />
-          </div>
+          <ItemTextField
+            id="new-item-url"
+            label="URL"
+            type="url"
+            value={url}
+            onChange={setUrl}
+            placeholder="https://example.com"
+            required={required.url}
+            messages={fieldErrors.url}
+          />
         )}
 
         {required.file && (
@@ -347,22 +301,19 @@ function NewItemForm({ types, defaultTypeSlug, onCreated, onCancel }: NewItemFor
               disabled={isPending}
               ariaLabel={isImageUploadType(selected.slug) ? 'Image' : 'File'}
             />
-            <FieldError messages={fieldErrors.fileUrl} />
+            <ItemFieldError messages={fieldErrors.fileUrl} />
           </div>
         )}
 
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="new-item-tags">Tags</Label>
-          <Input
-            id="new-item-tags"
-            value={tags}
-            onChange={(event) => setTags(event.target.value)}
-            aria-invalid={Boolean(fieldErrors.tags)}
-            placeholder="react, hooks, typescript"
-          />
-          <p className="text-xs text-muted-foreground">Separate tags with commas.</p>
-          <FieldError messages={fieldErrors.tags} />
-        </div>
+        <ItemTextField
+          id="new-item-tags"
+          label="Tags"
+          value={tags}
+          onChange={setTags}
+          placeholder="react, hooks, typescript"
+          hint="Separate tags with commas."
+          messages={fieldErrors.tags}
+        />
       </div>
 
       <DialogFooter className="shrink-0">

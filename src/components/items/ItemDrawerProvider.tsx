@@ -1,7 +1,15 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import { ItemDrawer } from '@/components/items/ItemDrawer';
 import { MAIN_CONTENT_ID } from '@/lib/constants';
@@ -137,8 +145,14 @@ export function ItemDrawerProvider({ children }: { children: React.ReactNode }) 
     router.refresh();
   }, [router]);
 
+  // Memoized, or every drawer transition — open, fetch resolve, edit toggle,
+  // close — would change the context identity and re-render every
+  // OpenItemButton on the page. There is one per card and the lists are
+  // unpaginated, so the count is unbounded. `openItem` is already stable.
+  const value = useMemo(() => ({ openItem }), [openItem]);
+
   return (
-    <ItemDrawerContext.Provider value={{ openItem }}>
+    <ItemDrawerContext.Provider value={value}>
       {children}
       <ItemDrawer
         open={open}

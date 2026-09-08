@@ -123,7 +123,9 @@ describe('updateItem', () => {
   it('reports a bad URL against its own field', async () => {
     const result = await updateItem(ITEM_ID, { title: 'x', url: 'not a url' });
 
-    expect(result).toMatchObject({ fieldErrors: { url: ['Enter a valid URL'] } });
+    expect(result).toMatchObject({
+      fieldErrors: { url: ['Enter a valid URL starting with http:// or https://'] },
+    });
   });
 
   it('lands a nested tag error on the tags field rather than losing it', async () => {

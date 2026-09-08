@@ -1,5 +1,6 @@
-import { Download, Pin, Star } from 'lucide-react';
+import { Download } from 'lucide-react';
 
+import { ItemMarkers } from '@/components/items/ItemMarkers';
 import { OpenItemButton } from '@/components/items/OpenItemButton';
 import { TypeIconTile } from '@/components/items/TypeIconTile';
 import { Button } from '@/components/ui/button';
@@ -58,10 +59,7 @@ export function FileRow({ item }: FileRowProps) {
           <p className="truncate text-sm font-medium" title={item.fileName ?? item.title}>
             {item.fileName ?? item.title}
           </p>
-          {item.isPinned && <Pin className="size-3.5 shrink-0 text-muted-foreground" />}
-          {item.isFavorite && (
-            <Star className="size-3.5 shrink-0 fill-yellow-500 text-yellow-500" />
-          )}
+          <ItemMarkers isPinned={item.isPinned} isFavorite={item.isFavorite} />
         </div>
 
         {/* Stacked below `sm`, where the two values would otherwise crowd the

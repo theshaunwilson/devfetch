@@ -81,8 +81,29 @@ describe('optional text fields', () => {
 });
 
 describe('url', () => {
+  const URL_ERROR = 'Enter a valid URL starting with http:// or https://';
+
   it('rejects text that is not a URL', () => {
-    expect(errorsFor({ title: 'x', url: 'not a url' }).url).toEqual(['Enter a valid URL']);
+    expect(errorsFor({ title: 'x', url: 'not a url' }).url).toEqual([URL_ERROR]);
+  });
+
+  it('rejects a scheme other than http(s), since the value is rendered as an href', () => {
+    // A bare z.url() accepts all three: it only asks whether new URL() parses.
+    expect(errorsFor({ title: 'x', url: 'javascript:alert(document.domain)' }).url).toEqual([
+      URL_ERROR,
+    ]);
+    expect(errorsFor({ title: 'x', url: 'data:text/html,<script>alert(1)</script>' }).url).toEqual([
+      URL_ERROR,
+    ]);
+    expect(errorsFor({ title: 'x', url: 'vbscript:msgbox(1)' }).url).toEqual([URL_ERROR]);
+    expect(errorsFor({ title: 'x', url: 'ftp://example.com/f' }).url).toEqual([URL_ERROR]);
+  });
+
+  it('keeps accepting a local URL, which a developer may well want to save', () => {
+    // The scheme is constrained, the hostname deliberately is not.
+    expect(updateItemSchema.parse({ title: 'x', url: 'http://localhost:3000/docs' }).url).toBe(
+      'http://localhost:3000/docs',
+    );
   });
 
   it('accepts and trims a real one', () => {
