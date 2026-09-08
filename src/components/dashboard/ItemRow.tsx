@@ -1,4 +1,5 @@
 import { Pin, Star } from 'lucide-react';
+import { CopyItemButton } from '@/components/items/CopyItemButton';
 import { OpenItemButton } from '@/components/items/OpenItemButton';
 import { TypeIconTile } from '@/components/items/TypeIconTile';
 import { Badge } from '@/components/ui/badge';
@@ -6,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { borderColorClass } from '@/lib/colors';
 import { formatShortDate } from '@/lib/format';
 import { getIcon } from '@/lib/icons';
+import { copyableFieldFor } from '@/lib/items';
 import { cn } from '@/lib/utils';
 import type { DashboardItem } from '@/types/item';
 
@@ -19,6 +21,9 @@ interface ItemRowProps {
  */
 export function ItemRow({ item }: ItemRowProps) {
   const { type } = item;
+  // Null for a type whose body is not text — the dashboard's lists mix every
+  // type, so file and image rows get no button.
+  const copyableField = copyableFieldFor(type.slug);
 
   return (
     <Card
@@ -42,6 +47,17 @@ export function ItemRow({ item }: ItemRowProps) {
             <span className="ml-auto shrink-0 text-xs text-muted-foreground">
               {formatShortDate(item.updatedAt)}
             </span>
+
+            {/* On the title line rather than beside the block, so it lines up
+                with the date instead of floating over the description. */}
+            {copyableField && (
+              <CopyItemButton
+                itemId={item.id}
+                field={copyableField}
+                title={item.title}
+                className="-my-1 -mr-1"
+              />
+            )}
           </div>
 
           {item.description && (

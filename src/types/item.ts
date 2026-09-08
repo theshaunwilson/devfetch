@@ -2,6 +2,13 @@
 export interface DashboardItemType {
   id: string;
   name: string;
+  /**
+   * The stable identifier for the type, unlike `name`, which is user-facing
+   * text a custom type could reuse. Cards decide from it — whether a copy
+   * button has anything to copy — and the edit form picks its type-specific
+   * fields from it.
+   */
+  slug: string;
   icon: string | null;
   color: string | null;
 }
@@ -69,24 +76,14 @@ export interface ItemDetailCollection {
 }
 
 /**
- * The item's type as the drawer knows it. Carries the slug on top of what a
- * card needs, because the edit form decides which fields to show from it —
- * `name` is user-facing text and a custom type could reuse one.
- */
-export interface ItemDetailType extends DashboardItemType {
-  slug: string;
-}
-
-/**
  * An item as rendered in the detail drawer: everything a card already knows,
  * plus the fields only the drawer shows.
  */
 export interface ItemDetail extends DashboardItem {
-  type: ItemDetailType;
   content: string | null;
   language: string | null;
   url: string | null;
-  /** `fileUrl`, `fileName`, `fileSize` and `createdAt` are all inherited. */
+  /** `type`, `fileUrl`, `fileName`, `fileSize` and `createdAt` are inherited. */
   collection: ItemDetailCollection | null;
 }
 

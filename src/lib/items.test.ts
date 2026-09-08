@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  copyableFieldFor,
   editableFieldsFor,
   formatTagInput,
   initialTypeId,
@@ -231,6 +232,49 @@ describe('usesMarkdownEditor', () => {
     for (const slug of ['link', 'file', 'image', 'recipe']) {
       expect(editableFieldsFor(slug).content).toBe(false);
       expect(usesCodeEditor(slug) || usesMarkdownEditor(slug)).toBe(false);
+    }
+  });
+});
+
+describe('copyableFieldFor', () => {
+  it('copies the content of every type that has content', () => {
+    expect(copyableFieldFor('snippet')).toBe('content');
+    expect(copyableFieldFor('command')).toBe('content');
+    expect(copyableFieldFor('prompt')).toBe('content');
+    expect(copyableFieldFor('note')).toBe('content');
+  });
+
+  it('copies a link\'s URL, which is the only body it has', () => {
+    expect(copyableFieldFor('link')).toBe('url');
+  });
+
+  it('offers nothing for the upload types or a custom one', () => {
+    // A file or image item holds an object, not text; a custom type holds
+    // neither, so a card for any of them gets no button at all.
+    expect(copyableFieldFor('file')).toBeNull();
+    expect(copyableFieldFor('image')).toBeNull();
+    expect(copyableFieldFor('recipe')).toBeNull();
+    expect(copyableFieldFor('')).toBeNull();
+  });
+
+  // The property the derivation exists to guarantee: a button is offered
+  // exactly when the item type has that field, so a card can never offer to
+  // copy a column its items never fill.
+  it('names a field only when that type actually has it', () => {
+    for (const slug of ['snippet', 'command', 'note', 'prompt', 'link', 'file', 'image', 'recipe']) {
+      const field = copyableFieldFor(slug);
+
+      if (field === null) {
+        expect(editableFieldsFor(slug)).toMatchObject({ content: false, url: false });
+      } else {
+        expect(editableFieldsFor(slug)[field]).toBe(true);
+      }
+    }
+  });
+
+  it('offers a button to every type that has a body', () => {
+    for (const slug of ['snippet', 'command', 'note', 'prompt', 'link']) {
+      expect(copyableFieldFor(slug)).not.toBeNull();
     }
   });
 });

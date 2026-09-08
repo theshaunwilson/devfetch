@@ -770,6 +770,24 @@ describe('getItemsByTypeSlug', () => {
     expect(result?.items[0].fileSize).toBeNull();
   });
 
+  it('selects the type slug, without which no card could decide what to copy', async () => {
+    await getItemsByTypeSlug('snippet');
+
+    expect(findMany.mock.calls[0][0]).toMatchObject({
+      select: { type: { select: { slug: true } } },
+    });
+  });
+
+  it('carries the type slug onto a card, so its copy button knows its field', async () => {
+    findMany.mockResolvedValue([row()]);
+
+    const result = await getItemsByTypeSlug('snippet');
+
+    // The name is user-facing text and a custom type may reuse a system slug,
+    // so the slug is the only stable thing a card can branch on.
+    expect(result?.items[0].type.slug).toBe('snippet');
+  });
+
   it('returns null when the slug names no type the user can see', async () => {
     lookupType.mockResolvedValue(null);
 
