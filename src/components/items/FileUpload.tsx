@@ -1,18 +1,18 @@
 'use client';
 
-import { FileText, Loader2, Upload, X } from 'lucide-react';
+import { Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
-import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
 import {
   formatFileSize,
   isImageUploadType,
   uploadConstraintsFor,
   validateUpload,
 } from '@/lib/uploads';
+import { UploadedFilePanel } from '@/components/items/UploadedFilePanel';
+import { uploadFile } from '@/lib/upload-request';
 import { cn } from '@/lib/utils';
-import type { UploadResponse, UploadedFile } from '@/types/upload';
+import type { UploadedFile } from '@/types/upload';
 
 interface FileUploadProps {
   /** The item type's slug — decides the size limit and the accepted extensions. */
@@ -22,57 +22,6 @@ interface FileUploadProps {
   onChange: (file: UploadedFile | null) => void;
   disabled?: boolean;
   ariaLabel?: string;
-}
-
-/**
- * Sends one file to `POST /api/uploads` and reports its progress.
- *
- * `XMLHttpRequest` rather than `fetch`, which has no upload progress event at
- * all — a request body cannot be observed as it goes out, only as it comes
- * back. This is the one place in the app that still needs XHR.
- */
-function upload(
-  file: File,
-  slug: string,
-  onProgress: (percent: number) => void,
-): { promise: Promise<UploadResponse>; abort: () => void } {
-  const request = new XMLHttpRequest();
-
-  const promise = new Promise<UploadResponse>((resolve) => {
-    request.upload.addEventListener('progress', (event) => {
-      if (event.lengthComputable) {
-        onProgress(Math.round((event.loaded / event.total) * 100));
-      }
-    });
-
-    request.addEventListener('load', () => {
-      try {
-        resolve(JSON.parse(request.responseText) as UploadResponse);
-      } catch {
-        // A non-JSON body means the request never reached the route — a proxy
-        // error page, say — so the status is all there is to go on.
-        resolve({ success: false, error: 'Could not upload this file. Please try again.' });
-      }
-    });
-
-    request.addEventListener('error', () => {
-      resolve({ success: false, error: 'Could not reach the server. Check your connection.' });
-    });
-
-    // Aborting is the caller replacing or cancelling the file; nothing to say.
-    request.addEventListener('abort', () => {
-      resolve({ success: false, error: '' });
-    });
-
-    const form = new FormData();
-    form.append('file', file);
-    form.append('slug', slug);
-
-    request.open('POST', '/api/uploads');
-    request.send(form);
-  });
-
-  return { promise, abort: () => request.abort() };
 }
 
 /**
@@ -145,7 +94,7 @@ export function FileUpload({ slug, value, onChange, disabled, ariaLabel }: FileU
     replacePreview(isImage ? URL.createObjectURL(file) : null);
     setProgress(0);
 
-    const task = upload(file, slug, setProgress);
+    const task = uploadFile(file, slug, setProgress);
     activeUpload.current = task;
 
     const result = await task.promise;
@@ -200,53 +149,14 @@ export function FileUpload({ slug, value, onChange, disabled, ariaLabel }: FileU
       />
 
       {chosen || uploading ? (
-        <div className="flex flex-col gap-3 rounded-lg border bg-card p-3">
-          <div className="flex items-start gap-3">
-            {preview && isImage ? (
-              // Not `next/image`: the source is a blob URL of a file that has
-              // not been stored yet, which the optimizer cannot fetch.
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={preview}
-                alt=""
-                className="size-16 shrink-0 rounded-md border object-cover"
-              />
-            ) : (
-              <div className="flex size-16 shrink-0 items-center justify-center rounded-md border bg-muted/40">
-                <FileText className="size-6 text-muted-foreground" />
-              </div>
-            )}
-
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium" title={value?.fileName}>
-                {value?.fileName ?? 'Uploading…'}
-              </p>
-              {value && (
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {formatFileSize(value.fileSize)}
-                </p>
-              )}
-              {uploading && (
-                <div className="mt-2 flex items-center gap-2">
-                  <Progress value={progress} className="flex-1" />
-                  <span className="text-xs tabular-nums text-muted-foreground">{progress}%</span>
-                </div>
-              )}
-            </div>
-
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-8 shrink-0"
-              onClick={handleClear}
-              disabled={disabled}
-              aria-label={uploading ? 'Cancel upload' : 'Remove file'}
-            >
-              {uploading ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />}
-            </Button>
-          </div>
-        </div>
+        <UploadedFilePanel
+          value={value}
+          preview={preview}
+          isImage={isImage}
+          progress={progress}
+          disabled={disabled}
+          onClear={handleClear}
+        />
       ) : (
         // A button rather than a label wrapping the input: this is the drop
         // target too, and a button gets keyboard activation for free.

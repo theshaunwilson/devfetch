@@ -12,18 +12,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/auth', () => ({ auth: vi.fn() }));
 vi.mock('@/lib/r2', () => ({ deleteObject: vi.fn() }));
+vi.mock('@/lib/db/item-types', () => ({ getItemTypeById: vi.fn() }));
 vi.mock('@/lib/db/items', () => ({
   createItem: vi.fn(),
-  getItemTypeById: vi.fn(),
   updateItem: vi.fn(),
   deleteItem: vi.fn(),
 }));
 
 const { auth } = await import('@/auth');
 const { deleteObject } = await import('@/lib/r2');
+const { getItemTypeById } = await import('@/lib/db/item-types');
 const {
   createItem: createItemRow,
-  getItemTypeById,
   updateItem: updateItemRow,
   deleteItem: deleteItemRow,
 } = await import('@/lib/db/items');

@@ -34,8 +34,6 @@ const {
   getItemDetail,
   getItemFile,
   getItemsByTypeSlug,
-  getItemTypeById,
-  getItemTypes,
   updateItem,
 } = await import('./items');
 const { Prisma } = await import('@/generated/prisma/client');
@@ -72,26 +70,7 @@ const destroy = prisma.item.delete as unknown as Mock<
   (args: unknown) => Promise<{ fileUrl: string | null }>
 >;
 const create = prisma.item.create as unknown as Mock<(args: unknown) => Promise<DetailRow>>;
-const findType = prisma.itemType.findFirst as unknown as Mock<
-  (args: unknown) => Promise<{ id: string; slug: string } | null>
->;
 const currentUserId = vi.mocked(getCurrentUserId);
-
-/** What `getItemTypes` selects from `ItemType`, and what it counts. */
-interface TypeRow {
-  id: string;
-  name: string;
-  slug: string;
-  icon: string | null;
-  color: string | null;
-}
-
-const findManyTypes = prisma.itemType.findMany as unknown as Mock<
-  (args: unknown) => Promise<TypeRow[]>
->;
-const groupByType = prisma.item.groupBy as unknown as Mock<
-  (args: unknown) => Promise<{ typeId: string; _count: { _all: number } }[]>
->;
 
 const USER_ID = 'user_1';
 const ITEM_ID = 'item_1';
@@ -341,31 +320,6 @@ interface CreateArgs {
 
 const createArgs = (): CreateArgs => create.mock.calls[0][0] as CreateArgs;
 
-describe('getItemTypeById', () => {
-  it("accepts a global system type or one of the user's own, and nothing else", async () => {
-    findType.mockResolvedValue({ id: 'type_1', slug: 'snippet' });
-
-    await getItemTypeById('type_1');
-
-    expect(findType.mock.calls[0][0]).toMatchObject({
-      where: { id: 'type_1', OR: [{ userId: null }, { userId: USER_ID }] },
-    });
-  });
-
-  it('returns null when the id names a type the user cannot see', async () => {
-    findType.mockResolvedValue(null);
-
-    await expect(getItemTypeById('someone_elses_type')).resolves.toBeNull();
-  });
-
-  it('returns null without querying when nobody is signed in', async () => {
-    currentUserId.mockResolvedValue(null);
-
-    await expect(getItemTypeById('type_1')).resolves.toBeNull();
-    expect(findType).not.toHaveBeenCalled();
-  });
-});
-
 describe('createItem', () => {
   const data = {
     typeId: 'type_1',
@@ -455,87 +409,6 @@ describe('createItem', () => {
  * The property worth pinning is the global-types join: the seven built-ins are
  * `userId: null`, so a plain `userId` filter would return none of them.
  */
-describe('getItemTypes', () => {
-  const SYSTEM_TYPE: TypeRow = {
-    id: 'type_snippet',
-    name: 'snippet',
-    slug: 'snippet',
-    icon: 'Code',
-    color: '#3b82f6',
-  };
-  const CUSTOM_TYPE: TypeRow = {
-    id: 'type_recipe',
-    name: 'recipe',
-    slug: 'recipe',
-    icon: null,
-    color: null,
-  };
-
-  beforeEach(() => {
-    findManyTypes.mockResolvedValue([SYSTEM_TYPE]);
-    groupByType.mockResolvedValue([]);
-  });
-
-  it('asks for the global system types as well as the user\'s own', async () => {
-    await getItemTypes();
-
-    expect(findManyTypes).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { OR: [{ userId: null }, { userId: USER_ID }] },
-      }),
-    );
-  });
-
-  it('orders by creation, so the built-ins keep their seeded order', async () => {
-    await getItemTypes();
-
-    expect(findManyTypes).toHaveBeenCalledWith(
-      expect.objectContaining({ orderBy: { createdAt: 'asc' } }),
-    );
-  });
-
-  it('counts only the signed-in user\'s items, though the types are shared', async () => {
-    await getItemTypes();
-
-    expect(groupByType).toHaveBeenCalledWith(
-      expect.objectContaining({ by: ['typeId'], where: { userId: USER_ID } }),
-    );
-  });
-
-  it('attaches each type its own count', async () => {
-    findManyTypes.mockResolvedValue([SYSTEM_TYPE, CUSTOM_TYPE]);
-    groupByType.mockResolvedValue([
-      { typeId: 'type_recipe', _count: { _all: 2 } },
-      { typeId: 'type_snippet', _count: { _all: 4 } },
-    ]);
-
-    expect(await getItemTypes()).toEqual([
-      { ...SYSTEM_TYPE, itemCount: 4 },
-      { ...CUSTOM_TYPE, itemCount: 2 },
-    ]);
-  });
-
-  // An unused type has no groupBy row at all, so the count has to come from
-  // somewhere — the sidebar shows 0 for File and Image, not a blank.
-  it('reports zero for a type no item uses, rather than dropping it', async () => {
-    findManyTypes.mockResolvedValue([SYSTEM_TYPE, CUSTOM_TYPE]);
-    groupByType.mockResolvedValue([{ typeId: 'type_snippet', _count: { _all: 4 } }]);
-
-    const types = await getItemTypes();
-
-    expect(types).toHaveLength(2);
-    expect(types[1]).toEqual({ ...CUSTOM_TYPE, itemCount: 0 });
-  });
-
-  it('returns nothing without querying when nobody is signed in', async () => {
-    currentUserId.mockResolvedValue(null);
-
-    expect(await getItemTypes()).toEqual([]);
-    expect(findManyTypes).not.toHaveBeenCalled();
-    expect(groupByType).not.toHaveBeenCalled();
-  });
-});
-
 describe('getItemFile', () => {
   /** What the download proxy's own narrower select returns. */
   interface FileRow {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildCreateItemPayload,
   copyableFieldFor,
   editableFieldsFor,
   formatTagInput,
@@ -276,5 +277,94 @@ describe('copyableFieldFor', () => {
     for (const slug of ['snippet', 'command', 'note', 'prompt', 'link']) {
       expect(copyableFieldFor(slug)).not.toBeNull();
     }
+  });
+});
+
+describe('buildCreateItemPayload', () => {
+  const base = {
+    typeId: 'type_1',
+    slug: 'snippet',
+    title: 'A snippet',
+    description: 'about it',
+    content: 'const x = 1;',
+    language: 'typescript',
+    url: 'https://example.com',
+    tags: 'react, hooks',
+    file: null,
+  };
+
+  it('always carries the fields every item has', () => {
+    const payload = buildCreateItemPayload({ ...base, slug: 'note' });
+
+    expect(payload.typeId).toBe('type_1');
+    expect(payload.title).toBe('A snippet');
+    expect(payload.description).toBe('about it');
+    expect(payload.tags).toEqual(['react', 'hooks']);
+  });
+
+  it('includes only the fields this type actually renders', () => {
+    const snippet = buildCreateItemPayload(base);
+
+    expect(snippet.content).toBe('const x = 1;');
+    expect(snippet.language).toBe('typescript');
+    // A snippet has no URL field, so the typed value must not ride along.
+    expect('url' in snippet).toBe(false);
+  });
+
+  it('omits an unrendered field entirely rather than sending it blank', () => {
+    // The rule this function exists for. `updateItem` reads undefined as
+    // "leave alone" and null as "clear", so a blank for a field the user never
+    // saw is how a save silently wipes a column.
+    const link = buildCreateItemPayload({ ...base, slug: 'link' });
+
+    expect(link.url).toBe('https://example.com');
+    expect('content' in link).toBe(false);
+    expect('language' in link).toBe(false);
+  });
+
+  it('gives a prompt content but no language', () => {
+    const prompt = buildCreateItemPayload({ ...base, slug: 'prompt' });
+
+    expect(prompt.content).toBe('const x = 1;');
+    expect('language' in prompt).toBe(false);
+  });
+
+  it('gives a custom type only the fields every item has', () => {
+    const custom = buildCreateItemPayload({ ...base, slug: 'recipe' });
+
+    expect('content' in custom).toBe(false);
+    expect('language' in custom).toBe(false);
+    expect('url' in custom).toBe(false);
+  });
+
+  it('sets the file trio together, keyed off the object key', () => {
+    const file = { key: 'users/user_1/abc.pdf', fileName: 'notes.pdf', fileSize: 1024 };
+    const payload = buildCreateItemPayload({ ...base, slug: 'file', file });
+
+    // fileUrl holds the object's key, not a URL — uploads are private.
+    expect(payload.fileUrl).toBe('users/user_1/abc.pdf');
+    expect(payload.fileName).toBe('notes.pdf');
+    expect(payload.fileSize).toBe(1024);
+  });
+
+  it('sends no file fields when the type takes one but none was chosen', () => {
+    const payload = buildCreateItemPayload({ ...base, slug: 'file', file: null });
+
+    expect('fileUrl' in payload).toBe(false);
+    expect('fileName' in payload).toBe(false);
+    expect('fileSize' in payload).toBe(false);
+  });
+
+  it('ignores a file on a type that takes none', () => {
+    const file = { key: 'users/user_1/abc.pdf', fileName: 'notes.pdf', fileSize: 1024 };
+    const payload = buildCreateItemPayload({ ...base, slug: 'snippet', file });
+
+    expect('fileUrl' in payload).toBe(false);
+  });
+
+  it('deduplicates tags and absorbs a trailing comma', () => {
+    const payload = buildCreateItemPayload({ ...base, tags: 'react, react, hooks,' });
+
+    expect(payload.tags).toEqual(['react', 'hooks']);
   });
 });

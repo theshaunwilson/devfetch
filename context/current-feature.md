@@ -1,294 +1,94 @@
 # Current Feature
 
-<!-- Feature Name -->
-
-Code scan fixes — open redirect, context memoization, URL scheme, duplication
+Extract shared components and testable utilities
 
 ## Status
 
 <!-- Not Started|In Progress|Completed -->
 
-Completed
+In Progress
 
 ## Goals
 
-<!-- Goals & requirements -->
-
-Apply the findings from a `code-scanner` audit of the whole codebase as one
-batch. Ten findings: one exploitable open redirect, two medium, seven low.
-Nothing here adds a feature — every change closes a gap in something already
-built.
-
-Branch: `fix/code-scan-findings`.
-
-### 1. Open redirect — `safeCallbackUrl` lets a backslash through (High)
-
-`src/lib/auth-redirect.ts:20` rejects `//evil.example` but not `/\evil.example`:
-
-```ts
-if (!value.startsWith('/') || value.startsWith('//')) return DEFAULT_SIGNED_IN_PATH;
-```
-
-The WHATWG URL parser folds `\` to `/` for special schemes, and strips tabs,
-newlines and carriage returns before parsing. Verified by running it, not
-assumed — resolved against `http://app.local`:
-
-| input | guard passes | resolves to |
-| --- | --- | --- |
-| `/\evil.example` | yes | `http://evil.example/` |
-| `/\/evil.example` | yes | `http://evil.example/` |
-| `/<tab>/evil.example` | yes | `http://evil.example/` |
-| `/<LF>/evil.example` | yes | `http://evil.example/` |
-| `//evil.example` | **no** | — (already blocked) |
-
-**The tab case is narrower than it first looks and the distinction matters for
-the tests:** a bare `/<tab>evil.example` stays on-origin
-(`http://app.local/evil.example`). The control characters only escape when a
-slash follows, because stripping them leaves the `//` the guard already
-rejects. So the bypass is the backslash, plus any control character that
-*reveals* a second slash.
-
-Requirements:
-
-- Reject backslashes and C0 control characters outright, before the existing
-  `//` check, rather than stripping them — a callback URL has no legitimate
-  reason to contain either, and rejecting is one predicate instead of a
-  normalize-then-recheck loop that has to be got right twice.
-- Keep the existing `//`, absolute-URL, no-slash-scheme and non-string
-  branches exactly as they are.
-- Add the new cases to `src/lib/auth-redirect.test.ts` beside the
-  `//evil.example` case they belong with, including the on-origin
-  `/<tab>evil.example` control so the test pins the real rule rather than a
-  blanket "no weird characters" that would pass for the wrong reason.
-
-**Scope note — only one of the three call sites is a live sink**, and this was
-checked rather than assumed. `src/app/(auth)/sign-in/page.tsx:40` passes the
-value to a bare `redirect()`, which Next writes as the raw `Location` header
-(`next.config.ts` sets no `basePath`, so the prefixing is a no-op). The two
-Auth.js call sites — `src/actions/auth.ts:81` and `:170` — are **not**
-affected: `@auth/core`'s default `redirect` callback prefixes `baseUrl`, so
-`//evil.example` becomes `http://app.local//evil.example` and stays on-origin.
-The fix goes in the shared guard regardless, since that is where the control
-lives and the next sink should inherit it.
-
-This is a gap in a control the project already believes it has —
-`src/lib/auth-redirect.test.ts:11-15` asserts this exact class is closed — so
-it is a regression fix, not a new defence.
-
-### 2. `ItemDrawerProvider` passes an unmemoized context value (Medium)
-
-`src/components/items/ItemDrawerProvider.tsx:141`:
-
-```tsx
-<ItemDrawerContext.Provider value={{ openItem }}>
-```
-
-`openItem` is already stable (`useCallback` with `[]` at line 67), but the
-wrapper object is rebuilt on every provider render, and the provider holds five
-pieces of state (`open`, `item`, `detail`, `status`, `mode`). So every drawer
-transition — open, fetch resolve, edit-mode toggle, close — changes the context
-identity and re-renders every `OpenItemButton` on the page. One is rendered per
-card by `ItemCard`, `ItemRow`, `ImageCard` and `FileRow`, and the item lists are
-unpaginated, so the count is unbounded.
-
-- Wrap in `useMemo(() => ({ openItem }), [openItem])`.
-- `src/components/dashboard/SidebarProvider.tsx:55` already does exactly this,
-  so the fix is applying the codebase's own existing pattern rather than
-  importing a new one.
-
-### 3. `z.url()` accepts any scheme, and the value is rendered as an `href` (Medium)
-
-`src/lib/validation/items.ts:69`:
-
-```ts
-.pipe(z.url('Enter a valid URL').nullable())
-```
-
-Zod 4's bare `z.url()` validates with `new URL()` and constrains no protocol.
-Probed against the real schema: `javascript:alert(document.domain)`,
-`data:text/html,<script>…</script>` and `vbscript:msgbox(1)` are all accepted.
-`<Input type="url">` in `NewItemDialog.tsx:322` and `ItemEditForm.tsx:194` does
-not filter them either — HTML URL validation only requires an absolute URL. The
-stored value is rendered as an `href` in `ItemDrawer.tsx:208-215`.
-
-**State the bound honestly rather than overselling this:** it is not
-exploitable in a current browser. React 19 rewrites `javascript:` hrefs at
-render time, and Chrome and Firefox block top-level navigation to `data:`. It
-is a real input-validation gap — the app stores and renders attacker-chosen
-schemes and relies entirely on the framework and the browser to defuse them —
-and it is one argument to close.
-
-- Constrain to `http`/`https` at the schema, so the rule is enforced on the
-  server where it belongs and both forms inherit it.
-- Add cases to `src/lib/validation/items.test.ts` beside the existing URL ones.
-- **Check the existing tests and the seeded data before assuming this is
-  inert**: any test or seeded link item whose URL is not `http(s)` would start
-  failing validation on edit. The seed's six URLs are all `https`, so the
-  expectation is no change — but confirm rather than assume, and note that this
-  makes a previously-storable value unstorable.
-
-### 4. `FieldError` is defined twice, byte-identical (Low)
-
-`src/components/items/NewItemDialog.tsx:62-66` and
-`src/components/items/ItemEditForm.tsx:33-37` are the same five lines; `diff`
-of the two ranges is empty. A third, differently-shaped one lives at
-`src/components/auth/FieldError.tsx:2` — it takes an `id`, uses `text-xs` and
-renders only `messages[0]`, where the item copies use `text-sm` and
-`messages.join('. ')`.
-
-- Extract the item copies into one component and import in both.
-- **Do not merge the auth one into it in this pass.** The two genuinely differ
-  in behaviour (first message vs all messages) and in the `id` wiring that ties
-  the auth version to its input for screen readers; collapsing them means
-  choosing which behaviour wins on both sides, which is a UI decision this
-  batch should not smuggle in. Leave the divergence recorded instead.
-
-### 5. `NewItemForm` and `ItemEditForm` duplicate the type-specific field block (Low)
-
-`src/components/items/NewItemDialog.tsx:265-365` and
-`src/components/items/ItemEditForm.tsx:137-217`. The content block (the
-`codeContent ? <CodeEditor> : markdownContent ? <MarkdownEditor> : <Textarea>`
-ladder), the language input, the URL input and the tags input are the same JSX
-in both, differing only in element ids (`new-item-*` vs `item-*`), `minHeight`
-values and `rows`. Both derive from the same `editableFieldsFor` /
-`usesCodeEditor` / `usesMarkdownEditor` calls.
-
-- Extract `ItemContentField` (label + editor ladder + error) and
-  `ItemTagsField`, parameterised by `idPrefix` and `minHeight`.
-- ~100 duplicated lines across the create and edit paths. The markdown feature
-  already recorded having to set `minHeight` at three call sites for this
-  reason, so the cost is demonstrated rather than hypothetical.
-
-### 6. Three components well over the 50-line guidance (Low)
-
-`NewItemForm` (`NewItemDialog.tsx:138-384`, ~247 lines), `ItemDrawer`
-(`ItemDrawer.tsx:69-272`, ~204) and `ItemEditForm`
-(`ItemEditForm.tsx:50-221`, ~172). `context/coding-standards.md`: "Keep
-functions under 50 lines when possible" and "Keep components focused — one job
-per component."
-
-- The extractions in finding 5 cover the two forms.
-- For `ItemDrawer`, pull the read-only body into `ItemDrawerBody`, leaving the
-  drawer to own the sheet, the heading and the view/edit switch. It currently
-  renders the heading, action bar, description, content ladder, file panel,
-  URL, tags, collection and details table in one body with the edit branch
-  nested inside.
-- Under 50 lines is a target, not a contract — do not split further just to hit
-  a number if the result reads worse.
-
-### 7. The pin/favourite marker pair is copy-pasted into four cards (Low)
-
-`ItemCard.tsx:55-58`, `ItemRow.tsx:43-46`, `ImageCard.tsx:76-79`,
-`FileRow.tsx:61-64` — all four are the same two lines.
-
-The four components are legitimately different shapes, with reasoning already
-recorded in History, and that is not being revisited. But this fragment is not
-part of what differs, and pin/favourite mutations are still unbuilt, so it will
-need touching in four places when they land.
-
-- Extract `ItemMarkers` taking `{ isPinned, isFavorite }`, the same way
-  `TypeIconTile` was already extracted from `ItemCard`/`ItemRow`.
-
-### 8. Dead export: `isStorageConfigured` (Low)
-
-`src/lib/r2.ts:45-47`. `grep -rn "isStorageConfigured" src` returns only the
-definition — no caller, no test, not used inside `r2.ts` itself.
-`context/coding-standards.md`: "No unused imports or variables."
-
-- Delete it. Wiring it into `/api/uploads` for a clearer 503 when R2 is
-  unconfigured is a defensible alternative, but that is a behaviour change the
-  audit did not ask for — prefer the deletion, and note the option here.
-
-### 9. Vestigial re-assignment in `NewItemDialog` (Low)
-
-`src/components/items/NewItemDialog.tsx:90`:
-
-```tsx
-const types = itemTypes;
-```
-
-Left over from when `isProType` filtered the list; the comment above it
-explains the removal. It now only renames the prop.
-
-- Use `itemTypes` directly and keep the comment, which still records why the
-  filter went away.
-
-### 10. No security response headers (Low)
-
-`next.config.ts` sets no `headers()` and `src/proxy.ts` adds none, so app pages
-ship with no `X-Frame-Options` / `frame-ancestors`, no `Referrer-Policy` and no
-`X-Content-Type-Options`. `/api/files/[id]` sets its own strict headers
-correctly — it is the only thing that does.
-
-- Add a `headers()` entry covering `/(.*)` with `X-Frame-Options: DENY`,
-  `Referrer-Policy: strict-origin-when-cross-origin` and
-  `X-Content-Type-Options: nosniff`.
-- **A full CSP is explicitly out of scope.** Monaco's AMD loader and Next's
-  inline bootstrap both need allowances, and getting that wrong breaks the code
-  editor in production while passing every test here. It deserves its own
-  feature with its own browser verification.
-- Verify with `curl -I` against the running dev server, and confirm
-  `/api/files/[id]` still sends its own stricter set rather than being
-  overridden.
+- **Extract `PasswordFields`.** `RegisterForm.tsx:137-169` and
+  `ResetPasswordForm.tsx:70-102` are 33 lines whose `diff` is two label
+  strings; `ChangePasswordForm.tsx:65-95` is a third variant of the same
+  shape. One component, taking the two labels and the two element ids.
+- **Extract the global-item-types predicate.** `OR: [{ userId: null }, { userId }]`
+  is hand-written at `src/lib/db/items.ts:124`, `:242` and `:450`, each with
+  its own copy of the same comment. One helper, used at all three sites.
+- **Extract `fetchItemDetail(id, signal)` into `src/lib/`** out of
+  `ItemDrawerProvider.tsx:91-117`, and test it — the fetch, JSON parse,
+  `success` check and abort branch have no coverage today because they live in
+  a component.
+- **Move `getItemTypeById` and `getItemTypes` to `src/lib/db/item-types.ts`.**
+  Both are `ItemType` queries sitting in the 468-line item module, touching
+  neither `ITEM_SELECT` nor either mapper.
+- **Split `FileUpload`'s chosen/uploading panel out** of its 205-line body, and
+  move the standalone `upload()` XHR helper to `src/lib/` so its non-JSON and
+  abort branches can be tested.
+- **Extract `NewItemForm`'s payload builder** (`NewItemDialog.tsx:151-174`) to
+  `src/lib/items.ts` and test the omit-versus-blank rule.
+- No behaviour changes anywhere. Every item is a move or a deduplication, and
+  the rendered result should be identical.
 
 ## Notes
 
-<!-- Any extra notes -->
-
-### Testing
-
-`context/coding-standards.md` scopes the suite to server actions and utilities,
-never components. That splits this batch cleanly:
-
-- **Unit tested:** findings 1 and 3 only — `safeCallbackUrl` and the item URL
-  schema are both pure utilities with existing test files to extend.
-- **Not unit tested, verified in the browser:** findings 2, 4, 5, 6, 7 and 9
-  are all components. Finding 8 is a deletion, covered by the build and lint.
-  Finding 10 is config, verified with `curl -I`.
-- Prove each new test can fail before trusting it — break the source, watch it
-  go red, restore. **Restore from a file backup, never `git checkout`**, which
-  wipes uncommitted work; that lesson is already recorded in History.
-
-### Refactor risk
-
-Findings 4–7 are pure refactors touching the create dialog, the edit form, the
-drawer and all four card components — i.e. most of the item UI at once, with no
-component test suite underneath any of it. Verify in a real browser after the
-extractions, not only via `npm run build`:
-
-- Create an item of each type, checking the fields still match the type.
-- Edit an item, checking the same.
-- Open the drawer from a card on `/dashboard`, `/items/snippet`,
-  `/items/image` and `/items/file`.
-- Pin and favourite markers still render on all four card shapes.
-- Escape still closes the drawer and returns focus to the exact card — that
-  behaviour was hard-won across two features and is exactly the kind of thing a
-  refactor of `ItemDrawer` can silently break.
-
-### Not in scope
-
-Everything the audit checked and deliberately did not report, because History
-already records it as an accepted trade-off: the duplicate `getTypeUsage` per
-dashboard render, unbounded `findMany` in `getPinnedItems` and
-`getItemsByTypeSlug`, the unindexed `findScopedToken` lookup, the three colour
-maps in `src/lib/colors.ts`, the two user queries on `/profile`, orphaned `Tag`
-rows and orphaned R2 objects, no rate limit on `/api/uploads`, and the inert
-favourite/pin/copy buttons in the drawer action bar.
-
-Also not in scope: any unbuilt feature. Search, collections CRUD, tags
-management, export, billing, AI features, Pro gating enforcement and item
-pagination are known MVP gaps, not findings.
-
-### Verified clean, worth recording
-
-The audit read every Prisma call in `src/lib/db`, `src/actions` and the four
-route handlers. **Every** item read and write carries `userId` in its `where`,
-including the `update` and `delete` filters rather than a read-then-write;
-`getItemTypeById` resolves against `OR: [{ userId: null }, { userId }]`; and
-`keyBelongsTo` matches the key exactly rather than by prefix. No missing
-ownership scoping anywhere. There is also no `any`, `as any`, `@ts-ignore` or
-`@ts-expect-error` in `src` outside `src/generated`, and `git ls-files` shows
-`.env.example` as the only tracked env file.
+- Goals are ordered by value. 1–4 earn their keep; 5–6 are worth doing but are
+  the first to drop if either reads worse split than whole.
+- **Why the password fields matter more than their line count:** each copy
+  decides whether `aria-describedby` points at the error or the hint, and
+  getting that wrong breaks screen-reader output silently. Keep the `name`
+  attributes fixed at `password`/`confirmPassword` — all three forms post to
+  schemas that expect exactly those, so they are contract, not parameter.
+  `ChangePasswordForm`'s `currentPassword` field stays put: different field,
+  `autoComplete="current-password"`, no hint.
+- **The item-types predicate is security-relevant.** It is what stops one user
+  filing an item under another's custom type, and what lets the seven global
+  system types resolve at all — a plain `userId` filter returns none of them.
+  Three hand-written copies is the drift risk that `usesCodeEditor`,
+  `usesMarkdownEditor` and `requiredFieldsFor` are derived rather than listed
+  to avoid.
+- **Items 3 and 6 exist to make untested logic testable**, so shipping either
+  without tests misses the point. For `fetchItemDetail`, cover a successful
+  parse, a non-`ok` response, a `success: false` body, a non-JSON body, and an
+  `AbortError` propagating so the caller can recognise it — that last is what
+  the drawer's race guard depends on. The component keeps the
+  `DOMException`/`AbortError` check, since deciding what to do about an abort
+  is drawer state, not fetch logic.
+- **Keep `getItemTypes` wrapped in `cache()`** through the move. `AppShell` and
+  `/items/[type]` both call it per request and rely on the dedupe; dropping it
+  would silently double a `findMany` plus a `groupBy` on every items page.
+  Four import sites to update: `app/profile/page.tsx`,
+  `app/items/[type]/page.tsx`, `components/dashboard/AppShell.tsx`,
+  `actions/items.ts`. Move the matching tests across too.
+- `FileUpload`'s progress bar `aria-valuenow` was a real defect once already —
+  shadcn's generated `Progress` never passed `value` to Radix. Re-check it live
+  after the split rather than assuming the move preserved it.
+- **Checked and deliberately not doing:** `ItemDrawerBody` (128 lines, but a
+  flat list of independent sections — splitting each into a file adds
+  indirection without reducing complexity); `src/lib/db/items.ts` beyond the
+  item-type move (the remaining ~400 lines are one concern); and the four
+  `const session = await auth()` guards plus eleven `if (!userId)` guards,
+  which each return a differently-shaped result (`[]`, `null`, a typed error
+  object) so a shared helper would obscure more than it saves.
+- **Verify in a browser**, since 1 and 5 are components and the suite does not
+  cover components: all five auth/profile password forms still submit with
+  errors associating to the right input; upload reports progress and cancel and
+  remove both work; an item of each type still creates, with a link item's save
+  not clearing content it never showed; the drawer's abort race still lets the
+  second of two rapid clicks win; Escape returns focus to the exact card and a
+  delete falls back to `<main>`.
+- **Before starting:** the auth rate limit is 5 sign-ins per 15 minutes and
+  will fire during testing — mint a session with `AUTH_SECRET` and reuse it. A
+  live Chrome usually holds the Playwright MCP profile, so drive an isolated
+  headless Chromium (`chromium_headless_shell-1208`) rather than killing it. Do
+  not run `npx prettier`; it is neither a dependency nor configured, and its
+  defaults caused 263 lines of unrelated churn once. Ask before writing to the
+  development branch, per `CLAUDE.md` — most of this verifies with rejected
+  saves, which write nothing.
+- Prove each new test can fail before trusting it, and restore from a **file
+  backup, never `git checkout`**, which wipes uncommitted work.
 
 ## History
 

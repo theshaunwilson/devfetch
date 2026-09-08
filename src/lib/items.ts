@@ -1,4 +1,5 @@
 import { usesFileUpload } from '@/lib/uploads';
+import type { CreateItemInput } from '@/lib/validation/items';
 
 /**
  * Which of the type-specific fields the edit form shows, keyed on the item
@@ -144,4 +145,55 @@ export function copyableFieldFor(slug: string): CopyableField | null {
   if (fields.content) return 'content';
 
   return null;
+}
+
+/** The raw form values a create dialog holds, before they become a payload. */
+export interface NewItemValues {
+  typeId: string;
+  slug: string;
+  title: string;
+  description: string;
+  content: string;
+  language: string;
+  url: string;
+  tags: string;
+  file: { key: string; fileName: string; fileSize: number } | null;
+}
+
+/**
+ * Turns what the create form holds into the payload the action takes.
+ *
+ * The rule worth keeping honest is omit-versus-blank: a field this type never
+ * rendered is left **off the object entirely** rather than sent as an empty
+ * string. On a create the two happen to mean the same thing, but `updateItem`
+ * reads `undefined` as "leave alone" and `null` as "clear", and sending a
+ * blank for a field the user never saw is how a save silently wipes a column.
+ * Keeping create honest keeps the two payloads reading the same way.
+ *
+ * The file trio is set together or not at all — the three only mean anything
+ * as a set, and `fileUrl` holds the object's key rather than a URL, since
+ * uploads are private and are read back through `/api/files/[id]`.
+ */
+export function buildCreateItemPayload(values: NewItemValues): CreateItemInput {
+  const fields = editableFieldsFor(values.slug);
+  const required = requiredFieldsFor(values.slug);
+
+  const payload: CreateItemInput = {
+    typeId: values.typeId,
+    title: values.title,
+    description: values.description,
+    tags: parseTagInput(values.tags),
+  };
+
+  if (fields.content) payload.content = values.content;
+  if (fields.language) payload.language = values.language;
+  if (fields.url) payload.url = values.url;
+
+  if (required.file && values.file) {
+    payload.fileUrl = values.file.key;
+    payload.fileName = values.file.fileName;
+    payload.fileSize = values.file.fileSize;
+  }
+
+  return payload;
 }

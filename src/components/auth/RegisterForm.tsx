@@ -6,11 +6,12 @@ import { useActionState } from 'react';
 import { z } from 'zod';
 
 import { FieldError } from '@/components/auth/FieldError';
+import { PasswordFields } from '@/components/auth/PasswordFields';
 import { FormMessage } from '@/components/auth/FormMessage';
 import { SubmitButton } from '@/components/auth/SubmitButton';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PASSWORD_MIN_LENGTH, registerSchema } from '@/lib/validation/auth';
+import { registerSchema } from '@/lib/validation/auth';
 
 /** Mirrors the `{ success, data, error }` shape of `/api/auth/register`. */
 interface RegisterResponseBody {
@@ -134,39 +135,11 @@ export function RegisterForm({ verificationRequired }: RegisterFormProps) {
           <FieldError id="email-error" messages={state.fieldErrors?.email} />
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="password">Password</Label>
-          <Input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete="new-password"
-            required
-            aria-invalid={Boolean(state.fieldErrors?.password)}
-            aria-describedby={state.fieldErrors?.password ? 'password-error' : 'password-hint'}
-          />
-          {state.fieldErrors?.password ? (
-            <FieldError id="password-error" messages={state.fieldErrors.password} />
-          ) : (
-            <p id="password-hint" className="text-xs text-muted-foreground">
-              At least {PASSWORD_MIN_LENGTH} characters.
-            </p>
-          )}
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="confirmPassword">Confirm password</Label>
-          <Input
-            id="confirmPassword"
-            name="confirmPassword"
-            type="password"
-            autoComplete="new-password"
-            required
-            aria-invalid={Boolean(state.fieldErrors?.confirmPassword)}
-            aria-describedby={state.fieldErrors?.confirmPassword ? 'confirm-error' : undefined}
-          />
-          <FieldError id="confirm-error" messages={state.fieldErrors?.confirmPassword} />
-        </div>
+        <PasswordFields
+          passwordLabel="Password"
+          confirmLabel="Confirm password"
+          fieldErrors={state.fieldErrors}
+        />
 
         <SubmitButton pendingLabel="Creating account…" disabled={state.created} className="mt-1 w-full">
           Create account
