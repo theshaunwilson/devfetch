@@ -2,11 +2,14 @@
 // which the tsx scripts import, where `server-only` throws.
 import 'server-only';
 
+import { Prisma } from '@/generated/prisma/client';
 import { getCurrentUserId } from '@/lib/db/user';
 import { prisma } from '@/lib/prisma';
+import type { CreateCollectionData } from '@/lib/validation/collections';
 import type {
   CollectionItemType,
   CollectionStats,
+  CreateCollectionOutcome,
   DashboardCollection,
   SidebarCollection,
   SidebarCollections,
@@ -167,4 +170,56 @@ export async function getCollectionStats(): Promise<CollectionStats> {
   ]);
 
   return { total, favorites };
+}
+
+/**
+ * Creates one collection for the signed-in user and returns it as the grid
+ * renders it.
+ *
+ * The owner comes from the session rather than the payload, like every other
+ * write here. A brand-new collection is necessarily empty, so the item count,
+ * the type mix and the accent colour are known without the `getTypeUsage`
+ * aggregation the read paths need.
+ *
+ * `@@unique([userId, name])` is what decides a duplicate name. A pre-check
+ * cannot close the race between two requests, so the index is left to reject
+ * it and P2002 is turned into an outcome the form can render on the field.
+ * The comparison is the index's own, which is case-sensitive: `React` and
+ * `react` are two collections today.
+ */
+export async function createCollection(
+  data: CreateCollectionData
+): Promise<CreateCollectionOutcome> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) return { ok: false, reason: 'no-session' };
+
+  try {
+    const collection = await prisma.collection.create({
+      data: {
+        name: data.name,
+        description: data.description ?? null,
+        user: { connect: { id: userId } },
+      },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        isFavorite: true,
+      },
+    });
+
+    return {
+      ok: true,
+      collection: { ...collection, itemCount: 0, types: [], accentColor: null },
+    };
+  } catch (error) {
+    // P2002: the unique index rejected it. The only unique constraint on
+    // Collection is [userId, name], so this can mean nothing else.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return { ok: false, reason: 'duplicate-name' };
+    }
+
+    throw error;
+  }
 }
