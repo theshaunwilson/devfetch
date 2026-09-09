@@ -1,78 +1,20 @@
-# Current Feature: Collection Create
+# Current Feature
+
+<!-- Feature Name -->
 
 ## Status
 
-In Progress
+<!-- Not Started|In Progress|Completed -->
+
+Not Started
 
 ## Goals
 
-- A "New Collection" button in the top bar opens a modal. The button exists
-  today but is display only — it has been inert since Dashboard UI Phase 1.
-- The modal takes a **name** and a **description** and creates the collection.
-- A `createCollection` server action validates with Zod and returns the
-  `{ success, data, error }` shape every other action uses, with `fieldErrors`
-  for per-field messages.
-- A `createCollection` query in `src/lib/db/collections.ts` does the write.
-  Collections are user-scoped: the owner comes from the session, never from
-  the payload.
-- Toast on success and on failure, via the `sonner` `<Toaster />` already
-  mounted in `AppShell`.
-- Everything catches up on save: the sidebar's Favorites/Recent lists, the
-  dashboard's Collections grid and both collection stat tiles.
+<!-- Goals & requirements -->
 
 ## Notes
 
-**Follow the item create path.** `NewItemDialog` + `NewItemForm` + `createItem`
-(action) + `createItem` (query) is the worked example, and the collection
-version is a smaller version of the same thing: dialog owns `open`, the form
-lives in a child so it **unmounts with the dialog** (a half-typed collection and
-its errors belong to the abandoned attempt), submit runs in a `useTransition`,
-then toast → close → `router.refresh()`.
-
-**Two fields, not three.** `Collection` also has `color`, which nothing writes
-and nothing reads — the dashboard and sidebar derive their accent from the
-collection's most-used item **type**, not from this column. The spec asks for
-name and description, so `color` stays unset rather than growing an unused
-picker.
-
-**The one thing items do not have to handle: `@@unique([userId, name])`.**
-Two collections of the same name under one user is a database error, not a
-validation one. A pre-check cannot close the race, so P2002 has to be caught
-and turned into a field error on `name` — the pattern `POST /api/auth/register`
-already uses for duplicate emails. Worth deciding whether the comparison should
-be case-insensitive: the constraint is not, so `React` and `react` would both
-be storable today.
-
-**"API routes for any client-side calls" needs settling at `start`.** Item
-creation does **not** go through an API route — it is a server action, which
-`coding-standards.md` prescribes for form submissions and simple mutations.
-The `/api/items/[id]` route exists for a different job: the drawer fetching
-detail on click. So on the current design there is no client-side call here
-that wants a route, and adding one would diverge from the pattern the same
-sentence asks us to follow. Assumption unless corrected: **server action for
-the create, no new API route.**
-
-**Refresh, not local state.** `AppShell` (which renders the sidebar) and
-`/dashboard` are both `force-dynamic`, so `router.refresh()` re-renders the
-layout as well as the page and every one of the six surfaces catches up from
-one call. Worth verifying the sidebar really does update, since it is a layout
-and not the page under it.
-
-**No migration.** `Collection.name`, `description` and the `userId` relation
-have been in the schema since the Prisma feature, and `@@index([userId,
-updatedAt(sort: Desc)])` already covers the lists the new row lands in.
-
-**Open questions for `start`:**
-
-- Does the new collection need to be navigable after creation? `/collections/[id]`
-  is linked from the dashboard cards but **no such route exists** — the cards
-  have pointed at a 404 since Dashboard UI Phase 3. Creating a collection you
-  cannot open is the honest scope here, but it is worth naming.
-- Nothing assigns an item to a collection yet, so a new collection is
-  necessarily empty and renders with a count of 0 and no type icons.
-- Length ceilings for `name` and `description`: `src/lib/validation/items.ts`
-  already exports `TITLE_MAX_LENGTH` (200) and `DESCRIPTION_MAX_LENGTH` (1000),
-  so reuse rather than re-declare.
+<!-- Any extra notes -->
 
 ## History
 
