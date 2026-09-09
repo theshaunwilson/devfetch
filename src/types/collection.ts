@@ -39,3 +39,23 @@ export interface SidebarCollections {
   favorites: SidebarCollection[];
   recent: SidebarCollection[];
 }
+
+/**
+ * What `createCollection` in `@/lib/db/collections` reports back.
+ *
+ * A duplicate name is its own outcome rather than a thrown error, because it
+ * is a field error the form has to render — and the unique index is what
+ * actually decides it, so it can only be known here, at the write.
+ */
+export type CreateCollectionOutcome =
+  | { ok: true; collection: DashboardCollection }
+  | { ok: false; reason: 'no-session' | 'duplicate-name' };
+
+/**
+ * What the `createCollection` server action returns. The new collection comes
+ * back in full, on the same contract as the item actions, so a caller has the
+ * saved row rather than only the fact that something was written.
+ */
+export type CreateCollectionResult =
+  | { success: true; data: DashboardCollection }
+  | { success: false; error: string; fieldErrors?: Record<string, string[]> };
