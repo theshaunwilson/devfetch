@@ -19,6 +19,18 @@ export interface DashboardCollection {
   accentColor: string | null;
 }
 
+/**
+ * A collection as offered by the item forms' collections picker.
+ *
+ * Name and id only: the picker draws a checkbox row per collection and files
+ * the item by id. It deliberately carries no counts, so it needs none of the
+ * per-collection aggregation the dashboard and sidebar lists pay for.
+ */
+export interface CollectionOption {
+  id: string;
+  name: string;
+}
+
 /** Collection counts shown in the dashboard stat tiles. */
 export interface CollectionStats {
   total: number;

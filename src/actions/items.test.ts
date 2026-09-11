@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/auth', () => ({ auth: vi.fn() }));
 vi.mock('@/lib/r2', () => ({ deleteObject: vi.fn() }));
 vi.mock('@/lib/db/item-types', () => ({ getItemTypeById: vi.fn() }));
+vi.mock('@/lib/db/collections', () => ({ getOwnedCollectionIds: vi.fn() }));
 vi.mock('@/lib/db/items', () => ({
   createItem: vi.fn(),
   updateItem: vi.fn(),
@@ -22,6 +23,7 @@ vi.mock('@/lib/db/items', () => ({
 const { auth } = await import('@/auth');
 const { deleteObject } = await import('@/lib/r2');
 const { getItemTypeById } = await import('@/lib/db/item-types');
+const { getOwnedCollectionIds } = await import('@/lib/db/collections');
 const {
   createItem: createItemRow,
   updateItem: updateItemRow,
@@ -34,6 +36,7 @@ const writeRow = vi.mocked(updateItemRow);
 const deleteRow = vi.mocked(deleteItemRow);
 const createRow = vi.mocked(createItemRow);
 const findType = vi.mocked(getItemTypeById);
+const findCollections = vi.mocked(getOwnedCollectionIds);
 const removeObject = vi.mocked(deleteObject);
 
 const USER_ID = 'user_1';
@@ -55,7 +58,7 @@ const saved = {
   fileUrl: null,
   fileName: null,
   fileSize: null,
-  collection: null,
+  collections: [],
 };
 
 beforeEach(() => {
@@ -67,6 +70,8 @@ beforeEach(() => {
   deleteRow.mockResolvedValue({ deleted: true, fileKey: null });
   createRow.mockResolvedValue(saved);
   findType.mockResolvedValue({ id: 'type_1', slug: 'snippet' });
+  // Owns whatever it is asked about, unless a test says otherwise.
+  findCollections.mockImplementation(async (ids: string[]) => ids);
 });
 
 describe('updateItem', () => {
@@ -164,6 +169,60 @@ describe('updateItem', () => {
       success: false,
       error: 'Could not save your changes. Please try again.',
     });
+  });
+
+  it('refuses a collection the user does not own, and writes nothing', async () => {
+    // Somebody else's collection, or one that never existed: the lookup finds
+    // neither, and the two are not distinguished.
+    findCollections.mockResolvedValue([]);
+
+    const result = await updateItem(ITEM_ID, { title: 'x', collectionIds: ['someone_elses'] });
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Check the highlighted fields and try again.',
+      fieldErrors: { collectionIds: ['Pick collections from your own list'] },
+    });
+    expect(writeRow).not.toHaveBeenCalled();
+  });
+
+  it('refuses when only some of the ids are the user’s own', async () => {
+    findCollections.mockResolvedValue(['mine']);
+
+    const result = await updateItem(ITEM_ID, {
+      title: 'x',
+      collectionIds: ['mine', 'someone_elses'],
+    });
+
+    expect(result.success).toBe(false);
+    // Not a partial write: an item quietly filed in fewer collections than were
+    // ticked is worse than being told.
+    expect(writeRow).not.toHaveBeenCalled();
+  });
+
+  it('writes the resolved ids rather than the ones that arrived', async () => {
+    // Same set, different order — so an action that passed the payload through
+    // would be visible here.
+    findCollections.mockResolvedValue(['coll_2', 'coll_1']);
+
+    await updateItem(ITEM_ID, { title: 'x', collectionIds: ['coll_1', 'coll_2'] });
+
+    expect(writeRow.mock.calls[0][1]).toMatchObject({ collectionIds: ['coll_2', 'coll_1'] });
+  });
+
+  it('checks the deduplicated ids, so one id twice is one lookup', async () => {
+    await updateItem(ITEM_ID, { title: 'x', collectionIds: ['coll_1', 'coll_1'] });
+
+    expect(findCollections).toHaveBeenCalledWith(['coll_1']);
+    expect(writeRow.mock.calls[0][1]).toMatchObject({ collectionIds: ['coll_1'] });
+  });
+
+  it('asks nothing about collections when the form did not show the field', async () => {
+    await updateItem(ITEM_ID, { title: 'x' });
+
+    expect(findCollections).not.toHaveBeenCalled();
+    // Absent, not empty: the filings are left exactly as they were.
+    expect(writeRow.mock.calls[0][1]).not.toHaveProperty('collectionIds', []);
   });
 });
 
@@ -311,6 +370,38 @@ describe('createItem', () => {
       success: false,
       error: 'Could not create this item. Please try again.',
     });
+  });
+
+  it('refuses a collection the user does not own, and writes nothing', async () => {
+    findCollections.mockResolvedValue([]);
+
+    const result = await createItem({ ...data, collectionIds: ['someone_elses'] });
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Check the highlighted fields and try again.',
+      fieldErrors: { collectionIds: ['Pick collections from your own list'] },
+    });
+    expect(createRow).not.toHaveBeenCalled();
+  });
+
+  it('files the new item under the resolved ids, not the ones that arrived', async () => {
+    findCollections.mockResolvedValue(['coll_2', 'coll_1']);
+
+    await createItem({ ...data, collectionIds: ['coll_1', 'coll_2'] });
+
+    expect(createRow.mock.calls[0][0]).toMatchObject({ collectionIds: ['coll_2', 'coll_1'] });
+  });
+
+  it('refuses more collections than one item may be filed in', async () => {
+    const tooMany = Array.from({ length: 51 }, (_, index) => `coll_${index}`);
+
+    const result = await createItem({ ...data, collectionIds: tooMany });
+
+    expect(result.success).toBe(false);
+    // Refused by the schema, so nothing was looked up either.
+    expect(findCollections).not.toHaveBeenCalled();
+    expect(createRow).not.toHaveBeenCalled();
   });
 });
 

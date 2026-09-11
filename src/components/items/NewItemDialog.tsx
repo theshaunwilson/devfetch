@@ -6,6 +6,7 @@ import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
 import { createItem } from '@/actions/items';
+import { CollectionSelect } from '@/components/items/CollectionSelect';
 import { FileUpload } from '@/components/items/FileUpload';
 import { ItemContentField } from '@/components/items/ItemContentField';
 import { ItemFieldError } from '@/components/items/ItemFieldError';
@@ -41,12 +42,15 @@ import {
 } from '@/lib/items';
 import { isImageUploadType } from '@/lib/uploads';
 import { cn } from '@/lib/utils';
+import type { CollectionOption } from '@/types/collection';
 import type { SidebarItemType } from '@/types/item';
 import type { UploadedFile } from '@/types/upload';
 
 interface NewItemDialogProps {
   /** Every type the user can see, Pro ones included — filtered here. */
   itemTypes: SidebarItemType[];
+  /** Every collection the user owns, for the collections picker. */
+  collectionOptions: CollectionOption[];
   /**
    * Which type the form opens on. Falls back to the first offered type when
    * absent or when the slug names a type that cannot be created — so a caller
@@ -71,6 +75,7 @@ interface NewItemDialogProps {
  */
 export function NewItemDialog({
   itemTypes,
+  collectionOptions,
   defaultTypeSlug,
   triggerLabel = 'New Item',
 }: NewItemDialogProps) {
@@ -110,6 +115,7 @@ export function NewItemDialog({
 
         <NewItemForm
           types={itemTypes}
+          collectionOptions={collectionOptions}
           defaultTypeSlug={defaultTypeSlug}
           onCreated={handleCreated}
           onCancel={() => setOpen(false)}
@@ -122,12 +128,19 @@ export function NewItemDialog({
 interface NewItemFormProps {
   /** Never empty: the trigger is disabled when there is nothing to pick. */
   types: SidebarItemType[];
+  collectionOptions: CollectionOption[];
   defaultTypeSlug?: string;
   onCreated: () => void;
   onCancel: () => void;
 }
 
-function NewItemForm({ types, defaultTypeSlug, onCreated, onCancel }: NewItemFormProps) {
+function NewItemForm({
+  types,
+  collectionOptions,
+  defaultTypeSlug,
+  onCreated,
+  onCancel,
+}: NewItemFormProps) {
   const [typeId, setTypeId] = useState(() => initialTypeId(types, defaultTypeSlug));
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -135,6 +148,7 @@ function NewItemForm({ types, defaultTypeSlug, onCreated, onCancel }: NewItemFor
   const [language, setLanguage] = useState('');
   const [url, setUrl] = useState('');
   const [tags, setTags] = useState('');
+  const [collectionIds, setCollectionIds] = useState<string[]>([]);
   const [file, setFile] = useState<UploadedFile | null>(null);
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
@@ -165,6 +179,7 @@ function NewItemForm({ types, defaultTypeSlug, onCreated, onCancel }: NewItemFor
       language,
       url,
       tags,
+      collectionIds,
       file,
     });
 
@@ -308,6 +323,15 @@ function NewItemForm({ types, defaultTypeSlug, onCreated, onCancel }: NewItemFor
           placeholder="react, hooks, typescript"
           hint="Separate tags with commas."
           messages={fieldErrors.tags}
+        />
+
+        <CollectionSelect
+          id="new-item-collections"
+          options={collectionOptions}
+          value={collectionIds}
+          onChange={setCollectionIds}
+          disabled={isPending}
+          messages={fieldErrors.collectionIds}
         />
       </div>
 

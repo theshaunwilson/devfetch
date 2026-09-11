@@ -48,6 +48,7 @@ async function printCounts(prisma: Prisma): Promise<void> {
     items: await prisma.item.count(),
     itemTypes: await prisma.itemType.count(),
     collections: await prisma.collection.count(),
+    itemCollections: await prisma.itemCollection.count(),
     tags: await prisma.tag.count(),
     itemTags: await prisma.itemTag.count(),
   };
@@ -100,9 +101,11 @@ async function printCollections(prisma: Prisma, userId: string): Promise<void> {
   const collections = await prisma.collection.findMany({
     where: { userId },
     include: {
+      // Items hang off the join table now, so each row is a filing and the
+      // item itself is one level in.
       items: {
-        include: { type: true, tags: { include: { tag: true } } },
-        orderBy: { title: 'asc' },
+        include: { item: { include: { type: true, tags: { include: { tag: true } } } } },
+        orderBy: { item: { title: 'asc' } },
       },
     },
     orderBy: { name: 'asc' },
@@ -116,15 +119,19 @@ async function printCollections(prisma: Prisma, userId: string): Promise<void> {
         `  [${collection.color ?? 'no color'}]`,
     );
 
-    const width = Math.max(...collection.items.map((item) => item.type.name.length));
-    for (const item of collection.items) {
+    const items = collection.items.map((filing) => filing.item);
+    const width = Math.max(...items.map((item) => item.type.name.length));
+    for (const item of items) {
       const tags = item.tags.map((link) => link.tag.name).join(', ');
       const title = `    ${item.type.name.padEnd(width)}  ${item.title} ${flags(item)}`.trimEnd();
       console.log(title + (tags ? `\n    ${' '.repeat(width)}  ↳ ${tags}` : ''));
     }
   }
 
-  const uncollected = await prisma.item.count({ where: { userId, collectionId: null } });
+  // An item with no filings at all, now that there is no column to be null.
+  const uncollected = await prisma.item.count({
+    where: { userId, collections: { none: {} } },
+  });
   if (uncollected > 0) console.log(`\n  (${uncollected} items are not in a collection)`);
 }
 

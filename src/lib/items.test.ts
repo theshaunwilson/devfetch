@@ -290,8 +290,18 @@ describe('buildCreateItemPayload', () => {
     language: 'typescript',
     url: 'https://example.com',
     tags: 'react, hooks',
+    collectionIds: [],
     file: null,
   };
+
+  it('always sends the collections, even when none are ticked', () => {
+    // Not a type-specific field: every type can be filed, so an empty array is
+    // an answer rather than a field the form never showed.
+    expect(buildCreateItemPayload({ ...base, collectionIds: [] }).collectionIds).toEqual([]);
+    expect(
+      buildCreateItemPayload({ ...base, collectionIds: ['coll_1', 'coll_2'] }).collectionIds,
+    ).toEqual(['coll_1', 'coll_2']);
+  });
 
   it('always carries the fields every item has', () => {
     const payload = buildCreateItemPayload({ ...base, slug: 'note' });

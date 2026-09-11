@@ -4,6 +4,7 @@ import { FileRow } from '@/components/items/FileRow';
 import { ImageCard } from '@/components/items/ImageCard';
 import { ItemCard } from '@/components/items/ItemCard';
 import { NewItemDialog } from '@/components/items/NewItemDialog';
+import { getCollectionOptions } from '@/lib/db/collections';
 import { getItemTypes } from '@/lib/db/item-types';
 import { getItemsByTypeSlug } from '@/lib/db/items';
 import { capitalize } from '@/lib/format';
@@ -34,12 +35,15 @@ export default async function ItemsByTypePage({ params }: PageProps<'/items/[typ
   const { items } = result;
   const typeName = capitalize(result.type.name);
 
-  // Free: `getItemTypes` is request-cached and `AppShell` has already called
-  // it for the sidebar.
+  // Both free: `getItemTypes` and `getCollectionOptions` are request-cached and
+  // `AppShell` has already called each of them.
   //
   // Every type gets a button now that File and Image can be uploaded; they were
   // the only two the dialog would not have opened on.
-  const itemTypes = await getItemTypes();
+  const [itemTypes, collectionOptions] = await Promise.all([
+    getItemTypes(),
+    getCollectionOptions(),
+  ]);
 
   // Uploads get their own layouts: images a gallery of thumbnails, files a
   // single column of rows. The resolved slug decides, not the requested one.
@@ -61,6 +65,7 @@ export default async function ItemsByTypePage({ params }: PageProps<'/items/[typ
             matched it exactly. */}
         <NewItemDialog
           itemTypes={itemTypes}
+          collectionOptions={collectionOptions}
           defaultTypeSlug={type}
           triggerLabel={`New ${typeName}`}
         />

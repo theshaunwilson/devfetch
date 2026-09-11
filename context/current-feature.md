@@ -1,20 +1,157 @@
-# Current Feature
-
-<!-- Feature Name -->
+# Current Feature: Item Collections
 
 ## Status
 
-<!-- Not Started|In Progress|Completed -->
-
-Not Started
+In Progress
 
 ## Goals
 
-<!-- Goals & requirements -->
+- An item can belong to **zero, one, or many** collections.
+- The New Item dialog and the drawer's edit form both carry a collections input
+  listing the signed-in user's collections, with the item's current ones
+  preselected when editing.
+- Creating an item files it in whichever collections were picked; saving an edit
+  **replaces** the set, including clearing it back to none.
+- Only collections the signed-in user owns can be attached. The ids arrive from
+  the client, so they are resolved against `{ userId }` before anything is
+  written — the same rule `getItemTypeById` applies to `typeId`.
+- Every existing surface that reads an item's collection keeps working: the
+  drawer's badge (now badges, plural), the dashboard Collections grid's item
+  counts, type icons and accent colour, and the sidebar's per-collection counts.
+- `prisma/seed.ts` and `scripts/test-db.ts` keep working — the seed is
+  re-runnable and `db:test` is the health check.
+- Unit tests for the changed server actions, queries and utilities, each one
+  mutation-checked, per `coding-standards.md`.
+- **No collection pages.** `/collections` and `/collections/[id]` stay 404, as
+  asked. Nothing here makes a collection openable.
 
 ## Notes
 
-<!-- Any extra notes -->
+**This needs a migration, and it is the only feature since Prisma landed that
+does.** `Item.collectionId` is a single nullable FK (`onDelete: SetNull`) — one
+collection per item. "Single or multiple" cannot be expressed by it, so the
+relation becomes a join model: `ItemCollection` with `@@id([itemId, collectionId])`
+and `Cascade` from both sides, which is the shape `ItemTag` already has, plus an
+index on `collectionId` for the reads that go the other way.
+
+**The existing column has to be migrated, not just dropped.** Real rows are
+filed through it today — the dev branch holds 18 items across 5 collections, and
+some of that is the user's own data. So the migration is three steps written by
+hand rather than whatever `prisma migrate dev` generates on its own: create the
+table, `INSERT ... SELECT` every non-null `collectionId` into it, then drop the
+column. Keeping the column **as well** was considered and rejected: two sources
+of truth for one relation is exactly the drift this codebase keeps avoiding
+(`usesCodeEditor`, `requiredFieldsFor`, `visibleItemTypeFilter` are all the same
+argument). Per `coding-standards.md` this goes through `prisma migrate dev`, not
+raw SQL through the Neon MCP, and it must be verified against the dev branch
+before anything else is believed.
+
+**The ripple was found by reading the code, and one piece of it is not
+mechanical.** `getTypeUsage` in `src/lib/db/collections.ts` is
+`item.groupBy({ by: ['collectionId', 'typeId'] })`, and it feeds the dashboard
+grid's item counts, its type icons, its accent colour **and** the sidebar's
+counts — four surfaces off one aggregation. Prisma's `groupBy` cannot group
+across a relation, so with `collectionId` gone this becomes either a read of the
+join rows selecting each item's `typeId` and the aggregation done in JS, or a
+raw query. Decide at `start`; the JS version keeps the module free of raw SQL
+and the row counts here are small.
+
+The rest is mechanical but wide: `ITEM_DETAIL_SELECT`'s
+`collection: { select: … }` becomes `collections`, `ItemDetail.collection`
+becomes `collections: ItemDetailCollection[]`, `ItemDrawerBody` renders a badge
+per collection rather than one, `prisma/seed.ts` writes join rows instead of a
+`collectionId` per item, and `scripts/test-db.ts` both prints the per-collection
+item list and counts `collectionId: null` as "uncollected". `src/actions/profile.ts`
+deletes items then collections in one transaction and the join rows cascade from
+both sides, so no new explicit delete is needed — worth confirming rather than
+assuming, since `Item.type`'s `Restrict` is the reason that ordering exists at
+all.
+
+**Where the list of collections comes from has two different answers, and this
+is the design decision the UI hangs on.** The create dialog is server-rendered
+chrome: `Topbar` is handed `itemTypes` by `AppShell`, and `/items/[type]` fetches
+its own, so a new `getCollectionOptions()` (id and name, the user's own, ordered
+by name) threads down the same way — `cache()`d like `getItemTypes()`, or the
+shell and the page will both pay for it on every items page. Note `AppShell`'s
+existing `getSidebarCollections(5)` is **not** reusable: it is split into
+favourites and recent and the recent half is capped at five.
+
+The edit form is different — it lives inside the drawer, a client component fed
+by `GET /api/items/[id]` on click. Adding the user's collections to that
+response is cheaper than threading a second list through `AppShell` into every
+page, costs nothing on a page load, and matches the drawer's existing "fetch on
+click". Assumption unless corrected at `start`: **options in the detail response
+for the drawer, props from the server for the create dialog.**
+
+**Write semantics follow `updateItem`'s existing idiom, including its one
+subtlety.** `collectionIds` is an optional array on both schemas with a count
+ceiling of its own (the `TAGS_MAX_COUNT` precedent). On update the set is
+replaced — `deleteMany: {}` then `create`, exactly what tags do — and
+`undefined` must keep meaning "leave alone" while `[]` means "clear", since the
+whole one-field-at-a-time assignment in `updateItem` rests on that distinction.
+An unknown or unowned id should be a **field error**, not silently dropped: a
+caller that picked a collection and got an item without it deserves to be told.
+
+**The tag replace hazard applies to this table too and should be re-proven, not
+assumed.** `deleteMany: {}` plus `create` in one nested write re-creates a kept
+row, which would violate `[itemId, collectionId]` if Prisma ran the create
+first. That was proven safe for `ItemTag` against the real branch inside a
+rolled-back transaction; the same proof is owed here rather than inherited.
+
+**There is no multi-select component in the project.** shadcn has no
+multi-select primitive, so it is either a `Popover` + `Command` combobox with
+checked items (`shadcn add command popover` — and note both earlier `shadcn add`
+runs pulled a third-party `cn` package that had to be repointed and uninstalled)
+or a plain checkbox list. Decide at `start`. The checkbox list has fewer moving
+parts and the collection count is small, but it grows the create dialog's
+height, which is already capped at `calc(100svh-2rem)` after a real clipping
+defect — so whichever wins gets re-measured at 1280x620 and 390x667 with the
+Create button still visible.
+
+**A user with no collections needs an answer**, since that is every new account:
+either hide the field or show a hint pointing at New Collection. Worth knowing
+the trigger for that is `hidden md:inline-flex`, so on a phone there is no way
+to make one — the gap the collection-create feature recorded and left standing.
+
+**Out of scope**, stated so it does not creep in: collection pages, assigning
+items from a collection's page, renaming or deleting collections, showing which
+collections an item is in anywhere other than the drawer, and any change to the
+dashboard's Pinned/Recent rows or the item cards.
+
+## Decisions settled at `start`
+
+**The collections input is a dropdown checkbox menu**, using the
+`DropdownMenuCheckboxItem` that `src/components/ui/dropdown-menu.tsx` already
+exports. No `shadcn add`, so no repeat of the third-party `cn` package both
+earlier runs pulled in, and the list is an overlay rather than inline — so the
+create dialog's height does not grow with the number of collections, which is
+what the `calc(100svh-2rem)` cap exists to protect. Each item needs
+`onSelect` prevented, or the menu closes on the first tick.
+
+**A user with no collections gets a hint and no control** — the label with a
+muted "No collections yet" line rather than a dead trigger, matching how Pinned
+disappears when it is empty.
+
+**The options come from the server as props, reversing the assumption written at
+`load`.** The load note put them in the `GET /api/items/[id]` response for the
+drawer, on the grounds that it costs nothing on a page load. That is true, but it
+buys two mechanisms rather than one: the create dialog is server-rendered chrome
+and needs a query regardless, so the API route would have been a *second* source
+of the same list, with the response shape, `fetchItemDetail`, its tests and the
+provider's state all changed to carry it. Instead `getCollectionOptions()` is
+`cache()`d and fetched once in `AppShell`, then threaded to `Topbar`'s dialog and
+through `ItemDrawerProvider` to the edit form; `/items/[type]` calls the same
+cached function for free. The cost is one small indexed query per shell render,
+alongside the two the sidebar already runs — and the field is then populated
+before the detail request resolves, which matches how the drawer paints
+everything the card already knew.
+
+**`getTypeUsage` aggregates in JS, not in raw SQL.** With `collectionId` gone
+from `Item`, Prisma cannot `groupBy` across the join, and the per-collection
+alternative is one `groupBy` per collection. So it reads the join rows for the
+collections asked about, selecting each item's `typeId`, and counts them in
+memory — the row count is exactly the join rows for those collections, and the
+module stays free of raw SQL.
 
 ## History
 

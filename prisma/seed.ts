@@ -389,7 +389,10 @@ async function seedCollections(
           ...itemFields,
           userId,
           typeId,
-          collectionId: record.id,
+          // One collection per seeded item, as before items became a
+          // many-to-many relation: the fixture's shape is what the dashboard
+          // and `db:test` expectations are written against.
+          collections: { create: [{ collectionId: record.id }] },
           tags: {
             create: tags.map((name) => ({ tagId: tagIdsByName.get(name)! })),
           },

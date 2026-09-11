@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
 import { updateItem } from '@/actions/items';
+import { CollectionSelect } from '@/components/items/CollectionSelect';
 import { ItemContentField } from '@/components/items/ItemContentField';
 import { ItemFieldError } from '@/components/items/ItemFieldError';
 import { ItemTextField } from '@/components/items/ItemTextField';
@@ -14,10 +15,13 @@ import { SheetHeader } from '@/components/ui/sheet';
 import { Textarea } from '@/components/ui/textarea';
 import { editableFieldsFor, formatTagInput, parseTagInput } from '@/lib/items';
 import type { UpdateItemInput } from '@/lib/validation/items';
+import type { CollectionOption } from '@/types/collection';
 import type { ItemDetail } from '@/types/item';
 
 interface ItemEditFormProps {
   item: ItemDetail;
+  /** Every collection the user owns, for the collections picker. */
+  collectionOptions: CollectionOption[];
   /** The drawer's identity block, so both modes show the same one. */
   heading: React.ReactNode;
   /** Handed the saved item, in full. */
@@ -37,7 +41,13 @@ interface ItemEditFormProps {
  * keep the layout they have in view mode while both sit inside one form — which
  * is what lets the header's Save button submit the fields below it.
  */
-export function ItemEditForm({ item, heading, onSaved, onCancel }: ItemEditFormProps) {
+export function ItemEditForm({
+  item,
+  collectionOptions,
+  heading,
+  onSaved,
+  onCancel,
+}: ItemEditFormProps) {
   const fields = editableFieldsFor(item.type.slug);
 
   const [title, setTitle] = useState(item.title);
@@ -46,6 +56,9 @@ export function ItemEditForm({ item, heading, onSaved, onCancel }: ItemEditFormP
   const [language, setLanguage] = useState(item.language ?? '');
   const [url, setUrl] = useState(item.url ?? '');
   const [tags, setTags] = useState(formatTagInput(item.tags));
+  const [collectionIds, setCollectionIds] = useState(() =>
+    item.collections.map((collection) => collection.id),
+  );
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [isPending, startTransition] = useTransition();
@@ -57,7 +70,12 @@ export function ItemEditForm({ item, heading, onSaved, onCancel }: ItemEditFormP
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const payload: UpdateItemInput = { title, description, tags: parseTagInput(tags) };
+    const payload: UpdateItemInput = {
+      title,
+      description,
+      tags: parseTagInput(tags),
+      collectionIds,
+    };
 
     // Only the fields this type actually shows. Sending the rest would clear
     // whatever a previous type-specific edit had put there.
@@ -167,6 +185,15 @@ export function ItemEditForm({ item, heading, onSaved, onCancel }: ItemEditFormP
           placeholder="react, hooks, typescript"
           hint="Separate tags with commas."
           messages={fieldErrors.tags}
+        />
+
+        <CollectionSelect
+          id="item-collections"
+          options={collectionOptions}
+          value={collectionIds}
+          onChange={setCollectionIds}
+          disabled={isPending}
+          messages={fieldErrors.collectionIds}
         />
       </div>
     </form>

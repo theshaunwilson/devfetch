@@ -6,7 +6,7 @@ import { Topbar } from '@/components/dashboard/Topbar';
 import { ItemDrawerProvider } from '@/components/items/ItemDrawerProvider';
 import { Toaster } from '@/components/ui/sonner';
 import { MAIN_CONTENT_ID } from '@/lib/constants';
-import { getSidebarCollections } from '@/lib/db/collections';
+import { getCollectionOptions, getSidebarCollections } from '@/lib/db/collections';
 import { getItemTypes } from '@/lib/db/item-types';
 import { getCurrentUser } from '@/lib/db/user';
 import { isSidebarOpen, SIDEBAR_COOKIE } from '@/lib/sidebar';
@@ -19,9 +19,13 @@ const SIDEBAR_COLLECTION_LIMIT = 5;
  * sidebar reads its types and collections per request.
  */
 export async function AppShell({ children }: { children: React.ReactNode }) {
-  const [itemTypes, collections, user, cookieStore] = await Promise.all([
+  const [itemTypes, collections, collectionOptions, user, cookieStore] = await Promise.all([
     getItemTypes(),
     getSidebarCollections(SIDEBAR_COLLECTION_LIMIT),
+    // The full list, for the item forms' collections picker. The sidebar's own
+    // collections are split into favorites and a capped recent list, so they
+    // cannot stand in for it.
+    getCollectionOptions(),
     getCurrentUser(),
     cookies(),
   ]);
@@ -41,14 +45,19 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex h-svh overflow-hidden">
         <Sidebar itemTypes={itemTypes} collections={collections} user={user} />
         <div className="flex min-w-0 flex-1 flex-col">
-          <Topbar itemTypes={itemTypes} />
+          <Topbar itemTypes={itemTypes} collectionOptions={collectionOptions} />
           {/* `tabIndex={-1}` so focus has somewhere to land when the element
               it would have returned to is gone — see the drawer's
               `onCloseAutoFocus`. */}
           <main id={MAIN_CONTENT_ID} tabIndex={-1} className="flex-1 overflow-y-auto outline-none">
             {/* Wraps the pages rather than each list, so the one drawer serves
-                the dashboard's two lists and the items grid alike. */}
-            <ItemDrawerProvider>{children}</ItemDrawerProvider>
+                the dashboard's two lists and the items grid alike. Its edit
+                form's collection options are handed in rather than fetched by
+                the drawer: it is the same list the top bar's dialog uses, so
+                one query serves both. */}
+            <ItemDrawerProvider collectionOptions={collectionOptions}>
+              {children}
+            </ItemDrawerProvider>
           </main>
         </div>
       </div>
