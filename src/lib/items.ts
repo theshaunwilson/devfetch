@@ -1,4 +1,4 @@
-import { usesFileUpload } from '@/lib/uploads';
+import { isImageUploadType, usesFileList, usesFileUpload } from '@/lib/uploads';
 import type { CreateItemInput } from '@/lib/validation/items';
 
 /**
@@ -202,4 +202,47 @@ export function buildCreateItemPayload(values: NewItemValues): CreateItemInput {
   }
 
   return payload;
+}
+
+/** An item list split into the three shapes a mixed list renders it in. */
+export interface GroupedItems<T> {
+  /** Text-bodied items — snippets, prompts, commands, notes, links. */
+  cards: T[];
+  images: T[];
+  files: T[];
+}
+
+/**
+ * Splits a mixed list of items into the groups a collection page renders as its
+ * own section.
+ *
+ * An uploaded image or file is a different kind of thing from a snippet or a
+ * prompt, and shows a different shape — a thumbnail, or a row with a size and a
+ * download. Interleaving them by date mixes three rhythms in one grid and, since
+ * a full-width file row cannot start mid-row, leaves holes wherever one
+ * interrupts. Grouping keeps each shape in a run of its own.
+ *
+ * Which group a type belongs to is read off `isImageUploadType` and
+ * `usesFileList` rather than a list of its own, so the three groups partition
+ * the types the same way the gallery and the file list already do — a type is
+ * in exactly one, and a custom type falls to `cards` with every other
+ * text-bodied type.
+ *
+ * Order within each group is the order it arrived in, so the caller's sort —
+ * most recently updated first — survives the split.
+ */
+export function groupItemsByShape<T extends { type: { slug: string } }>(
+  items: T[]
+): GroupedItems<T> {
+  const grouped: GroupedItems<T> = { cards: [], images: [], files: [] };
+
+  for (const item of items) {
+    const { slug } = item.type;
+
+    if (isImageUploadType(slug)) grouped.images.push(item);
+    else if (usesFileList(slug)) grouped.files.push(item);
+    else grouped.cards.push(item);
+  }
+
+  return grouped;
 }

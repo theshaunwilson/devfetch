@@ -98,6 +98,21 @@ async function getTypeUsage(
   return usageByCollection;
 }
 
+/** Folds a collection's type usage into the aggregates its card renders. */
+function toDashboardCollection(
+  collection: { id: string; name: string; description: string | null; isFavorite: boolean },
+  usageByCollection: Map<string, TypeUsage[]>
+): DashboardCollection {
+  const entries = usageByCollection.get(collection.id) ?? [];
+
+  return {
+    ...collection,
+    itemCount: entries.reduce((total, entry) => total + entry.count, 0),
+    types: entries.map((entry) => entry.type),
+    accentColor: entries[0]?.type.color ?? null,
+  };
+}
+
 /**
  * Most recently updated collections, with the item count and the item types
  * each one holds.
@@ -124,16 +139,44 @@ export async function getRecentCollections(limit: number): Promise<DashboardColl
     collections.map((collection) => collection.id)
   );
 
-  return collections.map((collection) => {
-    const entries = usageByCollection.get(collection.id) ?? [];
+  return collections.map((collection) => toDashboardCollection(collection, usageByCollection));
+}
 
-    return {
-      ...collection,
-      itemCount: entries.reduce((total, entry) => total + entry.count, 0),
-      types: entries.map((entry) => entry.type),
-      accentColor: entries[0]?.type.color ?? null,
-    };
+/**
+ * Every collection the signed-in user owns, for the `/collections` index.
+ *
+ * Favorites first, then the rest by most recently updated, so the star
+ * `CollectionCard` already draws means something structural in an index rather
+ * than only decorative. Postgres sorts `false` before `true`, so `desc` on the
+ * boolean is what puts favorites at the top.
+ *
+ * Unbounded, like `getCollectionOptions` and the sidebar's favorites: a ceiling
+ * on an index would silently hide some of the user's own collections, which is
+ * the one list where that cannot be right. `getRecentCollections(limit)` stays
+ * as it is — that one is the dashboard's six-card preview of this.
+ */
+export async function getAllCollections(): Promise<DashboardCollection[]> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) return [];
+
+  const collections = await prisma.collection.findMany({
+    where: { userId },
+    orderBy: [{ isFavorite: 'desc' }, { updatedAt: 'desc' }],
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      isFavorite: true,
+    },
   });
+
+  const usageByCollection = await getTypeUsage(
+    userId,
+    collections.map((collection) => collection.id)
+  );
+
+  return collections.map((collection) => toDashboardCollection(collection, usageByCollection));
 }
 
 /**

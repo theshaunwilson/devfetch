@@ -5,6 +5,7 @@ import {
   copyableFieldFor,
   editableFieldsFor,
   formatTagInput,
+  groupItemsByShape,
   initialTypeId,
   parseTagInput,
   requiredFieldsFor,
@@ -376,5 +377,80 @@ describe('buildCreateItemPayload', () => {
     const payload = buildCreateItemPayload({ ...base, tags: 'react, react, hooks,' });
 
     expect(payload.tags).toEqual(['react', 'hooks']);
+  });
+});
+
+describe('groupItemsByShape', () => {
+  const item = (id: string, slug: string) => ({ id, type: { slug } });
+
+  it('puts every text-bodied type in cards', () => {
+    const items = [
+      item('a', 'snippet'),
+      item('b', 'prompt'),
+      item('c', 'command'),
+      item('d', 'note'),
+      item('e', 'link'),
+    ];
+
+    const grouped = groupItemsByShape(items);
+
+    expect(grouped.cards).toEqual(items);
+    expect(grouped.images).toEqual([]);
+    expect(grouped.files).toEqual([]);
+  });
+
+  it('separates images and files from the cards', () => {
+    const grouped = groupItemsByShape([
+      item('a', 'snippet'),
+      item('b', 'image'),
+      item('c', 'file'),
+    ]);
+
+    expect(grouped.cards.map((i) => i.id)).toEqual(['a']);
+    expect(grouped.images.map((i) => i.id)).toEqual(['b']);
+    expect(grouped.files.map((i) => i.id)).toEqual(['c']);
+  });
+
+  it('keeps an image out of the file group and a file out of the image group', () => {
+    const grouped = groupItemsByShape([item('img', 'image'), item('doc', 'file')]);
+
+    expect(grouped.images.map((i) => i.id)).toEqual(['img']);
+    expect(grouped.files.map((i) => i.id)).toEqual(['doc']);
+  });
+
+  it('partitions: every item lands in exactly one group', () => {
+    const slugs = ['snippet', 'prompt', 'command', 'note', 'link', 'image', 'file', 'recipe'];
+    const items = slugs.map((slug, i) => item(String(i), slug));
+
+    const { cards, images, files } = groupItemsByShape(items);
+
+    expect(cards.length + images.length + files.length).toBe(items.length);
+    const ids = [...cards, ...images, ...files].map((i) => i.id).sort();
+    expect(ids).toEqual(items.map((i) => i.id).sort());
+  });
+
+  it('sends a custom type to cards rather than dropping it', () => {
+    const grouped = groupItemsByShape([item('x', 'recipe')]);
+
+    expect(grouped.cards.map((i) => i.id)).toEqual(['x']);
+  });
+
+  it("preserves the caller's order within each group", () => {
+    const grouped = groupItemsByShape([
+      item('s1', 'snippet'),
+      item('f1', 'file'),
+      item('s2', 'snippet'),
+      item('i1', 'image'),
+      item('f2', 'file'),
+      item('s3', 'snippet'),
+    ]);
+
+    expect(grouped.cards.map((i) => i.id)).toEqual(['s1', 's2', 's3']);
+    expect(grouped.files.map((i) => i.id)).toEqual(['f1', 'f2']);
+    expect(grouped.images.map((i) => i.id)).toEqual(['i1']);
+  });
+
+  it('returns three empty groups for no items', () => {
+    expect(groupItemsByShape([])).toEqual({ cards: [], images: [], files: [] });
   });
 });

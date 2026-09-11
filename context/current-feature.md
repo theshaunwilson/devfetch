@@ -1,20 +1,95 @@
-# Current Feature
-
-<!-- Feature Name -->
+# Current Feature: Collections pages
 
 ## Status
 
-<!-- Not Started|In Progress|Completed -->
-
-Not Started
+In Progress
 
 ## Goals
 
-<!-- Goals & requirements -->
+- `/collections` lists every collection the signed-in user owns, using the
+  existing `CollectionCard`
+- `/collections/[id]` shows the items filed in that collection, using the
+  existing item cards
+- The sidebar's "View all collections" reaches `/collections` instead of a 404
+- Every collection card reaches its own `/collections/[id]` page instead of a 404
 
 ## Notes
 
-<!-- Any extra notes -->
+- **Both links already exist in the markup.** `SidebarViewAll` is already
+  rendered with `href="/collections"`, `CollectionCard` already wraps itself in
+  `<Link href={/collections/${id}}>`, and the dashboard's Collections
+  `SectionHeader` already sets `viewAllHref="/collections"`. They have pointed
+  at a 404 since Dashboard UI Phase 2 and Phase 3 built them. So the two linking
+  goals are **verification, not construction** — the work is the two routes, and
+  if either link needs editing something else has gone wrong.
+- **`/collections` needs its own `layout.tsx`.** The app shell lives in
+  `src/app/dashboard/layout.tsx` and `src/app/items/layout.tsx`, each a thin
+  `AppShell` wrapper with its own `force-dynamic` — there is no root shell. A
+  top-level `/collections` without one renders with **no sidebar or top bar**,
+  so clicking "View all collections" would kill the chrome it was clicked from.
+  This is the exact trap the Items List View feature hit and recorded.
+- **`src/proxy.ts` does not match `/collections`.** Its matcher is
+  `['/dashboard/:path*', '/items/:path*', '/profile/:path*']`, so both new routes
+  would be **unauthenticated** until `/collections/:path*` is added.
+- **Neither query exists yet.** `getRecentCollections(limit)` is limited and
+  ordered by `updatedAt`, which is a dashboard list rather than a full index, and
+  nothing reads the items of one collection at all. Both are new work in
+  `src/lib/db/collections.ts`.
+- **The id arrives from the URL**, so the collection lookup must be
+  `findFirst({ where: { id, userId } })` — the ownership-in-the-where rule
+  `getItemDetail`, `updateItem` and `deleteItem` all follow. `findUnique` would
+  accept the id alone and serve another user's collection.
+- **A collection holds a mix of item types, which `/items/[type]` never had to.**
+  That page resolves one slug and picks one layout for the whole grid; a
+  collection can hold snippets, images and files at once, so the card choice has
+  to be made **per item** from `item.type.slug` — `isImageUploadType` and
+  `usesFileList` already take a slug, so the existing helpers cover it. How a
+  mixed grid should look (one grid with three card shapes in it, or grouping) is
+  the open design question of this feature.
+- Items reach collections through the `ItemCollection` join table as of the last
+  feature, so the read starts from the join rather than an `Item.collectionId`
+  column, which no longer exists.
+- `/collections` has no create button in scope here — `NewCollectionDialog`
+  already exists in the top bar, though it is `hidden md:inline-flex`, so
+  collection creation stays desktop-only.
+
+- **Settled at `start`, then reversed on review:** the first build dispatched
+  **per item** in one grid, interleaved by date, with file rows spanning the
+  full width. That was replaced — uploads are a different kind of thing from a
+  snippet or a prompt, so images and files now get **their own labelled sections
+  below the text items**, each using the layout its own `/items/[type]` page
+  uses (a `sm:2 lg:3` gallery, a one-column row list). The grouping rule lives in
+  `groupItemsByShape` in `src/lib/items.ts`, read off `isImageUploadType` and
+  `usesFileList` rather than a list of its own, so the three groups partition the
+  types the same way the gallery and the file list already do.
+- The reversal also removed a real layout fault the interleaved version had:
+  a full-width row cannot start mid-row, so a grid with files in it left holes —
+  measured on a realistic `S S F S S S F S` sequence, where the first row kept
+  two cards and left the third column empty. Grouping makes the question moot.
+- `/collections` orders **favorites first, then `updatedAt` desc**, so the star
+  `CollectionCard` already draws means something structural in an index rather
+  than only decorative.
+- `@@index([collectionId])` on `ItemCollection` already covers the read that
+  starts from a collection — the last feature added it for exactly these counts.
+  No index covers `[userId, isFavorite, updatedAt]` as one composite sort, which
+  is a migration and is not worth one at this scale.
+
+- **Verified with throwaway data, since the seed cannot reach it:** the branch
+  holds zero image items and its one file item is filed nowhere, so the
+  `ImageCard` and `FileRow` branches of the dispatch were unreachable. A
+  disposable collection plus an image, a file and a snippet were created through
+  the real UI, measured, then deleted; the branch and bucket end exactly as
+  found (6 collections, 19 items, 18 filings, 34 tags, 1 R2 object).
+- **Worth knowing, and not a defect in this feature:** an upload that is
+  abandoned before the item is saved leaves its R2 object behind — uploads
+  happen on file selection, not on save. One orphan was produced during testing
+  by a script that failed after the upload step, and was cleaned up by hand.
+  This is the behaviour the File Upload feature already recorded.
+
+- **Worth knowing:** an item (`Devops image`) was created by the user in their
+  own browser partway through this session and is real data, not test residue —
+  it accounts for the branch reading one item, one filing and one tag above the
+  baseline measured at the start.
 
 ## History
 
