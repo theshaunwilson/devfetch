@@ -157,6 +157,8 @@ export interface NewItemValues {
   language: string;
   url: string;
   tags: string;
+  /** The collections ticked in the picker, by id. */
+  collectionIds: string[];
   file: { key: string; fileName: string; fileSize: number } | null;
 }
 
@@ -183,6 +185,10 @@ export function buildCreateItemPayload(values: NewItemValues): CreateItemInput {
     title: values.title,
     description: values.description,
     tags: parseTagInput(values.tags),
+    // Always sent, unlike the type-specific fields: every type can be filed in
+    // collections, so an empty array is an answer ("in none") rather than a
+    // field this form never showed.
+    collectionIds: values.collectionIds,
   };
 
   if (fields.content) payload.content = values.content;

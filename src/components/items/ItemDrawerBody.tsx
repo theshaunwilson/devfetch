@@ -141,12 +141,17 @@ export function ItemDrawerBody({ item, detail, status }: ItemDrawerBodyProps) {
             </section>
           )}
 
-          {(status === 'loading' || detail?.collection) && (
+          {(status === 'loading' || (detail?.collections.length ?? 0) > 0) && (
             <section className="flex flex-col gap-2">
               <SectionLabel icon={FolderOpen}>Collections</SectionLabel>
-              {detail?.collection ? (
-                <div>
-                  <Badge variant="outline">{detail.collection.name}</Badge>
+              {detail ? (
+                // One badge per collection: an item can be filed in several.
+                <div className="flex flex-wrap gap-1.5">
+                  {detail.collections.map((collection) => (
+                    <Badge key={collection.id} variant="outline">
+                      {collection.name}
+                    </Badge>
+                  ))}
                 </div>
               ) : (
                 <Skeleton className="h-5 w-32 rounded-4xl" />

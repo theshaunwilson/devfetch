@@ -14,6 +14,7 @@ import {
 import { ItemDrawer } from '@/components/items/ItemDrawer';
 import { MAIN_CONTENT_ID } from '@/lib/constants';
 import { fetchItemDetail } from '@/lib/item-detail-request';
+import type { CollectionOption } from '@/types/collection';
 import type { DashboardItem, ItemDetail } from '@/types/item';
 
 /** What the drawer knows while its detail request is in flight. */
@@ -56,7 +57,19 @@ export function useItemDrawer(): ItemDrawerContextValue {
  * One drawer for the whole app rather than one per list: the dashboard alone
  * renders two lists, which would otherwise each need their own state.
  */
-export function ItemDrawerProvider({ children }: { children: React.ReactNode }) {
+export function ItemDrawerProvider({
+  children,
+  collectionOptions,
+}: {
+  children: React.ReactNode;
+  /**
+   * Every collection the user owns, for edit mode's picker. A prop rather than
+   * part of the detail request: the same list is already loaded on the server
+   * for the top bar's create dialog, so this costs no second query — and the
+   * picker is populated before the detail request resolves.
+   */
+  collectionOptions: CollectionOption[];
+}) {
   const [open, setOpen] = useState(false);
   // The card's own data, shown immediately so the drawer has a title and type
   // before the request comes back.
@@ -169,6 +182,7 @@ export function ItemDrawerProvider({ children }: { children: React.ReactNode }) 
         }}
         item={item}
         detail={detail}
+        collectionOptions={collectionOptions}
         status={status}
         mode={mode}
         onModeChange={setMode}

@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  COLLECTIONS_MAX_COUNT,
   createItemSchema,
   TAGS_MAX_COUNT,
   TAG_MAX_LENGTH,
@@ -155,6 +156,44 @@ describe('tags', () => {
 
   it('accepts an empty array, which is how every tag is removed', () => {
     expect(updateItemSchema.parse({ title: 'x', tags: [] }).tags).toEqual([]);
+  });
+});
+
+describe('collectionIds', () => {
+  const parse = (collectionIds: string[]) =>
+    updateItemSchema.parse({ title: 'A note', collectionIds });
+
+  it('deduplicates, because [itemId, collectionId] would collide on the second write', () => {
+    expect(parse(['coll_1', 'coll_1']).collectionIds).toEqual(['coll_1']);
+  });
+
+  it('trims each id and drops the blanks', () => {
+    expect(parse(['  coll_1  ', '', '   ']).collectionIds).toEqual(['coll_1']);
+  });
+
+  it('accepts an empty array, which is how an item is taken out of every collection', () => {
+    expect(parse([]).collectionIds).toEqual([]);
+  });
+
+  it('leaves an omitted field undefined, which is what keeps the filings untouched', () => {
+    const result = updateItemSchema.parse({ title: 'A note' });
+
+    expect(result).not.toHaveProperty('collectionIds', []);
+    expect(result.collectionIds).toBeUndefined();
+  });
+
+  it('refuses more collections than one item may be filed in', () => {
+    const tooMany = Array.from({ length: COLLECTIONS_MAX_COUNT + 1 }, (_, i) => `coll_${i}`);
+
+    expect(errorsFor({ title: 'A note', collectionIds: tooMany }).collectionIds).toEqual([
+      `An item can be in at most ${COLLECTIONS_MAX_COUNT} collections`,
+    ]);
+  });
+
+  it('counts the limit after deduplication, as tags do', () => {
+    const atLimit = Array.from({ length: COLLECTIONS_MAX_COUNT }, (_, i) => `coll_${i}`);
+
+    expect(parse([...atLimit, atLimit[0]]).collectionIds).toHaveLength(COLLECTIONS_MAX_COUNT);
   });
 });
 

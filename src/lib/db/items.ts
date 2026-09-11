@@ -143,7 +143,11 @@ const ITEM_DETAIL_SELECT = {
   language: true,
   url: true,
   // The type, every file field and createdAt all come through the spread above.
-  collection: { select: { id: true, name: true } },
+  collections: {
+    select: { collection: { select: { id: true, name: true } } },
+    // Join rows have no natural order, the same reason tags are sorted by name.
+    orderBy: { collection: { name: 'asc' } },
+  },
 } satisfies Prisma.ItemSelect;
 
 type ItemDetailPayload = Prisma.ItemGetPayload<{ select: typeof ITEM_DETAIL_SELECT }>;
@@ -154,7 +158,7 @@ function toItemDetail(item: ItemDetailPayload): ItemDetail {
     content: item.content,
     language: item.language,
     url: item.url,
-    collection: item.collection,
+    collections: item.collections.map((filing) => filing.collection),
   };
 }
 
@@ -243,7 +247,7 @@ export async function createItem(
   if (!userId) return null;
 
   const { typeId, title, description, content, language, url, tags } = data;
-  const { fileUrl, fileName, fileSize } = data;
+  const { fileUrl, fileName, fileSize, collectionIds } = data;
 
   const item = await prisma.item.create({
     data: {
@@ -268,6 +272,12 @@ export async function createItem(
             },
           },
         })),
+      },
+      // Connected by id, not created: a collection has to exist to be filed
+      // into, and the caller has already resolved these against the ones this
+      // user owns — see `getOwnedCollectionIds`.
+      collections: {
+        create: (collectionIds ?? []).map((id) => ({ collection: { connect: { id } } })),
       },
     },
     select: ITEM_DETAIL_SELECT,
@@ -294,7 +304,7 @@ export async function updateItem(id: string, data: UpdateItemData): Promise<Item
 
   if (!userId) return null;
 
-  const { title, description, content, language, url, tags } = data;
+  const { title, description, content, language, url, tags, collectionIds } = data;
 
   // Assigned one at a time rather than spread: `undefined` in a Prisma `data`
   // object is ignored, but an explicit `null` clears the column, and the two
@@ -305,6 +315,17 @@ export async function updateItem(id: string, data: UpdateItemData): Promise<Item
   if (content !== undefined) fields.content = content;
   if (language !== undefined) fields.language = language;
   if (url !== undefined) fields.url = url;
+
+  if (collectionIds) {
+    fields.collections = {
+      // Replaced rather than diffed, exactly like tags: every filing goes, then
+      // the chosen set is connected. An empty array is therefore how an item is
+      // taken out of every collection — which is why `undefined` has to keep
+      // meaning "the form never showed this field, leave it alone".
+      deleteMany: {},
+      create: collectionIds.map((id) => ({ collection: { connect: { id } } })),
+    };
+  }
 
   if (tags) {
     fields.tags = {

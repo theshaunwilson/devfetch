@@ -55,7 +55,7 @@ interface DetailRow {
   fileUrl: string | null;
   fileName: string | null;
   fileSize: number | null;
-  collection: { id: string; name: string } | null;
+  collections: { collection: { id: string; name: string } }[];
 }
 
 // Prisma's `findFirst` is overloaded on its `select`, so `vi.mocked` resolves
@@ -91,7 +91,7 @@ const row = (overrides: Partial<DetailRow> = {}): DetailRow => ({
   fileUrl: null,
   fileName: null,
   fileSize: null,
-  collection: { id: 'coll_1', name: 'React Patterns' },
+  collections: [{ collection: { id: 'coll_1', name: 'React Patterns' } }],
   ...overrides,
 });
 
@@ -100,6 +100,7 @@ interface UpdateArgs {
   where: { id: string; userId: string };
   data: Record<string, unknown> & {
     tags?: { deleteMany: object; create: { tag: { connectOrCreate: { where: object } } }[] };
+    collections?: { deleteMany: object; create: { collection: { connect: { id: string } } }[] };
   };
 }
 
@@ -156,19 +157,38 @@ describe('getItemDetail', () => {
     await expect(getItemDetail(ITEM_ID)).resolves.toMatchObject({
       content: 'export function useDebounce() {}',
       language: 'typescript',
-      collection: { id: 'coll_1', name: 'React Patterns' },
+      collections: [{ id: 'coll_1', name: 'React Patterns' }],
+    });
+  });
+
+  it('flattens every collection join row, not only the first', async () => {
+    findFirst.mockResolvedValue(
+      row({
+        collections: [
+          { collection: { id: 'coll_1', name: 'React Patterns' } },
+          { collection: { id: 'coll_2', name: 'Context Files' } },
+        ],
+      }),
+    );
+
+    await expect(getItemDetail(ITEM_ID)).resolves.toMatchObject({
+      collections: [
+        { id: 'coll_1', name: 'React Patterns' },
+        { id: 'coll_2', name: 'Context Files' },
+      ],
     });
   });
 
   it('keeps the nullable fields null rather than dropping them', async () => {
-    // A Link item: no content, no language, and not filed in a collection.
-    findFirst.mockResolvedValue(row({ content: null, language: null, collection: null }));
+    // A Link item: no content, no language, and filed in no collection at all.
+    findFirst.mockResolvedValue(row({ content: null, language: null, collections: [] }));
 
     const item = await getItemDetail(ITEM_ID);
 
-    expect(item).toMatchObject({ content: null, language: null, collection: null });
-    // The drawer omits a section on null, so the keys must be present to read.
-    expect(item).toHaveProperty('collection', null);
+    expect(item).toMatchObject({ content: null, language: null });
+    // The drawer omits a section on an empty list, so the key must be present
+    // and an array — never undefined — to read.
+    expect(item).toHaveProperty('collections', []);
   });
 });
 
@@ -252,6 +272,31 @@ describe('updateItem', () => {
     expect(updateArgs().data.tags).toEqual({ deleteMany: {}, create: [] });
   });
 
+  it('leaves the filings untouched when no collections were sent', async () => {
+    await updateItem(ITEM_ID, { title: 'New title' });
+
+    // The difference between "the form did not show this" and "in none".
+    expect(updateArgs().data).not.toHaveProperty('collections');
+  });
+
+  it('replaces the whole set of filings, connecting each collection by id', async () => {
+    await updateItem(ITEM_ID, { title: 'New title', collectionIds: ['coll_1', 'coll_2'] });
+
+    const { collections } = updateArgs().data;
+
+    expect(collections?.deleteMany).toEqual({});
+    expect(collections?.create).toEqual([
+      { collection: { connect: { id: 'coll_1' } } },
+      { collection: { connect: { id: 'coll_2' } } },
+    ]);
+  });
+
+  it('unfiles the item from everything when handed an empty array', async () => {
+    await updateItem(ITEM_ID, { title: 'New title', collectionIds: [] });
+
+    expect(updateArgs().data.collections).toEqual({ deleteMany: {}, create: [] });
+  });
+
   it('returns the saved item in the drawer\'s own shape, so no second fetch is needed', async () => {
     const saved = await updateItem(ITEM_ID, { title: 'New title' });
 
@@ -315,6 +360,7 @@ interface CreateArgs {
     user: { connect: { id: string } };
     type: { connect: { id: string } };
     tags: { create: { tag: { connectOrCreate: { where: object; create: object } } }[] };
+    collections: { create: { collection: { connect: { id: string } } }[] };
   };
 }
 
@@ -392,6 +438,26 @@ describe('createItem', () => {
     await createItem({ typeId: 'type_1', title: 'Untagged' }, 'text');
 
     expect(createArgs().data.tags.create).toEqual([]);
+  });
+
+  it('files the item in every collection it was given, by id', async () => {
+    create.mockResolvedValue(row());
+
+    await createItem({ ...data, collectionIds: ['coll_1', 'coll_2'] }, 'text');
+
+    // Connected, never created: a collection has to exist to be filed into.
+    expect(createArgs().data.collections.create).toEqual([
+      { collection: { connect: { id: 'coll_1' } } },
+      { collection: { connect: { id: 'coll_2' } } },
+    ]);
+  });
+
+  it('writes no filings when no collections were sent', async () => {
+    create.mockResolvedValue(row());
+
+    await createItem({ typeId: 'type_1', title: 'Uncollected' }, 'text');
+
+    expect(createArgs().data.collections.create).toEqual([]);
   });
 
   it('serializes both dates, so the dialog gets the same shape a card holds', async () => {

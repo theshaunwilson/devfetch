@@ -14,6 +14,14 @@ export const LANGUAGE_MAX_LENGTH = 50;
 export const URL_MAX_LENGTH = 2048;
 export const TAG_MAX_LENGTH = 50;
 export const TAGS_MAX_COUNT = 20;
+/**
+ * How many collections one item can be filed in. A sanity bound on the payload
+ * rather than a product rule — the ids have to name collections this user
+ * already owns, so the real ceiling is how many they have. Worth knowing that
+ * an account with more than this many collections cannot put a single item in
+ * all of them at once.
+ */
+export const COLLECTIONS_MAX_COUNT = 50;
 /** Ours to mint, so this is a sanity bound rather than a real constraint. */
 export const FILE_KEY_MAX_LENGTH = 512;
 /** Most filesystems stop at 255 bytes, so a longer name did not come from one. */
@@ -85,6 +93,35 @@ export const updateItemSchema = z.object({
         // spend two of the twenty.
         .max(TAGS_MAX_COUNT, `An item can have at most ${TAGS_MAX_COUNT} tags`),
     )
+    .optional(),
+
+  collectionIds: z
+    .array(z.string())
+    .transform((values) => {
+      // Deduplicated before it reaches the database, for the same reason tags
+      // are: the join rows are keyed on [itemId, collectionId], so the same id
+      // twice in one write would collide on the primary key.
+      const seen = new Set<string>();
+
+      return values.reduce<string[]>((ids, value) => {
+        const id = value.trim();
+
+        if (id && !seen.has(id)) {
+          seen.add(id);
+          ids.push(id);
+        }
+
+        return ids;
+      }, []);
+    })
+    .pipe(
+      z
+        .array(z.string())
+        // Counted after deduplication, like tags.
+        .max(COLLECTIONS_MAX_COUNT, `An item can be in at most ${COLLECTIONS_MAX_COUNT} collections`),
+    )
+    // Absent means "leave the item's collections alone", which is what an edit
+    // form that never showed the field sends. An empty array means "in none".
     .optional(),
 });
 

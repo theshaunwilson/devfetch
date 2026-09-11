@@ -4,15 +4,23 @@ import { TopbarBrand } from '@/components/dashboard/TopbarBrand';
 import { TopbarToggle } from '@/components/dashboard/TopbarToggle';
 import { NewItemDialog } from '@/components/items/NewItemDialog';
 import { Input } from '@/components/ui/input';
+import type { CollectionOption } from '@/types/collection';
 import type { SidebarItemType } from '@/types/item';
 
 /**
  * Top bar shell. Search is still display only.
  *
  * The item types come down from `AppShell`, which already loads them for the
- * sidebar, so the dialog costs no query of its own.
+ * sidebar, so the dialog costs no query of its own. The collections it can file
+ * a new item in come the same way.
  */
-export function Topbar({ itemTypes }: { itemTypes: SidebarItemType[] }) {
+export function Topbar({
+  itemTypes,
+  collectionOptions,
+}: {
+  itemTypes: SidebarItemType[];
+  collectionOptions: CollectionOption[];
+}) {
   return (
     <header className="flex h-16 shrink-0 items-center gap-3 border-b px-4">
       <TopbarToggle />
@@ -34,7 +42,7 @@ export function Topbar({ itemTypes }: { itemTypes: SidebarItemType[] }) {
 
       <div className="ml-auto flex shrink-0 items-center gap-2">
         <NewCollectionDialog />
-        <NewItemDialog itemTypes={itemTypes} />
+        <NewItemDialog itemTypes={itemTypes} collectionOptions={collectionOptions} />
       </div>
     </header>
   );

@@ -106,9 +106,8 @@ model Item {
   // Types are never deleted out from under their items
   type   ItemType @relation(fields: [typeId], references: [id], onDelete: Restrict)
 
-  collectionId String?
-  // Deleting a collection keeps its items, they just become uncollected
-  collection   Collection? @relation(fields: [collectionId], references: [id], onDelete: SetNull)
+  // An item can be filed in any number of collections, including none
+  collections ItemCollection[]
 
   tags ItemTag[]
 
@@ -120,7 +119,6 @@ model Item {
   @@index([userId, isPinned])
   @@index([userId, isFavorite])
   @@index([userId, typeId])
-  @@index([collectionId])
   @@index([typeId])
 }
 
@@ -155,7 +153,7 @@ model Collection {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  items Item[]
+  items ItemCollection[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -163,6 +161,25 @@ model Collection {
   @@unique([userId, name])
   @@index([userId, updatedAt(sort: Desc)])
   @@index([userId, isFavorite])
+}
+
+// Items filed in collections. Many-to-many: an item can sit in several
+// collections and a collection holds many items. Shaped like ItemTag, and
+// cascading from both sides — a deleted item leaves no join rows behind, and
+// deleting a collection unfiles its items rather than deleting them.
+model ItemCollection {
+  itemId       String
+  collectionId String
+
+  item       Item       @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([itemId, collectionId])
+  // The item side is covered by the primary key; this is for reads that start
+  // from a collection, which is every dashboard and sidebar count.
+  @@index([collectionId])
 }
 
 model Tag {

@@ -2,12 +2,15 @@
 // which the tsx scripts import, where `server-only` throws.
 import 'server-only';
 
+import { cache } from 'react';
+
 import { Prisma } from '@/generated/prisma/client';
 import { getCurrentUserId } from '@/lib/db/user';
 import { prisma } from '@/lib/prisma';
 import type { CreateCollectionData } from '@/lib/validation/collections';
 import type {
   CollectionItemType,
+  CollectionOption,
   CollectionStats,
   CreateCollectionOutcome,
   DashboardCollection,
@@ -27,12 +30,18 @@ const byUsageDesc = (a: TypeUsage, b: TypeUsage) =>
 /**
  * Item types used by each of the given collections, most used first.
  *
- * Counting per (collection, type) in the database keeps the item rows out of
- * the response — callers only need totals and the type mix.
+ * Counted in memory rather than by the database, which is a step back from the
+ * `item.groupBy({ by: ['collectionId', 'typeId'] })` this was before items
+ * became a many-to-many relation: `collectionId` no longer lives on Item, and
+ * Prisma cannot group by a field it reaches through a relation. The
+ * alternatives were one `groupBy` per collection or raw SQL, and this keeps
+ * both the query count and the module's SQL-free-ness. What comes back is one
+ * row per filing for the collections asked about, and nothing else — no item
+ * bodies, only each item's `typeId`.
  *
  * Scoped to `userId` like every other query here: the ids come from a
  * user-scoped lookup today, but the filter keeps that true if a caller ever
- * passes an id from a request, and it matches the `userId` indexes on Item.
+ * passes an id from a request.
  */
 async function getTypeUsage(
   userId: string,
@@ -42,32 +51,48 @@ async function getTypeUsage(
 
   if (collectionIds.length === 0) return usageByCollection;
 
-  const usage = await prisma.item.groupBy({
-    by: ['collectionId', 'typeId'],
-    where: { userId, collectionId: { in: collectionIds } },
-    _count: { _all: true },
+  const filings = await prisma.itemCollection.findMany({
+    // Ownership is asserted through the item, which is where `userId` lives.
+    where: { collectionId: { in: collectionIds }, item: { userId } },
+    select: { collectionId: true, item: { select: { typeId: true } } },
   });
 
+  // Counted per (collection, type) here instead of in the database.
+  const countsByCollection = new Map<string, Map<string, number>>();
+
+  for (const filing of filings) {
+    const counts = countsByCollection.get(filing.collectionId) ?? new Map<string, number>();
+
+    counts.set(filing.item.typeId, (counts.get(filing.item.typeId) ?? 0) + 1);
+    countsByCollection.set(filing.collectionId, counts);
+  }
+
+  const typeIds = new Set<string>();
+
+  for (const counts of countsByCollection.values()) {
+    for (const typeId of counts.keys()) typeIds.add(typeId);
+  }
+
+  if (typeIds.size === 0) return usageByCollection;
+
   const types = await prisma.itemType.findMany({
-    where: { id: { in: [...new Set(usage.map((row) => row.typeId))] } },
+    where: { id: { in: [...typeIds] } },
     select: { id: true, name: true, icon: true, color: true },
   });
 
   const typeById = new Map(types.map((type) => [type.id, type]));
 
-  for (const row of usage) {
-    const type = typeById.get(row.typeId);
+  for (const [collectionId, counts] of countsByCollection) {
+    const entries: TypeUsage[] = [];
 
-    // collectionId is nullable on Item; the where clause already excludes nulls.
-    if (!row.collectionId || !type) continue;
+    for (const [typeId, count] of counts) {
+      const type = typeById.get(typeId);
 
-    const entries = usageByCollection.get(row.collectionId) ?? [];
-    entries.push({ type, count: row._count._all });
-    usageByCollection.set(row.collectionId, entries);
-  }
+      if (type) entries.push({ type, count });
+    }
 
-  for (const entries of usageByCollection.values()) {
     entries.sort(byUsageDesc);
+    usageByCollection.set(collectionId, entries);
   }
 
   return usageByCollection;
@@ -156,6 +181,55 @@ export async function getSidebarCollections(recentLimit: number): Promise<Sideba
     favorites: favorites.map(toSidebarCollection),
     recent: recent.map(toSidebarCollection),
   };
+}
+
+/**
+ * Every collection the signed-in user owns, for the item forms' picker.
+ *
+ * `cache()`d because two callers ask per request: `AppShell`, for the top bar's
+ * create dialog and the drawer's edit form, and `/items/[type]`, which renders
+ * its own create button. Without it both would issue the same query, the way
+ * `getItemTypes` would have.
+ *
+ * Ordered by name rather than by `updatedAt` like the dashboard lists: this is a
+ * list to find a known collection in, not a list of what happened recently.
+ * Unbounded, as the sidebar's favorites already are — a ceiling here would
+ * silently make some of the user's own collections unpickable.
+ */
+export const getCollectionOptions = cache(async (): Promise<CollectionOption[]> => {
+  const userId = await getCurrentUserId();
+
+  if (!userId) return [];
+
+  return prisma.collection.findMany({
+    where: { userId },
+    orderBy: { name: 'asc' },
+    select: { id: true, name: true },
+  });
+});
+
+/**
+ * Which of the given collection ids the signed-in user actually owns.
+ *
+ * The ids arrive from the client, so this is the check that stops an item being
+ * filed into somebody else's collection — the same job `getItemTypeById` does
+ * for `typeId`. It returns what it found rather than a boolean, so a caller can
+ * tell the difference between "all of these are yours" and "one of these is
+ * not" and report the second as a field error instead of silently dropping it.
+ */
+export async function getOwnedCollectionIds(ids: string[]): Promise<string[]> {
+  if (ids.length === 0) return [];
+
+  const userId = await getCurrentUserId();
+
+  if (!userId) return [];
+
+  const collections = await prisma.collection.findMany({
+    where: { userId, id: { in: ids } },
+    select: { id: true },
+  });
+
+  return collections.map((collection) => collection.id);
 }
 
 /** Collection counts for the dashboard stat tiles. */

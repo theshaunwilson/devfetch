@@ -69,7 +69,7 @@ export interface ItemsByType {
   items: DashboardItem[];
 }
 
-/** Collection an item belongs to, drawn as a badge in the detail drawer. */
+/** Collection an item is filed in, drawn as a badge in the detail drawer. */
 export interface ItemDetailCollection {
   id: string;
   name: string;
@@ -83,8 +83,14 @@ export interface ItemDetail extends DashboardItem {
   content: string | null;
   language: string | null;
   url: string | null;
-  /** `type`, `fileUrl`, `fileName`, `fileSize` and `createdAt` are inherited. */
-  collection: ItemDetailCollection | null;
+  /**
+   * Every collection this item is filed in, by name. An array rather than one
+   * nullable collection: an item can sit in several, or in none, so the empty
+   * array is what "uncollected" looks like.
+   *
+   * `type`, `fileUrl`, `fileName`, `fileSize` and `createdAt` are inherited.
+   */
+  collections: ItemDetailCollection[];
 }
 
 /** What `GET /api/items/[id]` returns. Shared by the route and the drawer. */

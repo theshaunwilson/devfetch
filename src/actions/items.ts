@@ -3,6 +3,7 @@
 import { z } from 'zod';
 
 import { auth } from '@/auth';
+import { getOwnedCollectionIds } from '@/lib/db/collections';
 import { getItemTypeById } from '@/lib/db/item-types';
 import {
   createItem as createItemRow,
@@ -17,12 +18,42 @@ import type { CreateItemInput, UpdateItemInput } from '@/lib/validation/items';
 import type { CreateItemResult, DeleteItemResult, UpdateItemResult } from '@/types/item';
 
 /**
+ * Narrows the collection ids a caller sent to the ones they actually own.
+ *
+ * The ids arrive from the client, so this is what stops an item being filed into
+ * somebody else's collection — the same job `getItemTypeById` does for `typeId`,
+ * and the reason the resolved ids are what gets written rather than the ones
+ * that arrived.
+ *
+ * A missing id is reported rather than dropped: the caller asked for a filing
+ * that did not happen, and an item quietly appearing in fewer collections than
+ * were ticked is worse than being told. Unknown and not-yours read the same way,
+ * as everywhere else.
+ *
+ * `undefined` passes straight through, because it means "the form never showed
+ * this field" — which `updateItem` reads as "leave the filings alone".
+ */
+async function resolveCollectionIds(
+  ids: string[] | undefined,
+): Promise<{ ok: true; ids: string[] | undefined } | { ok: false }> {
+  if (!ids) return { ok: true, ids: undefined };
+
+  const owned = await getOwnedCollectionIds(ids);
+
+  // Deduplicated by the schema already, so a count match means a set match.
+  if (owned.length !== ids.length) return { ok: false };
+
+  return { ok: true, ids: owned };
+}
+
+/**
  * Creates one item for the signed-in user and returns it in full.
  *
- * Two things arriving from the client are not trusted with anything until they
- * have been checked. The owner is never among them — it comes from the session
- * — and the type id is resolved against the types this user can actually see,
- * so an item cannot be filed under somebody else's custom type.
+ * Nothing arriving from the client is trusted with anything until it has been
+ * checked. The owner is never among it — that comes from the session — the type
+ * id is resolved against the types this user can actually see, so an item cannot
+ * be filed under somebody else's custom type, and the collection ids are
+ * resolved the same way, so it cannot be filed into somebody else's collection.
  *
  * The type-specific requirement is applied here rather than in the schema,
  * because it depends on the resolved type's slug: a link item is nothing
@@ -96,12 +127,22 @@ export async function createItem(data: CreateItemInput): Promise<CreateItemResul
       }
     }
 
-    // The resolved id rather than the one that arrived, so what is written is
-    // what was checked. `contentType` is decided here from the resolved slug
-    // rather than taken from the payload, so a text item cannot claim to be a
-    // file — or the other way round.
+    const collections = await resolveCollectionIds(parsed.data.collectionIds);
+
+    if (!collections.ok) {
+      return {
+        success: false,
+        error: 'Check the highlighted fields and try again.',
+        fieldErrors: { collectionIds: ['Pick collections from your own list'] },
+      };
+    }
+
+    // The resolved ids rather than the ones that arrived, so what is written is
+    // what was checked — for the type and the collections alike. `contentType`
+    // is decided here from the resolved slug rather than taken from the payload,
+    // so a text item cannot claim to be a file — or the other way round.
     const item = await createItemRow(
-      { ...parsed.data, typeId: type.id },
+      { ...parsed.data, typeId: type.id, collectionIds: collections.ids },
       required.file ? 'file' : 'text',
     );
 
@@ -145,7 +186,17 @@ export async function updateItem(itemId: string, data: UpdateItemInput): Promise
   }
 
   try {
-    const item = await updateItemRow(itemId, parsed.data);
+    const collections = await resolveCollectionIds(parsed.data.collectionIds);
+
+    if (!collections.ok) {
+      return {
+        success: false,
+        error: 'Check the highlighted fields and try again.',
+        fieldErrors: { collectionIds: ['Pick collections from your own list'] },
+      };
+    }
+
+    const item = await updateItemRow(itemId, { ...parsed.data, collectionIds: collections.ids });
 
     if (!item) {
       // Somebody else's item reads exactly like one that does not exist.

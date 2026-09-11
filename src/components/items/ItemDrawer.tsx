@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { capitalize } from '@/lib/format';
 import { getIcon } from '@/lib/icons';
 import type { ItemDetailStatus, ItemDrawerMode } from '@/components/items/ItemDrawerProvider';
+import type { CollectionOption } from '@/types/collection';
 import type { DashboardItem, ItemDetail } from '@/types/item';
 
 interface ItemDrawerProps {
@@ -20,6 +21,8 @@ interface ItemDrawerProps {
   item: DashboardItem | null;
   /** The full item, once the request comes back. */
   detail: ItemDetail | null;
+  /** Every collection the user owns, for edit mode's picker. */
+  collectionOptions: CollectionOption[];
   status: ItemDetailStatus;
   mode: ItemDrawerMode;
   onModeChange: (mode: ItemDrawerMode) => void;
@@ -46,6 +49,7 @@ export function ItemDrawer({
   onCloseAutoFocus,
   item,
   detail,
+  collectionOptions,
   status,
   mode,
   onModeChange,
@@ -94,6 +98,7 @@ export function ItemDrawer({
               // rather than keeping what was typed against the previous one.
               key={detail.id}
               item={detail}
+              collectionOptions={collectionOptions}
               heading={heading}
               onSaved={onSaved}
               onCancel={() => onModeChange('view')}

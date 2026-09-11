@@ -14,6 +14,7 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     collection: { create: vi.fn(), findMany: vi.fn(), count: vi.fn() },
     item: { groupBy: vi.fn() },
+    itemCollection: { findMany: vi.fn() },
     itemType: { findMany: vi.fn() },
   },
 }));
@@ -22,7 +23,8 @@ vi.mock('@/lib/db/user', () => ({ getCurrentUserId: vi.fn() }));
 
 const { prisma } = await import('@/lib/prisma');
 const { getCurrentUserId } = await import('@/lib/db/user');
-const { createCollection } = await import('./collections');
+const { createCollection, getCollectionOptions, getOwnedCollectionIds, getRecentCollections } =
+  await import('./collections');
 const { Prisma } = await import('@/generated/prisma/client');
 
 const currentUser = vi.mocked(getCurrentUserId);
@@ -40,6 +42,17 @@ interface CollectionRow {
 // which `tsc` catches and the green suite does not.
 const create = prisma.collection.create as unknown as Mock<
   (args: unknown) => Promise<CollectionRow>
+>;
+const findCollections = prisma.collection.findMany as unknown as Mock<
+  (args: unknown) => Promise<{ id: string; name: string }[]>
+>;
+const findFilings = prisma.itemCollection.findMany as unknown as Mock<
+  (args: unknown) => Promise<{ collectionId: string; item: { typeId: string } }[]>
+>;
+const findTypes = prisma.itemType.findMany as unknown as Mock<
+  (args: unknown) => Promise<
+    { id: string; name: string; icon: string | null; color: string | null }[]
+  >
 >;
 
 const USER_ID = 'user_1';
@@ -137,5 +150,147 @@ describe('createCollection', () => {
     create.mockRejectedValue(new Error('connection lost'));
 
     await expect(createCollection({ name: 'React Patterns' })).rejects.toThrow('connection lost');
+  });
+});
+
+/**
+ * The picker in both item forms is populated from this, and the ids it hands
+ * back are resolved through `getOwnedCollectionIds` before anything is written
+ * — which is the check that stops an item being filed into somebody else's
+ * collection.
+ */
+describe('getCollectionOptions', () => {
+  it('returns only the signed-in user’s own collections', async () => {
+    findCollections.mockResolvedValue([{ id: 'coll_1', name: 'React Patterns' }]);
+
+    await expect(getCollectionOptions()).resolves.toEqual([
+      { id: 'coll_1', name: 'React Patterns' },
+    ]);
+    expect(findCollections).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: USER_ID } }),
+    );
+  });
+
+  it('orders them by name, since this is a list to find a known one in', async () => {
+    findCollections.mockResolvedValue([]);
+
+    await getCollectionOptions();
+
+    expect(findCollections).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: { name: 'asc' } }),
+    );
+  });
+
+  it('returns nothing without querying when nobody is signed in', async () => {
+    currentUser.mockResolvedValue(null);
+
+    await expect(getCollectionOptions()).resolves.toEqual([]);
+    expect(findCollections).not.toHaveBeenCalled();
+  });
+});
+
+describe('getOwnedCollectionIds', () => {
+  it('scopes the lookup to the signed-in user, not the ids alone', async () => {
+    findCollections.mockResolvedValue([{ id: 'coll_1', name: 'React Patterns' }]);
+
+    await getOwnedCollectionIds(['coll_1', 'someone_elses']);
+
+    expect(findCollections).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: USER_ID, id: { in: ['coll_1', 'someone_elses'] } },
+      }),
+    );
+  });
+
+  it('returns only the ids that came back, so a caller can spot a missing one', async () => {
+    findCollections.mockResolvedValue([{ id: 'coll_1', name: 'React Patterns' }]);
+
+    await expect(getOwnedCollectionIds(['coll_1', 'someone_elses'])).resolves.toEqual(['coll_1']);
+  });
+
+  it('asks nothing when handed nothing', async () => {
+    await expect(getOwnedCollectionIds([])).resolves.toEqual([]);
+    expect(findCollections).not.toHaveBeenCalled();
+  });
+
+  it('returns nothing without querying when nobody is signed in', async () => {
+    currentUser.mockResolvedValue(null);
+
+    await expect(getOwnedCollectionIds(['coll_1'])).resolves.toEqual([]);
+    expect(findCollections).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The per-collection counts and type mix behind the dashboard grid and the
+ * sidebar. Items became a many-to-many relation, so the aggregation that was a
+ * database `groupBy` is now done here in JS — which is exactly why it is worth
+ * a test rather than trusted to Postgres.
+ */
+describe('getRecentCollections', () => {
+  const TYPES = [
+    { id: 'type_1', name: 'snippet', icon: 'Code', color: '#3b82f6' },
+    { id: 'type_2', name: 'note', icon: 'StickyNote', color: '#fde047' },
+    { id: 'type_3', name: 'command', icon: 'Terminal', color: '#f97316' },
+  ];
+
+  beforeEach(() => {
+    findCollections.mockResolvedValue([{ id: 'coll_1', name: 'React Patterns' }]);
+    findTypes.mockResolvedValue(TYPES);
+  });
+
+  it('counts the filings per collection rather than reading item rows', async () => {
+    findFilings.mockResolvedValue([
+      { collectionId: 'coll_1', item: { typeId: 'type_1' } },
+      { collectionId: 'coll_1', item: { typeId: 'type_1' } },
+      { collectionId: 'coll_1', item: { typeId: 'type_2' } },
+    ]);
+
+    const [collection] = await getRecentCollections(6);
+
+    expect(collection.itemCount).toBe(3);
+    // Most used type first: two snippets beat one note.
+    expect(collection.types.map((type) => type.name)).toEqual(['snippet', 'note']);
+    // And the border colour follows the most used type.
+    expect(collection.accentColor).toBe('#3b82f6');
+  });
+
+  it('breaks a tie alphabetically, so the icon order does not wander', async () => {
+    findFilings.mockResolvedValue([
+      { collectionId: 'coll_1', item: { typeId: 'type_1' } },
+      { collectionId: 'coll_1', item: { typeId: 'type_3' } },
+    ]);
+
+    const [collection] = await getRecentCollections(6);
+
+    expect(collection.types.map((type) => type.name)).toEqual(['command', 'snippet']);
+  });
+
+  it('asserts ownership through the item, which is where userId lives', async () => {
+    findFilings.mockResolvedValue([]);
+
+    await getRecentCollections(6);
+
+    expect(findFilings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { collectionId: { in: ['coll_1'] }, item: { userId: USER_ID } },
+      }),
+    );
+  });
+
+  it('reports an empty collection as empty, without looking up any type', async () => {
+    findFilings.mockResolvedValue([]);
+
+    const [collection] = await getRecentCollections(6);
+
+    expect(collection).toMatchObject({ itemCount: 0, types: [], accentColor: null });
+    expect(findTypes).not.toHaveBeenCalled();
+  });
+
+  it('skips the aggregation entirely when the user has no collections', async () => {
+    findCollections.mockResolvedValue([]);
+
+    await expect(getRecentCollections(6)).resolves.toEqual([]);
+    expect(findFilings).not.toHaveBeenCalled();
   });
 });
