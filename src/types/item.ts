@@ -69,6 +69,25 @@ export interface ItemsByType {
   items: DashboardItem[];
 }
 
+/**
+ * One collection together with the current user's items filed in it.
+ *
+ * The collection half is `DashboardCollection` minus the aggregates a card
+ * needs: `/collections/[id]` renders the items themselves, so the item count
+ * it shows is `items.length` and the type mix is visible in the grid — running
+ * `getTypeUsage` for it would re-derive from the join rows what the page is
+ * already holding in full.
+ */
+export interface ItemsByCollection {
+  collection: {
+    id: string;
+    name: string;
+    description: string | null;
+    isFavorite: boolean;
+  };
+  items: DashboardItem[];
+}
+
 /** Collection an item is filed in, drawn as a badge in the detail drawer. */
 export interface ItemDetailCollection {
   id: string;

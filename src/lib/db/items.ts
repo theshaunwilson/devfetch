@@ -15,6 +15,7 @@ import type {
   ItemContentType,
   ItemDetail,
   ItemFile,
+  ItemsByCollection,
   ItemsByType,
   ItemStats,
 } from '@/types/item';
@@ -135,6 +136,51 @@ export const getItemsByTypeSlug = cache(async (slug: string): Promise<ItemsByTyp
 
   return { type, items: items.map(toDashboardItem) };
 });
+
+/**
+ * One collection resolved from its id, with the current user's items filed in
+ * it, most recently updated first.
+ *
+ * Lives here rather than in `collections.ts` for the reason `getItemsByTypeSlug`
+ * does: it resolves a parent entity and then returns items, which needs the
+ * module-private `ITEM_SELECT` and `toDashboardItem`. Exporting those into the
+ * collections module would leak an item's row shape into it.
+ *
+ * The id arrives from the URL, so the lookup is `findFirst` on `{ id, userId }`
+ * rather than `findUnique` on the id alone — the ownership-in-the-where rule
+ * `getItemDetail`, `updateItem` and `deleteItem` all follow. Null therefore
+ * means "no such collection of yours", so somebody else's id reads exactly like
+ * one that never existed, and the caller can 404 both the same way.
+ *
+ * Items are read through the join rather than a column: `Item.collectionId` is
+ * gone as of the many-to-many. The filter asserts ownership on both sides —
+ * the collection is already known to be the user's, and `item: { userId }`
+ * keeps that true of every row that comes back.
+ *
+ * Cached, because the page and its `generateMetadata` both ask for it.
+ */
+export const getItemsByCollectionId = cache(
+  async (id: string): Promise<ItemsByCollection | null> => {
+    const userId = await getCurrentUserId();
+
+    if (!userId) return null;
+
+    const collection = await prisma.collection.findFirst({
+      where: { id, userId },
+      select: { id: true, name: true, description: true, isFavorite: true },
+    });
+
+    if (!collection) return null;
+
+    const filings = await prisma.itemCollection.findMany({
+      where: { collectionId: collection.id, item: { userId } },
+      orderBy: { item: { updatedAt: 'desc' } },
+      select: { item: { select: ITEM_SELECT } },
+    });
+
+    return { collection, items: filings.map((filing) => toDashboardItem(filing.item)) };
+  }
+);
 
 /** Everything the detail drawer renders on top of what a card already holds. */
 const ITEM_DETAIL_SELECT = {
