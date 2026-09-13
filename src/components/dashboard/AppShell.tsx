@@ -8,7 +8,9 @@ import { Toaster } from '@/components/ui/sonner';
 import { MAIN_CONTENT_ID } from '@/lib/constants';
 import { getCollectionOptions, getSidebarCollections } from '@/lib/db/collections';
 import { getItemTypes } from '@/lib/db/item-types';
+import { getSearchItems } from '@/lib/db/items';
 import { getCurrentUser } from '@/lib/db/user';
+import { SEARCH_ITEM_LIMIT } from '@/lib/search';
 import { isSidebarOpen, SIDEBAR_COOKIE } from '@/lib/sidebar';
 
 const SIDEBAR_COLLECTION_LIMIT = 5;
@@ -19,16 +21,20 @@ const SIDEBAR_COLLECTION_LIMIT = 5;
  * sidebar reads its types and collections per request.
  */
 export async function AppShell({ children }: { children: React.ReactNode }) {
-  const [itemTypes, collections, collectionOptions, user, cookieStore] = await Promise.all([
-    getItemTypes(),
-    getSidebarCollections(SIDEBAR_COLLECTION_LIMIT),
-    // The full list, for the item forms' collections picker. The sidebar's own
-    // collections are split into favorites and a capped recent list, so they
-    // cannot stand in for it.
-    getCollectionOptions(),
-    getCurrentUser(),
-    cookies(),
-  ]);
+  const [itemTypes, collections, collectionOptions, searchItems, user, cookieStore] =
+    await Promise.all([
+      getItemTypes(),
+      getSidebarCollections(SIDEBAR_COLLECTION_LIMIT),
+      // The full list, for the item forms' collections picker and the command
+      // palette. The sidebar's own collections are split into favorites and a
+      // capped recent list, so they cannot stand in for it.
+      getCollectionOptions(),
+      // The palette searches on the client, so its index is pre-fetched here
+      // rather than queried per keystroke.
+      getSearchItems(SEARCH_ITEM_LIMIT),
+      getCurrentUser(),
+      cookies(),
+    ]);
 
   // Read on the server so the first paint already has the right width. The
   // two sections mount their own AppShell, so this is also what carries the
@@ -42,25 +48,34 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
           pages report themselves with inline banners. */}
       <Toaster position="bottom-right" />
 
-      <div className="flex h-svh overflow-hidden">
-        <Sidebar itemTypes={itemTypes} collections={collections} user={user} />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <Topbar itemTypes={itemTypes} collectionOptions={collectionOptions} />
-          {/* `tabIndex={-1}` so focus has somewhere to land when the element
-              it would have returned to is gone — see the drawer's
-              `onCloseAutoFocus`. */}
-          <main id={MAIN_CONTENT_ID} tabIndex={-1} className="flex-1 overflow-y-auto outline-none">
-            {/* Wraps the pages rather than each list, so the one drawer serves
-                the dashboard's two lists and the items grid alike. Its edit
-                form's collection options are handed in rather than fetched by
-                the drawer: it is the same list the top bar's dialog uses, so
-                one query serves both. */}
-            <ItemDrawerProvider collectionOptions={collectionOptions}>
+      {/* Wraps the whole shell rather than each list, so the one drawer serves
+          the dashboard's two lists, the items grid and the command palette in
+          the top bar alike — the palette opens an item the same way a card
+          does, so it has to sit under this. Its edit form's collection options
+          are handed in rather than fetched by the drawer: it is the same list
+          the top bar's dialog uses, so one query serves both. */}
+      <ItemDrawerProvider collectionOptions={collectionOptions}>
+        <div className="flex h-svh overflow-hidden">
+          <Sidebar itemTypes={itemTypes} collections={collections} user={user} />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <Topbar
+              itemTypes={itemTypes}
+              collectionOptions={collectionOptions}
+              searchItems={searchItems}
+            />
+            {/* `tabIndex={-1}` so focus has somewhere to land when the element
+                it would have returned to is gone — see the drawer's
+                `onCloseAutoFocus`. */}
+            <main
+              id={MAIN_CONTENT_ID}
+              tabIndex={-1}
+              className="flex-1 overflow-y-auto outline-none"
+            >
               {children}
-            </ItemDrawerProvider>
-          </main>
+            </main>
+          </div>
         </div>
-      </div>
+      </ItemDrawerProvider>
     </SidebarProvider>
   );
 }

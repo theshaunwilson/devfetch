@@ -231,12 +231,18 @@ export async function getSidebarCollections(recentLimit: number): Promise<Sideba
 }
 
 /**
- * Every collection the signed-in user owns, for the item forms' picker.
+ * Every collection the signed-in user owns, for the item forms' picker and the
+ * command palette's Collections group.
  *
- * `cache()`d because two callers ask per request: `AppShell`, for the top bar's
- * create dialog and the drawer's edit form, and `/items/[type]`, which renders
- * its own create button. Without it both would issue the same query, the way
- * `getItemTypes` would have.
+ * `cache()`d because several callers ask per request: `AppShell`, for the top
+ * bar's create dialog, the drawer's edit form and the palette, and
+ * `/items/[type]`, which renders its own create button. Without it each would
+ * issue the same query, the way `getItemTypes` would have.
+ *
+ * The count is a `_count` on the join rows, which the palette shows beside the
+ * name; the picker ignores it. One widened query rather than a second read of
+ * the same rows — and it keeps the two lists from drifting apart, since a
+ * collection the picker offers is exactly one the palette can find.
  *
  * Ordered by name rather than by `updatedAt` like the dashboard lists: this is a
  * list to find a known collection in, not a list of what happened recently.
@@ -248,11 +254,17 @@ export const getCollectionOptions = cache(async (): Promise<CollectionOption[]> 
 
   if (!userId) return [];
 
-  return prisma.collection.findMany({
+  const collections = await prisma.collection.findMany({
     where: { userId },
     orderBy: { name: 'asc' },
-    select: { id: true, name: true },
+    select: { id: true, name: true, _count: { select: { items: true } } },
   });
+
+  return collections.map((collection) => ({
+    id: collection.id,
+    name: collection.name,
+    itemCount: collection._count.items,
+  }));
 });
 
 /**

@@ -7,6 +7,7 @@ import { cache } from 'react';
 import { visibleItemTypeFilter } from '@/lib/db/item-types';
 import { getCurrentUserId } from '@/lib/db/user';
 import { prisma } from '@/lib/prisma';
+import { SEARCH_PREVIEW_LENGTH } from '@/lib/search';
 import type { CreateItemData, UpdateItemData } from '@/lib/validation/items';
 import { Prisma } from '@/generated/prisma/client';
 import type {
@@ -19,6 +20,7 @@ import type {
   ItemsByType,
   ItemStats,
 } from '@/types/item';
+import type { SearchItem } from '@/types/search';
 
 /** Everything an item row renders: type for the icon and border, plus tags. */
 const ITEM_SELECT = {
@@ -181,6 +183,52 @@ export const getItemsByCollectionId = cache(
     return { collection, items: filings.map((filing) => toDashboardItem(filing.item)) };
   }
 );
+
+/**
+ * Every item the command palette searches, most recently updated first.
+ *
+ * Two queries rather than one, because of `content`. It holds up to 100,000
+ * characters and `ITEM_SELECT` deliberately omits it, so selecting it here
+ * would pull every body out of Postgres in full on every shell render —
+ * Prisma cannot truncate in a `select`, so the preview is taken with `LEFT()`
+ * in raw SQL and merged in by id.
+ *
+ * The second query is filtered by the ids the first returned rather than
+ * repeating the `ORDER BY`/`LIMIT`: run independently the two could disagree
+ * about which items tie at the same `updatedAt`, and an item would silently
+ * lose its preview. It still filters on `userId` as well, so the raw statement
+ * carries the ownership predicate itself rather than trusting the ids handed
+ * to it.
+ */
+export async function getSearchItems(limit: number): Promise<SearchItem[]> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) return [];
+
+  const items = await prisma.item.findMany({
+    where: { userId },
+    orderBy: { updatedAt: 'desc' },
+    take: limit,
+    select: ITEM_SELECT,
+  });
+
+  if (items.length === 0) return [];
+
+  const previews = await prisma.$queryRaw<{ id: string; preview: string | null }[]>`
+    SELECT "id", LEFT("content", ${SEARCH_PREVIEW_LENGTH}::int) AS "preview"
+    FROM "Item"
+    WHERE "userId" = ${userId}
+      AND "content" IS NOT NULL
+      AND "id" IN (${Prisma.join(items.map((item) => item.id))})
+  `;
+
+  const previewById = new Map(previews.map((row) => [row.id, row.preview]));
+
+  return items.map((item) => ({
+    ...toDashboardItem(item),
+    contentPreview: previewById.get(item.id) ?? null,
+  }));
+}
 
 /** Everything the detail drawer renders on top of what a card already holds. */
 const ITEM_DETAIL_SELECT = {
