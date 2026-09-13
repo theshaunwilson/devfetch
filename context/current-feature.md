@@ -1,21 +1,141 @@
-# Current Feature
-
-<!-- Feature Name -->
+# Current Feature: Collection Actions (Edit, Delete, Favorite)
 
 ## Status
 
-<!-- Not Started|In Progress|Completed -->
-
-Not Started
+In Progress
 
 ## Goals
 
-<!-- Goals & requirements -->
+- On `/collections/[id]`, add an action row with Edit, Delete and Favorite buttons.
+- Edit opens a modal that edits the collection's metadata (name, description) and
+  saves through a Zod-validated `updateCollection` server action.
+- Delete asks for confirmation first, then deletes the collection and sends the
+  user back to `/collections`.
+- **Deleting a collection must not delete its items.** They stop being filed in
+  that collection and nothing else about them changes.
+- Favorite renders as an icon/button only — no mutation, no `isFavorite` write.
+  It is deliberately inert this round.
+- On the collection cards at `/collections` and on the dashboard, a "3 dots"
+  (`MoreHorizontal`) trigger opens a dropdown with Edit, Delete and Favorite —
+  the same three actions, behaving the same way.
+- Clicking anywhere else on a card still navigates to that collection's page.
 
 ## Notes
 
-<!-- Any extra notes -->
+### What already exists, and what does not
 
+- **The cards have no "3 dots" icon yet.** Dashboard UI Phase 3 deliberately
+  left it out "until collection actions exist", so this is new UI, not a wiring
+  job. `CollectionCard` (`src/components/dashboard/CollectionCard.tsx`) is shared
+  by the dashboard grid and `/collections`, so one change covers both.
+- `/collections/[id]` has no action row at all — the header is a title, a count
+  and a description.
+- `src/actions/collections.ts` holds `createCollection` only; `src/lib/db/collections.ts`
+  has one write (`createCollection`) and seven reads. Both an update and a delete
+  are new, in both layers.
+- `dropdown-menu`, `dialog`, `alert-dialog` and `sonner` are all already in
+  `src/components/ui/`, so **no `shadcn add` is needed** — which also avoids the
+  third-party `cn` package both earlier `shadcn add` runs pulled in.
+
+### The card is currently a `Link` wrapper, and that has to change
+
+`CollectionCard` wraps the whole `Card` in a `<Link>`. A dropdown trigger
+`<button>` inside an anchor is invalid markup (interactive content cannot nest),
+and a click on it would also follow the link. The codebase already has the
+answer: `OpenItemButton` is an `absolute inset-0 z-10` overlay rather than a
+wrapper, with action controls sitting above it at `relative z-20` — the mechanic
+`FileRow`'s Download button and `CopyItemButton` both use. So the card becomes a
+`Card` with an overlay `Link` plus the menu at `z-20`, which is exactly what
+"clicking anywhere else in the card goes to that collection page" describes.
+The overlay needs `rounded-xl` and `focus-visible:ring-inset`, since `Card`
+clips overflow.
+
+### Items are already safe on delete — verify, don't add code
+
+`ItemCollection.collection` is `onDelete: Cascade`, so deleting a `Collection`
+removes only the join rows; the `Item` rows are untouched. The "items must not
+be deleted" goal therefore needs no `Item` write and no transaction — it needs
+proving. Worth checking live that an item filed in a deleted collection survives
+and simply shows one fewer collection in the drawer.
+
+### Constraints that follow from existing decisions
+
+- **Ownership rides in the `where` clause of the write itself** —
+  `prisma.collection.update({ where: { id, userId } })` and the same for delete —
+  the way `updateItem` and `deleteItem` do it. The id arrives from the client,
+  and a read-then-write leaves a window. P2025 becomes a "not found" outcome, so
+  somebody else's collection reads exactly like one that never existed.
+- **A duplicate name is the one thing item editing never had to handle.**
+  `@@unique([userId, name])` means a rename can collide, a pre-check cannot close
+  the race, and P2002 must come back as a *field* error on `name` — the shape
+  `createCollection` already returns. Prisma error codes are handled where the
+  Prisma call is, so the query function returns a tagged outcome
+  (`{ ok: false, reason: 'duplicate-name' | 'not-found' }`) rather than the
+  action sniffing error codes.
+- That index is **case-sensitive** (already recorded: `zz-test Collection` and
+  `ZZ-TEST COLLECTION` both save), so a rename to a case variant will succeed.
+  Out of scope, as it was for create.
+- `Collection.color` stays unwritten. Nothing reads it — the accent comes from
+  the collection's most-used item *type*.
+
+### Refresh and navigation
+
+- `router.refresh()` after an edit catches up every surface, because `AppShell`
+  is `force-dynamic`: the sidebar's Favorites and Recent lists, the dashboard
+  grid and both collection stat tiles. That is the path the create dialog proved.
+- **A delete from `/collections/[id]` cannot just refresh** — the page would
+  `notFound()` under the user. It has to `router.push('/collections')`.
+  A delete from a card can refresh in place.
+
+### Reuse, so this does not become a fourth copy
+
+- The edit form is nearly the create form. Candidate for one shared
+  `CollectionForm` taking initial values and a submit handler, rather than a
+  second near-identical component.
+- The same three actions appear in two places (the page's action row and the
+  card's dropdown), so the dialogs themselves should be shared components driven
+  by open state, not duplicated per call site.
+- `DeleteItemDialog` is the precedent for the confirmation: the confirm control
+  is a plain `<Button>`, **not** `AlertDialogAction`, which closes the dialog on
+  click and would unmount the transition mid-request; Escape is blocked while
+  pending; and the name is rendered with `wrap-anywhere` so a long one cannot
+  overflow the dialog at 390px.
+- The edit dialog's form must unmount with the dialog, so an abandoned draft and
+  its errors do not greet the next open — the rule `ChangePasswordDialog` and
+  `NewCollectionDialog` both follow.
+- `trimmed()`, `requiredText()` and `optionalText()` already live in
+  `src/lib/validation/text.ts`; an update schema reuses them and the existing
+  `COLLECTION_NAME_MAX_LENGTH` / `COLLECTION_DESCRIPTION_MAX_LENGTH`.
+
+### The inert Favorite button
+
+Favorite has no action behind it this round. The Item Drawer feature found that
+five consistently inert buttons read better than one working button beside four
+dead ones — here the opposite holds, since Edit and Delete *do* work. Worth
+deciding at `start` how the icon presents so it does not look broken: rendered
+but disabled, or rendered live-looking and doing nothing. It must not write
+`isFavorite`.
+
+### Testing
+
+- New server actions and query functions are exactly what
+  `coding-standards.md` scopes the suite to, so `updateCollection` and
+  `deleteCollection` need tests in both layers — including the ownership
+  predicate, the P2002 → field error mapping and the P2025 → not-found mapping.
+- `src/lib/db/collections.ts`'s reads still have no tests; not this feature's job
+  to close, but the file's coverage number will stay low.
+- The dialogs, the dropdown and the card have no tests, per the same scoping rule,
+  so they ride on browser verification.
+- Mutations must be restored from **file backups, never `git checkout`** — the
+  lesson the Image Gallery feature recorded after a revert wiped uncommitted work.
+
+### Open questions for `start`
+
+- Does the page's action row show labelled buttons or icon-only ones, and does it
+  sit beside the title or below the description?
+- The dashboard grid shows six cards with a "View all" link; the dropdown lands
+  on both it and `/collections`. Confirm the trigger does not disturb the card's
+  existing layout (title, count, description, type icons).
 ## History
 
 

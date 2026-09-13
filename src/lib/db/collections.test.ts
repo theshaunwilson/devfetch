@@ -12,7 +12,7 @@ import type { Mock } from 'vitest';
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    collection: { create: vi.fn(), findMany: vi.fn(), count: vi.fn() },
+    collection: { create: vi.fn(), update: vi.fn(), delete: vi.fn(), findMany: vi.fn(), count: vi.fn() },
     item: { groupBy: vi.fn() },
     itemCollection: { findMany: vi.fn() },
     itemType: { findMany: vi.fn() },
@@ -23,8 +23,14 @@ vi.mock('@/lib/db/user', () => ({ getCurrentUserId: vi.fn() }));
 
 const { prisma } = await import('@/lib/prisma');
 const { getCurrentUserId } = await import('@/lib/db/user');
-const { createCollection, getCollectionOptions, getOwnedCollectionIds, getRecentCollections } =
-  await import('./collections');
+const {
+  createCollection,
+  deleteCollection,
+  getCollectionOptions,
+  getOwnedCollectionIds,
+  getRecentCollections,
+  updateCollection,
+} = await import('./collections');
 const { Prisma } = await import('@/generated/prisma/client');
 
 const currentUser = vi.mocked(getCurrentUserId);
@@ -42,6 +48,12 @@ interface CollectionRow {
 // which `tsc` catches and the green suite does not.
 const create = prisma.collection.create as unknown as Mock<
   (args: unknown) => Promise<CollectionRow>
+>;
+const update = prisma.collection.update as unknown as Mock<
+  (args: unknown) => Promise<{ id: string }>
+>;
+const remove = prisma.collection.delete as unknown as Mock<
+  (args: unknown) => Promise<{ id: string }>
 >;
 const findCollections = prisma.collection.findMany as unknown as Mock<
   (args: unknown) => Promise<{ id: string; name: string }[]>
@@ -63,6 +75,14 @@ const row: CollectionRow = {
   description: null,
   isFavorite: false,
 };
+
+/** Prisma's own error shape, so the `instanceof` narrowing is exercised. */
+function notFound() {
+  return new Prisma.PrismaClientKnownRequestError('No record was found', {
+    code: 'P2025',
+    clientVersion: '7.0.0',
+  });
+}
 
 /** Prisma's own error shape, so the `instanceof` narrowing is exercised. */
 function uniqueViolation() {
@@ -292,5 +312,136 @@ describe('getRecentCollections', () => {
 
     await expect(getRecentCollections(6)).resolves.toEqual([]);
     expect(findFilings).not.toHaveBeenCalled();
+  });
+});
+
+describe('updateCollection', () => {
+  beforeEach(() => {
+    update.mockResolvedValue({ id: 'collection_1' });
+  });
+
+  it('scopes the update to the signed-in user, in the where clause itself', async () => {
+    // The id arrives from the client. A read to check ownership followed by a
+    // write leaves a window between the two, so the filter rides along with the
+    // update — without it, one user could rename another's collection.
+    await updateCollection('collection_1', { name: 'React Patterns', description: null });
+
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'collection_1', userId: USER_ID } }),
+    );
+  });
+
+  it('never writes without a session', async () => {
+    currentUser.mockResolvedValue(null);
+
+    const outcome = await updateCollection('collection_1', {
+      name: 'React Patterns',
+      description: null,
+    });
+
+    expect(outcome).toEqual({ ok: false, reason: 'no-session' });
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('writes both fields the user can change', async () => {
+    await updateCollection('collection_1', { name: 'Renamed', description: 'Hooks' });
+
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { name: 'Renamed', description: 'Hooks' } }),
+    );
+  });
+
+  it('clears a blanked description rather than leaving the old text behind', async () => {
+    // The schema turns a blank field into null, and null is what empties the
+    // column — an update that skipped it would keep showing the old text.
+    await updateCollection('collection_1', { name: 'React Patterns', description: null });
+
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ description: null }) }),
+    );
+  });
+
+  it('never writes a color, which nothing reads', async () => {
+    await updateCollection('collection_1', { name: 'React Patterns', description: null });
+
+    const [args] = update.mock.calls[0] as [{ data: Record<string, unknown> }];
+
+    expect(args.data).not.toHaveProperty('color');
+  });
+
+  it('turns a unique-index violation into a duplicate-name outcome', async () => {
+    // A rename can collide with an existing name, and a pre-check cannot close
+    // the race — so the index decides and the form renders the field error.
+    update.mockRejectedValue(uniqueViolation());
+
+    const outcome = await updateCollection('collection_1', {
+      name: 'React Patterns',
+      description: null,
+    });
+
+    expect(outcome).toEqual({ ok: false, reason: 'duplicate-name' });
+  });
+
+  it('turns nothing matching into a not-found outcome', async () => {
+    // Somebody else's collection and one that never existed both land here.
+    update.mockRejectedValue(notFound());
+
+    const outcome = await updateCollection('collection_1', {
+      name: 'React Patterns',
+      description: null,
+    });
+
+    expect(outcome).toEqual({ ok: false, reason: 'not-found' });
+  });
+
+  it('rethrows anything that is not one of those two', async () => {
+    update.mockRejectedValue(new Error('connection lost'));
+
+    await expect(
+      updateCollection('collection_1', { name: 'React Patterns', description: null }),
+    ).rejects.toThrow('connection lost');
+  });
+});
+
+describe('deleteCollection', () => {
+  beforeEach(() => {
+    remove.mockResolvedValue({ id: 'collection_1' });
+  });
+
+  it('scopes the delete to the signed-in user, in the where clause itself', async () => {
+    await deleteCollection('collection_1');
+
+    expect(remove).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'collection_1', userId: USER_ID } }),
+    );
+  });
+
+  it('never deletes without a session', async () => {
+    currentUser.mockResolvedValue(null);
+
+    await expect(deleteCollection('collection_1')).resolves.toBe(false);
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it('deletes the collection and nothing else', async () => {
+    // The items it held survive: `ItemCollection.collection` is `onDelete:
+    // Cascade`, so the filings go and the item rows are untouched. Nothing here
+    // may write an Item, and no transaction is needed to make that true.
+    await deleteCollection('collection_1');
+
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(prisma.item.groupBy).not.toHaveBeenCalled();
+  });
+
+  it('reports nothing matching as not deleted rather than throwing', async () => {
+    remove.mockRejectedValue(notFound());
+
+    await expect(deleteCollection('collection_1')).resolves.toBe(false);
+  });
+
+  it('rethrows anything that is not a missing row', async () => {
+    remove.mockRejectedValue(new Error('connection lost'));
+
+    await expect(deleteCollection('collection_1')).rejects.toThrow('connection lost');
   });
 });

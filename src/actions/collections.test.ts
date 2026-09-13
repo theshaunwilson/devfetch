@@ -10,14 +10,24 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/auth', () => ({ auth: vi.fn() }));
-vi.mock('@/lib/db/collections', () => ({ createCollection: vi.fn() }));
+vi.mock('@/lib/db/collections', () => ({
+  createCollection: vi.fn(),
+  updateCollection: vi.fn(),
+  deleteCollection: vi.fn(),
+}));
 
 const { auth } = await import('@/auth');
-const { createCollection: createCollectionRow } = await import('@/lib/db/collections');
-const { createCollection } = await import('./collections');
+const {
+  createCollection: createCollectionRow,
+  updateCollection: updateCollectionRow,
+  deleteCollection: deleteCollectionRow,
+} = await import('@/lib/db/collections');
+const { createCollection, updateCollection, deleteCollection } = await import('./collections');
 
 const session = vi.mocked(auth);
 const createRow = vi.mocked(createCollectionRow);
+const updateRow = vi.mocked(updateCollectionRow);
+const deleteRow = vi.mocked(deleteCollectionRow);
 
 const USER_ID = 'user_1';
 
@@ -40,6 +50,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   signedIn();
   createRow.mockResolvedValue({ ok: true, collection: saved });
+  updateRow.mockResolvedValue({ ok: true });
+  deleteRow.mockResolvedValue(true);
 });
 
 describe('createCollection', () => {
@@ -145,5 +157,167 @@ describe('createCollection', () => {
     expect(createRow).toHaveBeenCalledWith(
       expect.not.objectContaining({ userId: expect.anything() }),
     );
+  });
+});
+
+describe('updateCollection', () => {
+  it('reports success without handing back a row', async () => {
+    // A metadata edit cannot change the item count, type mix or accent colour,
+    // so nothing comes back: the caller refreshes the surfaces it appears on.
+    const result = await updateCollection('collection_1', { name: 'Renamed' });
+
+    expect(result).toEqual({ success: true });
+  });
+
+  it('passes the id through as the address, never as data', async () => {
+    await updateCollection('collection_1', { name: 'Renamed' });
+
+    expect(updateRow).toHaveBeenCalledWith(
+      'collection_1',
+      expect.not.objectContaining({ id: expect.anything() }),
+    );
+  });
+
+  it('refuses to write without a session', async () => {
+    session.mockResolvedValue(null as unknown as never);
+
+    const result = await updateCollection('collection_1', { name: 'Renamed' });
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Your session has expired. Sign in again.',
+    });
+    expect(updateRow).not.toHaveBeenCalled();
+  });
+
+  it('checks the session before it parses the payload', async () => {
+    session.mockResolvedValue(null as unknown as never);
+
+    const result = await updateCollection('collection_1', { name: '' });
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Your session has expired. Sign in again.',
+    });
+  });
+
+  it('hands the query function the trimmed name, not the one it was sent', async () => {
+    await updateCollection('collection_1', { name: '  Renamed  ' });
+
+    expect(updateRow).toHaveBeenCalledWith(
+      'collection_1',
+      expect.objectContaining({ name: 'Renamed' }),
+    );
+  });
+
+  it('hands the query function the description it was sent, trimmed', async () => {
+    // Without this, an action that quietly dropped the description would pass
+    // every other test here while the user's edit went nowhere.
+    await updateCollection('collection_1', { name: 'Renamed', description: '  Hooks  ' });
+
+    expect(updateRow).toHaveBeenCalledWith(
+      'collection_1',
+      expect.objectContaining({ description: 'Hooks' }),
+    );
+  });
+
+  it('reports a blank name on the field and never writes', async () => {
+    const result = await updateCollection('collection_1', { name: '   ' });
+
+    expect(result.success).toBe(false);
+    expect(result.success === false && result.fieldErrors?.name).toEqual(['Name is required']);
+    expect(updateRow).not.toHaveBeenCalled();
+  });
+
+  it('reports a duplicate name on the field so the form can point at it', async () => {
+    updateRow.mockResolvedValue({ ok: false, reason: 'duplicate-name' });
+
+    const result = await updateCollection('collection_1', { name: 'React Patterns' });
+
+    expect(result.success).toBe(false);
+    expect(result.success === false && result.fieldErrors?.name).toEqual([
+      'You already have a collection with that name',
+    ]);
+  });
+
+  it('reports a missing row as not found, with no field to blame', async () => {
+    updateRow.mockResolvedValue({ ok: false, reason: 'not-found' });
+
+    const result = await updateCollection('collection_1', { name: 'Renamed' });
+
+    expect(result).toEqual({ success: false, error: 'That collection could not be found.' });
+  });
+
+  it('reports an expired session when the row lookup finds no user', async () => {
+    updateRow.mockResolvedValue({ ok: false, reason: 'no-session' });
+
+    const result = await updateCollection('collection_1', { name: 'Renamed' });
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Your session has expired. Sign in again.',
+    });
+  });
+
+  it('does not leak a thrown database error to the caller', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    updateRow.mockRejectedValue(new Error('connection lost'));
+
+    const result = await updateCollection('collection_1', { name: 'Renamed' });
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Could not save this collection. Please try again.',
+    });
+    expect(logged).toHaveBeenCalled();
+
+    logged.mockRestore();
+  });
+});
+
+describe('deleteCollection', () => {
+  it('reports success once the row is gone', async () => {
+    const result = await deleteCollection('collection_1');
+
+    expect(result).toEqual({ success: true });
+    expect(deleteRow).toHaveBeenCalledWith('collection_1');
+  });
+
+  it('refuses to delete without a session', async () => {
+    session.mockResolvedValue(null as unknown as never);
+
+    const result = await deleteCollection('collection_1');
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Your session has expired. Sign in again.',
+    });
+    expect(deleteRow).not.toHaveBeenCalled();
+  });
+
+  it('reports a row it could not delete as not found', async () => {
+    // Somebody else's collection reads exactly like one that never existed.
+    deleteRow.mockResolvedValue(false);
+
+    const result = await deleteCollection('collection_1');
+
+    expect(result).toEqual({ success: false, error: 'That collection could not be found.' });
+  });
+
+  it('does not leak a thrown database error to the caller', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    deleteRow.mockRejectedValue(new Error('connection lost'));
+
+    const result = await deleteCollection('collection_1');
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Could not delete this collection. Please try again.',
+    });
+    expect(logged).toHaveBeenCalled();
+
+    logged.mockRestore();
   });
 });

@@ -6,7 +6,7 @@ import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
 import { createCollection } from '@/actions/collections';
-import { ItemFieldError } from '@/components/items/ItemFieldError';
+import { CollectionFields } from '@/components/collections/CollectionFields';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -17,9 +17,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 
 /**
  * "New Collection" in the top bar, and the dialog behind it.
@@ -103,31 +100,14 @@ function NewCollectionForm({ onCreated, onCancel }: NewCollectionFormProps) {
       {/* Only the fields scroll, so the footer's buttons stay put — the same
           shape as the item dialog, which needs it on a short viewport. */}
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-1">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="new-collection-name">Name</Label>
-          <Input
-            id="new-collection-name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            aria-invalid={Boolean(fieldErrors.name)}
-            placeholder="React Patterns"
-            autoFocus
-            required
-          />
-          <ItemFieldError messages={fieldErrors.name} />
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="new-collection-description">Description</Label>
-          <Textarea
-            id="new-collection-description"
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            aria-invalid={Boolean(fieldErrors.description)}
-            rows={3}
-          />
-          <ItemFieldError messages={fieldErrors.description} />
-        </div>
+        <CollectionFields
+          idPrefix="new-collection"
+          name={name}
+          description={description}
+          onNameChange={setName}
+          onDescriptionChange={setDescription}
+          fieldErrors={fieldErrors}
+        />
       </div>
 
       <DialogFooter className="shrink-0">

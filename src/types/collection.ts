@@ -71,3 +71,46 @@ export type CreateCollectionOutcome =
 export type CreateCollectionResult =
   | { success: true; data: DashboardCollection }
   | { success: false; error: string; fieldErrors?: Record<string, string[]> };
+
+/**
+ * A collection reduced to the metadata its edit dialog and delete confirmation
+ * need: the id that addresses it, and the two fields a user can change.
+ *
+ * `DashboardCollection` is a superset, so a card can hand one straight over.
+ */
+export interface CollectionMeta {
+  id: string;
+  name: string;
+  description: string | null;
+}
+
+/**
+ * What `updateCollection` in `@/lib/db/collections` reports back.
+ *
+ * `not-found` covers both an id that names nothing and one that names somebody
+ * else's collection, because the update's own `where` clause is what decides
+ * it and the two are indistinguishable from outside.
+ *
+ * Nothing comes back on success. A metadata edit cannot change a collection's
+ * item count, type mix or accent colour, so returning a full
+ * `DashboardCollection` would mean running the type-usage aggregation purely to
+ * satisfy a shape — and the caller refreshes the surfaces it appears on anyway.
+ */
+export type UpdateCollectionOutcome =
+  | { ok: true }
+  | { ok: false; reason: 'no-session' | 'duplicate-name' | 'not-found' };
+
+/**
+ * What the `updateCollection` server action returns. A duplicate name comes
+ * back on the field, as it does for a create: it is the one failure the user
+ * can fix by editing what they typed.
+ */
+export type UpdateCollectionResult =
+  | { success: true }
+  | { success: false; error: string; fieldErrors?: Record<string, string[]> };
+
+/**
+ * What `deleteCollection` returns. Nothing on success — the row is gone, and
+ * the caller either navigates away or refreshes.
+ */
+export type DeleteCollectionResult = { success: true } | { success: false; error: string };

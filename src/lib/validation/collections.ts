@@ -31,3 +31,23 @@ export type CreateCollectionInput = z.input<typeof createCollectionSchema>;
 
 /** What the server action hands the query function, after normalization. */
 export type CreateCollectionData = z.output<typeof createCollectionSchema>;
+
+/**
+ * Editing a collection's metadata.
+ *
+ * Deliberately an alias rather than a second copy: a collection is created and
+ * edited through the same two fields, so the rules are the same rules, and two
+ * declarations of them could only drift. The name exists so the call sites read
+ * as what they do, and so a future divergence has somewhere to happen.
+ *
+ * The id is not a field here, the way `updateItemSchema` does not carry one —
+ * it is a separate argument to the action, since it addresses the row rather
+ * than being part of what is written to it.
+ */
+export const updateCollectionSchema = createCollectionSchema;
+
+/** What a caller sends. Output differs — the schema trims and nulls blanks. */
+export type UpdateCollectionInput = z.input<typeof updateCollectionSchema>;
+
+/** What the server action hands the query function, after normalization. */
+export type UpdateCollectionData = z.output<typeof updateCollectionSchema>;

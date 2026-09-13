@@ -3,10 +3,21 @@
 import { z } from 'zod';
 
 import { auth } from '@/auth';
-import { createCollection as createCollectionRow } from '@/lib/db/collections';
-import { createCollectionSchema } from '@/lib/validation/collections';
-import type { CreateCollectionInput } from '@/lib/validation/collections';
-import type { CreateCollectionResult } from '@/types/collection';
+import {
+  createCollection as createCollectionRow,
+  deleteCollection as deleteCollectionRow,
+  updateCollection as updateCollectionRow,
+} from '@/lib/db/collections';
+import { createCollectionSchema, updateCollectionSchema } from '@/lib/validation/collections';
+import type {
+  CreateCollectionInput,
+  UpdateCollectionInput,
+} from '@/lib/validation/collections';
+import type {
+  CreateCollectionResult,
+  DeleteCollectionResult,
+  UpdateCollectionResult,
+} from '@/types/collection';
 
 const CHECK_FIELDS = 'Check the highlighted fields and try again.';
 
@@ -59,5 +70,90 @@ export async function createCollection(
     console.error('Could not create the collection:', error);
 
     return { success: false, error: 'Could not create this collection. Please try again.' };
+  }
+}
+
+/**
+ * Edits one collection's metadata for the signed-in user.
+ *
+ * The id is an argument rather than a payload field, as it is for `updateItem`:
+ * it addresses the row, and the ownership filter in the query's own `where`
+ * clause is what stands between it and somebody else's collection.
+ */
+export async function updateCollection(
+  collectionId: string,
+  data: UpdateCollectionInput
+): Promise<UpdateCollectionResult> {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    return { success: false, error: 'Your session has expired. Sign in again.' };
+  }
+
+  const parsed = updateCollectionSchema.safeParse(data);
+
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: CHECK_FIELDS,
+      fieldErrors: z.flattenError(parsed.error).fieldErrors,
+    };
+  }
+
+  try {
+    const outcome = await updateCollectionRow(collectionId, parsed.data);
+
+    if (outcome.ok) {
+      return { success: true };
+    }
+
+    if (outcome.reason === 'duplicate-name') {
+      return {
+        success: false,
+        error: CHECK_FIELDS,
+        fieldErrors: { name: ['You already have a collection with that name'] },
+      };
+    }
+
+    if (outcome.reason === 'not-found') {
+      return { success: false, error: 'That collection could not be found.' };
+    }
+
+    return { success: false, error: 'Your session has expired. Sign in again.' };
+  } catch (error) {
+    console.error('Could not update the collection:', error);
+
+    return { success: false, error: 'Could not save this collection. Please try again.' };
+  }
+}
+
+/**
+ * Deletes one collection belonging to the signed-in user.
+ *
+ * The items it held survive — see `deleteCollection` in `@/lib/db/collections`,
+ * where the cascade that makes that true is spelled out. Nothing comes back on
+ * success: the caller either navigates away from the page it was showing or
+ * refreshes the list it was in.
+ */
+export async function deleteCollection(collectionId: string): Promise<DeleteCollectionResult> {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    return { success: false, error: 'Your session has expired. Sign in again.' };
+  }
+
+  try {
+    const deleted = await deleteCollectionRow(collectionId);
+
+    if (!deleted) {
+      // Somebody else's collection reads exactly like one that does not exist.
+      return { success: false, error: 'That collection could not be found.' };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Could not delete the collection:', error);
+
+    return { success: false, error: 'Could not delete this collection. Please try again.' };
   }
 }
