@@ -20,15 +20,21 @@ export interface DashboardCollection {
 }
 
 /**
- * A collection as offered by the item forms' collections picker.
+ * A collection reduced to what a picker or the command palette needs.
  *
- * Name and id only: the picker draws a checkbox row per collection and files
- * the item by id. It deliberately carries no counts, so it needs none of the
- * per-collection aggregation the dashboard and sidebar lists pay for.
+ * The item forms draw a checkbox row per collection and file the item by id,
+ * so they use the name and the id alone. The palette shows the item count
+ * beside the name, which is why this carries one — a reversal of the note that
+ * stood here before, when nothing needed it. It is a `_count` on the join
+ * rather than the per-collection type aggregation the dashboard and sidebar
+ * pay for, and both callers are served by one cached query instead of two
+ * reads of the same rows.
  */
 export interface CollectionOption {
   id: string;
   name: string;
+  /** How many items are filed in it. */
+  itemCount: number;
 }
 
 /** Collection counts shown in the dashboard stat tiles. */

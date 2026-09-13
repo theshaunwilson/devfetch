@@ -1,12 +1,115 @@
-# Current Feature
+# Current Feature: Global Search / Command Palette
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
+- Open a command palette with Cmd+K (Mac) / Ctrl+K (Windows), from anywhere in the signed-in app
+- Fuzzy search across all of the user's items and collections
+- Group the results: an Items section and a Collections section
+- Keyboard navigation — arrow keys to move, Enter to select
+- Show the item type icon on item rows, and the item count on collection rows
+- Selecting an item opens the item drawer; selecting a collection navigates to its page
+- The top bar's search input opens the palette on click
+- Show the ⌘K hint in the search input
+
 ## Notes
+
+### From the spec
+
+- Use the shadcn `Command` component (cmdk)
+- Client-side fuzzy search, no server round-trips per keystroke
+- Pre-fetch the searchable data on app load
+- Search data: items (id, title, type, content preview), collections (id, name, itemCount)
+- Reuse the existing data fetching functions
+
+### What the code already has
+
+- The ⌘K hint **already exists** — `Topbar.tsx` renders a `<kbd>⌘ K</kbd>` inside the search
+  field, hidden below `sm`. The input itself is display only, as its own comment says.
+- `/collections/[id]` and the item drawer both exist, so both select targets are live.
+- `getAllCollections()` returns `DashboardCollection` (id, name, itemCount, types, accentColor)
+  — the collection half of the search data, already written.
+- shadcn has no `command.tsx` yet, so `shadcn add command` is needed. That pulls **cmdk** as a
+  new runtime dependency, and both previous `shadcn add` runs (select, progress) also pulled a
+  third-party `cn` package and had to be undone — check the `package.json` diff after running it.
+- cmdk filters and scores with `command-score` out of the box, so "fuzzy search" may need no
+  extra library. Worth confirming before adding one.
+
+### Decisions, as settled
+
+1. **`ItemDrawerProvider` moved up in `AppShell`** to wrap the whole shell rather than only
+   `{children}` inside `<main>`. The palette lives in the top bar and opens an item exactly the
+   way a card does, so it has to sit under that provider. Verified afterwards that a card still
+   opens the drawer and that Escape still returns focus to the exact card.
+2. **The search payload carries full `DashboardItem`s**, so `openItem(item, trigger)` is
+   unchanged and the drawer's header is complete the instant it opens. `SearchItem` extends
+   `DashboardItem` with one added field.
+3. **The content preview is truncated in SQL.** `getSearchItems` runs the normal `ITEM_SELECT`
+   `findMany`, then a second `$queryRaw` taking `LEFT("content", 160)` for the ids it got back —
+   Prisma cannot truncate in a `select`, and selecting `content` would pull every body in full on
+   every shell render. The raw statement carries its own `userId` predicate.
+4. **`SEARCH_ITEM_LIMIT` is 500**, most recently updated first, so the payload and the rendered
+   row count are both bounded. For the demo account's 22 items the previews total 1,307 bytes
+   against 3,126 for the full bodies.
+5. **The ⌘K listener stands off Monaco** two ways: `isSearchShortcut` refuses a keydown that is
+   already `defaultPrevented`, and the handler refuses one whose target is inside `.monaco-editor`.
+   Both were exercised — the palette does not open while the editor has the caret, and Ctrl+K
+   inside the open palette moves the selection up (cmdk's own vim binding) instead of closing it.
+
+### Fixed after review: the search was matching almost everything
+
+Reported from real use — typing "test" brought up nearly every item. Measured against the
+seeded account: **21 of 22 items scored above zero**, and "npm" matched 16.
+
+Two causes, both mine only in part. cmdk scores with `command-score`, which matches a query as a
+**subsequence** — any string holding t…e…s…t in that order scores above zero — and I handed it
+**one joined string per row**, so a query could take a letter from the title, one from a tag and
+the rest from the 160-character body.
+
+`scoreKeywords` in `src/lib/search.ts` now scores **each field on its own and keeps the best**,
+and returns 0 below `SEARCH_SCORE_THRESHOLD`. Per field alone takes "test" from 21 matches to 5
+and "docker" from 11 to 3; the threshold removes the rest. Live in the browser afterwards:
+**"test" → 5 rows**, every one a genuine match, "docker" → 3, "npm" → 5, and an unmatched query
+still reaches the empty state.
+
+The cut is 0.5 because the measurements put a wide empty band there — genuine matches scored
+0.79–1.00, noise never passed 0.17 — not because it was tuned until the output looked right.
+Fuzzy matching survives it: prefixes ("debounc"), in-word abbreviations ("usedeb") and multi-word
+queries ("kill port") all still resolve to one row.
+
+**The cost, stated rather than hidden:** a genuine typo ("dockrfile" for Dockerfile) scores 0.15
+— inside the same band as the noise — so no threshold can keep typo tolerance and drop the
+noise. Skeletal abbreviations ("fmtbytes") go the same way at 0.026.
+
+**One thing I had wrong along the way:** I first attributed a high score for "Format Bytes
+Utility" to its `typescript` tag fuzzy-matching "test". Scored per field it drops to 0.15, so the
+0.70 came from the joined blob, not the tag.
+
+### Other decisions taken while building
+
+- **`shadcn add command` pulled the third-party `cn` package again**, the trap recorded twice in
+  History. It was uninstalled, leaving `cmdk` as the only added dependency, and
+  `src/components/ui/command.tsx` was adapted by hand from the `radix-nova` registry source — its
+  `input-group` dependency is not in this project, and its sr-only `DialogHeader` sat outside
+  `DialogContent`, which Radix warns about. No console warning is emitted now.
+- **`getCollectionOptions` was widened with an item count** rather than adding a second query for
+  the palette's Collections group. One cached query serves the item forms' picker and the palette,
+  which also stops the two lists drifting apart. This reverses the note on `CollectionOption`
+  that said it deliberately carried no counts.
+- **Rows are matched on cmdk `keywords`, not on `value`.** cmdk identifies a row by `value`,
+  which must be unique and is therefore the id — a cuid that matches short queries by accident.
+  A custom `filter` scores the keywords instead.
+- **The palette's input is uncontrolled.** The dialog's content unmounts on close, so cmdk's own
+  state is discarded with it and the next open starts empty.
+- **Focus is restored explicitly on close**, to the search field — nothing opens this dialog
+  declaratively, so Radix left focus on the body. Suppressed when a selection hands off to the
+  drawer, which takes focus itself.
+- **The trigger label stayed "Search items..."**, the wording the field already had: at 390px the
+  row is 152px and the fuller phrase truncates mid-word. The palette's own placeholder says it in
+  full.
 
 ## History
 

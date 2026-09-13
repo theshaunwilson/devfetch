@@ -56,7 +56,9 @@ const remove = prisma.collection.delete as unknown as Mock<
   (args: unknown) => Promise<{ id: string }>
 >;
 const findCollections = prisma.collection.findMany as unknown as Mock<
-  (args: unknown) => Promise<{ id: string; name: string }[]>
+  // `_count` is optional here because the other callers of `collection.findMany`
+  // in this file do not select it; `getCollectionOptions` is the one that does.
+  (args: unknown) => Promise<{ id: string; name: string; _count?: { items: number } }[]>
 >;
 const findFilings = prisma.itemCollection.findMany as unknown as Mock<
   (args: unknown) => Promise<{ collectionId: string; item: { typeId: string } }[]>
@@ -181,13 +183,33 @@ describe('createCollection', () => {
  */
 describe('getCollectionOptions', () => {
   it('returns only the signed-in user’s own collections', async () => {
-    findCollections.mockResolvedValue([{ id: 'coll_1', name: 'React Patterns' }]);
+    findCollections.mockResolvedValue([
+      { id: 'coll_1', name: 'React Patterns', _count: { items: 3 } },
+    ]);
 
     await expect(getCollectionOptions()).resolves.toEqual([
-      { id: 'coll_1', name: 'React Patterns' },
+      { id: 'coll_1', name: 'React Patterns', itemCount: 3 },
     ]);
     expect(findCollections).toHaveBeenCalledWith(
       expect.objectContaining({ where: { userId: USER_ID } }),
+    );
+  });
+
+  /** The palette shows the count beside the name; the item forms' picker ignores it. */
+  it('reports how many items are filed in each, counted on the join', async () => {
+    findCollections.mockResolvedValue([
+      { id: 'coll_1', name: 'React Patterns', _count: { items: 4 } },
+      { id: 'coll_2', name: 'Empty', _count: { items: 0 } },
+    ]);
+
+    await expect(getCollectionOptions()).resolves.toEqual([
+      { id: 'coll_1', name: 'React Patterns', itemCount: 4 },
+      { id: 'coll_2', name: 'Empty', itemCount: 0 },
+    ]);
+    expect(findCollections).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: { id: true, name: true, _count: { select: { items: true } } },
+      }),
     );
   });
 

@@ -1,25 +1,27 @@
-import { Search } from 'lucide-react';
 import { NewCollectionDialog } from '@/components/collections/NewCollectionDialog';
 import { TopbarBrand } from '@/components/dashboard/TopbarBrand';
 import { TopbarToggle } from '@/components/dashboard/TopbarToggle';
 import { NewItemDialog } from '@/components/items/NewItemDialog';
-import { Input } from '@/components/ui/input';
+import { SearchPalette } from '@/components/search/SearchPalette';
 import type { CollectionOption } from '@/types/collection';
 import type { SidebarItemType } from '@/types/item';
+import type { SearchItem } from '@/types/search';
 
 /**
- * Top bar shell. Search is still display only.
+ * Top bar shell.
  *
  * The item types come down from `AppShell`, which already loads them for the
  * sidebar, so the dialog costs no query of its own. The collections it can file
- * a new item in come the same way.
+ * a new item in come the same way, and are the same list the palette searches.
  */
 export function Topbar({
   itemTypes,
   collectionOptions,
+  searchItems,
 }: {
   itemTypes: SidebarItemType[];
   collectionOptions: CollectionOption[];
+  searchItems: SearchItem[];
 }) {
   return (
     <header className="flex h-16 shrink-0 items-center gap-3 border-b px-4">
@@ -27,18 +29,7 @@ export function Topbar({
 
       <TopbarBrand />
 
-      <div className="relative min-w-0 flex-1 sm:max-w-lg">
-        <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          type="search"
-          placeholder="Search items..."
-          className="h-10 pr-3 pl-9 sm:pr-16"
-          aria-label="Search items"
-        />
-        <kbd className="pointer-events-none absolute top-1/2 right-3 hidden -translate-y-1/2 rounded border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground sm:block">
-          ⌘ K
-        </kbd>
-      </div>
+      <SearchPalette items={searchItems} collections={collectionOptions} />
 
       <div className="ml-auto flex shrink-0 items-center gap-2">
         <NewCollectionDialog />

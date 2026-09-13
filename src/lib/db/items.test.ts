@@ -21,6 +21,7 @@ vi.mock('@/lib/prisma', () => ({
       groupBy: vi.fn(),
     },
     itemType: { findFirst: vi.fn(), findMany: vi.fn() },
+    $queryRaw: vi.fn(),
   },
 }));
 
@@ -34,6 +35,7 @@ const {
   getItemDetail,
   getItemFile,
   getItemsByTypeSlug,
+  getSearchItems,
   updateItem,
 } = await import('./items');
 const { Prisma } = await import('@/generated/prisma/client');
@@ -741,5 +743,116 @@ describe('getItemsByTypeSlug', () => {
     expect(await getItemsByTypeSlug('image')).toBeNull();
     expect(lookupType).not.toHaveBeenCalled();
     expect(findMany).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The command palette's index. It is pre-fetched into the shell on every
+ * request, so what it selects — and what it does not — is the property worth
+ * pinning: the body is truncated in SQL rather than fetched in full.
+ */
+describe('getSearchItems', () => {
+  const findMany = prisma.item.findMany as unknown as Mock<
+    (args: unknown) => Promise<DetailRow[]>
+  >;
+  const queryRaw = prisma.$queryRaw as unknown as Mock<
+    (strings: TemplateStringsArray, ...values: unknown[]) => Promise<
+      { id: string; preview: string | null }[]
+    >
+  >;
+
+  beforeEach(() => {
+    findMany.mockResolvedValue([]);
+    queryRaw.mockResolvedValue([]);
+  });
+
+  it('returns nothing, and queries nothing, without a session', async () => {
+    currentUserId.mockResolvedValue(null);
+
+    await expect(getSearchItems(500)).resolves.toEqual([]);
+    expect(findMany).not.toHaveBeenCalled();
+    expect(queryRaw).not.toHaveBeenCalled();
+  });
+
+  it('returns only the signed-in user’s items, most recently updated first', async () => {
+    await getSearchItems(500);
+
+    expect(findMany.mock.calls[0][0]).toMatchObject({
+      where: { userId: USER_ID },
+      orderBy: { updatedAt: 'desc' },
+    });
+  });
+
+  it('applies the ceiling it is given, so the payload cannot grow without bound', async () => {
+    await getSearchItems(120);
+
+    expect(findMany.mock.calls[0][0]).toMatchObject({ take: 120 });
+  });
+
+  it('never selects the body itself, which can be 100,000 characters', async () => {
+    await getSearchItems(500);
+
+    const args = findMany.mock.calls[0][0] as { select: Record<string, unknown> };
+
+    expect(args.select.content).toBeUndefined();
+  });
+
+  it('scopes the preview statement to the user as well, not to the ids alone', async () => {
+    findMany.mockResolvedValue([row()]);
+
+    await getSearchItems(500);
+
+    // The raw statement carries its own ownership predicate rather than
+    // trusting the ids handed to it.
+    expect(queryRaw.mock.calls[0]).toContain(USER_ID);
+  });
+
+  it('merges each preview onto its own item', async () => {
+    findMany.mockResolvedValue([
+      row({ id: 'item_1', title: 'One' }),
+      row({ id: 'item_2', title: 'Two' }),
+    ]);
+    queryRaw.mockResolvedValue([
+      { id: 'item_2', preview: 'second body' },
+      { id: 'item_1', preview: 'first body' },
+    ]);
+
+    const items = await getSearchItems(500);
+
+    // By id, not by position: the preview statement has its own ordering.
+    expect(items.map((item) => [item.id, item.contentPreview])).toEqual([
+      ['item_1', 'first body'],
+      ['item_2', 'second body'],
+    ]);
+  });
+
+  it('leaves the preview null for an item that stores no text', async () => {
+    findMany.mockResolvedValue([row({ id: 'item_1' })]);
+    queryRaw.mockResolvedValue([]);
+
+    const items = await getSearchItems(500);
+
+    expect(items[0].contentPreview).toBeNull();
+  });
+
+  it('skips the preview statement entirely when there are no items', async () => {
+    findMany.mockResolvedValue([]);
+
+    await expect(getSearchItems(500)).resolves.toEqual([]);
+    expect(queryRaw).not.toHaveBeenCalled();
+  });
+
+  it('carries everything a card holds, so a result can open the drawer as one', async () => {
+    findMany.mockResolvedValue([row()]);
+
+    const items = await getSearchItems(500);
+
+    expect(items[0]).toMatchObject({
+      id: ITEM_ID,
+      title: 'useDebounce Hook',
+      type: { slug: 'snippet' },
+      tags: ['hooks', 'react'],
+      updatedAt: '2026-08-18T21:56:33.193Z',
+    });
   });
 });
