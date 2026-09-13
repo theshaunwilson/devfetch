@@ -141,8 +141,8 @@ model Item {
   typeId      String
   type        ItemType @relation(fields: [typeId], references: [id])
 
-  collectionId String?
-  collection   Collection? @relation(fields: [collectionId], references: [id])
+  // An item can be filed in any number of collections, including none
+  collections ItemCollection[]
 
   tags        ItemTag[]
 
@@ -172,7 +172,7 @@ model Collection {
   userId      String
   user        User @relation(fields: [userId], references: [id])
 
-  items       Item[]
+  items       ItemCollection[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -194,6 +194,18 @@ model ItemTag {
   tag  Tag  @relation(fields: [tagId], references: [id])
 
   @@id([itemId, tagId])
+}
+
+// Items filed in collections. Shaped like ItemTag, and cascading from both
+// sides — deleting a collection unfiles its items rather than deleting them.
+model ItemCollection {
+  itemId       String
+  collectionId String
+
+  item       Item       @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@id([itemId, collectionId])
 }
 ```
 
@@ -331,11 +343,14 @@ git switch -c feature/item-drawer
 ## 📌 Status
 
 MVP in progress. Built so far: items (create, edit, delete, per-type views,
-detail drawer, code and markdown editors, file and image uploads to R2),
-authentication (credentials + GitHub, email verification, password reset,
-rate limiting), the dashboard and sidebar, and the profile page.
+detail drawer, code and markdown editors, file and image uploads to R2, quick
+copy), collections (create, edit, delete, `/collections` index and per-collection
+pages, filing an item in any number of them), global search (Cmd+K command
+palette over items and collections), authentication (credentials + GitHub, email
+verification, password reset, rate limiting), the dashboard and sidebar, and the
+profile page.
 
-Not built yet: search, collection CRUD, tags management, export, billing and
+Not built yet: tags management, favouriting and pinning, export, billing and
 every AI feature. See `context/current-feature.md` for the full history.
 
 ---
