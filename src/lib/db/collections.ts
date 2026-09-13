@@ -7,7 +7,10 @@ import { cache } from 'react';
 import { Prisma } from '@/generated/prisma/client';
 import { getCurrentUserId } from '@/lib/db/user';
 import { prisma } from '@/lib/prisma';
-import type { CreateCollectionData } from '@/lib/validation/collections';
+import type {
+  CreateCollectionData,
+  UpdateCollectionData,
+} from '@/lib/validation/collections';
 import type {
   CollectionItemType,
   CollectionOption,
@@ -16,6 +19,7 @@ import type {
   DashboardCollection,
   SidebarCollection,
   SidebarCollections,
+  UpdateCollectionOutcome,
 } from '@/types/collection';
 
 interface TypeUsage {
@@ -335,6 +339,90 @@ export async function createCollection(
     // Collection is [userId, name], so this can mean nothing else.
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       return { ok: false, reason: 'duplicate-name' };
+    }
+
+    throw error;
+  }
+}
+
+/**
+ * Edits one collection's metadata, for the signed-in user only.
+ *
+ * Ownership rides in the `where` clause of the update itself rather than a read
+ * followed by a write: the id arrives from the client, and a check in front of
+ * the write leaves a window between the two. Prisma's extended unique filters
+ * allow the extra field, and `updateItem` does it the same way.
+ *
+ * `@@unique([userId, name])` can reject a rename, and a pre-check cannot close
+ * the race between two requests — so P2002 becomes an outcome the form renders
+ * on the field, exactly as it does for a create. The comparison is the index's
+ * own, which is case-sensitive: renaming `React` to `react` succeeds.
+ *
+ * `color` is not written, here or anywhere: nothing reads it, since a card's
+ * accent comes from the collection's most-used item type.
+ */
+export async function updateCollection(
+  id: string,
+  data: UpdateCollectionData
+): Promise<UpdateCollectionOutcome> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) return { ok: false, reason: 'no-session' };
+
+  try {
+    await prisma.collection.update({
+      where: { id, userId },
+      data: {
+        name: data.name,
+        description: data.description ?? null,
+      },
+      select: { id: true },
+    });
+
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      // P2002: the unique index rejected the new name. [userId, name] is the
+      // only unique constraint on Collection, so this can mean nothing else.
+      if (error.code === 'P2002') return { ok: false, reason: 'duplicate-name' };
+
+      // P2025: nothing matched. An unknown id and somebody else's id both land
+      // here, and the caller cannot tell them apart — which is the point.
+      if (error.code === 'P2025') return { ok: false, reason: 'not-found' };
+    }
+
+    throw error;
+  }
+}
+
+/**
+ * Deletes one collection belonging to the signed-in user.
+ *
+ * **The items it held are not deleted.** `ItemCollection.collection` is
+ * `onDelete: Cascade`, so the join rows go with the collection and the `Item`
+ * rows are untouched — an item filed nowhere else simply ends up filed nowhere.
+ * That is the whole mechanism: there is no `Item` write here and no transaction,
+ * because the schema already says it.
+ *
+ * Ownership rides in the `where` clause for the same reason the update does.
+ */
+export async function deleteCollection(id: string): Promise<boolean> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) return false;
+
+  try {
+    await prisma.collection.delete({
+      where: { id, userId },
+      select: { id: true },
+    });
+
+    return true;
+  } catch (error) {
+    // P2025: nothing matched, so somebody else's collection reads exactly like
+    // one that never existed.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+      return false;
     }
 
     throw error;

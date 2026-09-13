@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { FileText, ImageIcon, Star } from 'lucide-react';
+import { CollectionActions } from '@/components/collections/CollectionActions';
 import { FileRow } from '@/components/items/FileRow';
 import { ImageCard } from '@/components/items/ImageCard';
 import { ItemCard } from '@/components/items/ItemCard';
@@ -38,19 +39,34 @@ export default async function CollectionPage({ params }: PageProps<'/collections
 
   return (
     <div className="px-6 py-8">
-      <div className="min-w-0">
-        <h1 className="flex min-w-0 items-center gap-2 text-3xl font-semibold tracking-tight">
-          <span className="truncate">{collection.name}</span>
-          {collection.isFavorite && (
-            <Star className="size-5 shrink-0 fill-yellow-500 text-yellow-500" />
+      {/* Stacked below `sm`, where three labelled buttons beside a title would
+          squeeze the name to nothing; the actions sit top-right above it. */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="flex min-w-0 items-center gap-2 text-3xl font-semibold tracking-tight">
+            <span className="truncate">{collection.name}</span>
+            {collection.isFavorite && (
+              <Star className="size-5 shrink-0 fill-yellow-500 text-yellow-500" />
+            )}
+          </h1>
+          <p className="mt-1 text-muted-foreground">
+            {items.length} {items.length === 1 ? 'item' : 'items'}
+          </p>
+          {collection.description && (
+            <p className="mt-3 max-w-2xl text-sm text-muted-foreground">{collection.description}</p>
           )}
-        </h1>
-        <p className="mt-1 text-muted-foreground">
-          {items.length} {items.length === 1 ? 'item' : 'items'}
-        </p>
-        {collection.description && (
-          <p className="mt-3 max-w-2xl text-sm text-muted-foreground">{collection.description}</p>
-        )}
+        </div>
+
+        <div className="sm:shrink-0">
+          <CollectionActions
+            collection={{
+              id: collection.id,
+              name: collection.name,
+              description: collection.description,
+            }}
+            isFavorite={collection.isFavorite}
+          />
+        </div>
       </div>
 
       {items.length > 0 ? (
