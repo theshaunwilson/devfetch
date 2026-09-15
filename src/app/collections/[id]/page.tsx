@@ -5,25 +5,33 @@ import { CollectionActions } from '@/components/collections/CollectionActions';
 import { FileRow } from '@/components/items/FileRow';
 import { ImageCard } from '@/components/items/ImageCard';
 import { ItemCard } from '@/components/items/ItemCard';
+import { PaginationControls } from '@/components/pagination/PaginationControls';
 import { getItemsByCollectionId } from '@/lib/db/items';
 import { groupItemsByShape } from '@/lib/items';
+import { parsePageParam } from '@/lib/pagination';
 
 // Reads the signed-in user's items per request, so it cannot be prerendered.
 export const dynamic = 'force-dynamic';
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: PageProps<'/collections/[id]'>): Promise<Metadata> {
-  const { id } = await params;
-  const result = await getItemsByCollectionId(id);
+  const [{ id }, { page }] = await Promise.all([params, searchParams]);
+  // The same page the component asks for, so the cached query is hit once
+  // rather than keyed twice.
+  const result = await getItemsByCollectionId(id, parsePageParam(page));
 
   // An unknown id renders notFound() below; the generic title covers it.
   return { title: result ? `${result.collection.name} | Devfetch` : 'Collection | Devfetch' };
 }
 
-export default async function CollectionPage({ params }: PageProps<'/collections/[id]'>) {
-  const { id } = await params;
-  const result = await getItemsByCollectionId(id);
+export default async function CollectionPage({
+  params,
+  searchParams,
+}: PageProps<'/collections/[id]'>) {
+  const [{ id }, { page }] = await Promise.all([params, searchParams]);
+  const result = await getItemsByCollectionId(id, parsePageParam(page));
 
   // Null covers both an id that names nothing and one that names somebody
   // else's collection, so the two are indistinguishable from outside.
@@ -31,10 +39,11 @@ export default async function CollectionPage({ params }: PageProps<'/collections
     notFound();
   }
 
-  const { collection, items } = result;
+  const { collection, items, pagination } = result;
   // Uploads are a different kind of thing from a snippet or a prompt and show a
   // different shape, so each gets a run of its own below the text items rather
-  // than being interleaved by date.
+  // than being interleaved by date. Grouping happens after the page is cut, so
+  // a given page shows whichever of the three its own items fall into.
   const { cards, images, files } = groupItemsByShape(items);
 
   return (
@@ -49,8 +58,10 @@ export default async function CollectionPage({ params }: PageProps<'/collections
               <Star className="size-5 shrink-0 fill-yellow-500 text-yellow-500" />
             )}
           </h1>
+          {/* The total rather than this page's length, which is what it was
+              before the list was paged. */}
           <p className="mt-1 text-muted-foreground">
-            {items.length} {items.length === 1 ? 'item' : 'items'}
+            {pagination.total} {pagination.total === 1 ? 'item' : 'items'}
           </p>
           {collection.description && (
             <p className="mt-3 max-w-2xl text-sm text-muted-foreground">{collection.description}</p>
@@ -111,6 +122,10 @@ export default async function CollectionPage({ params }: PageProps<'/collections
       ) : (
         <p className="mt-8 text-sm text-muted-foreground">No items in this collection yet.</p>
       )}
+
+      {/* Renders nothing when there is only one page, so it needs no guard of
+          its own — including on the empty state, which is always page 1. */}
+      <PaginationControls pagination={pagination} basePath={`/collections/${id}`} />
     </div>
   );
 }

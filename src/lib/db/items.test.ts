@@ -19,8 +19,11 @@ vi.mock('@/lib/prisma', () => ({
       update: vi.fn(),
       delete: vi.fn(),
       groupBy: vi.fn(),
+      count: vi.fn(),
     },
     itemType: { findFirst: vi.fn(), findMany: vi.fn() },
+    collection: { findFirst: vi.fn() },
+    itemCollection: { findMany: vi.fn(), count: vi.fn() },
     $queryRaw: vi.fn(),
   },
 }));
@@ -34,6 +37,7 @@ const {
   deleteItem,
   getItemDetail,
   getItemFile,
+  getItemsByCollectionId,
   getItemsByTypeSlug,
   getSearchItems,
   updateItem,
@@ -631,15 +635,18 @@ describe('getItemsByTypeSlug', () => {
     } | null>
   >;
 
+  const count = prisma.item.count as unknown as Mock<(args: unknown) => Promise<number>>;
+
   const imageType = { id: 'type_img', name: 'image', icon: 'Image', color: '#ec4899' };
 
   beforeEach(() => {
     lookupType.mockResolvedValue(imageType);
     findMany.mockResolvedValue([]);
+    count.mockResolvedValue(0);
   });
 
   it('accepts a global system type as well as one of the user\'s own', async () => {
-    await getItemsByTypeSlug('image');
+    await getItemsByTypeSlug('image', 1);
 
     // The seven built-ins are userId: null, so a plain userId filter would
     // match none of them.
@@ -649,7 +656,7 @@ describe('getItemsByTypeSlug', () => {
   });
 
   it('scopes the items to the signed-in user and the resolved type', async () => {
-    await getItemsByTypeSlug('image');
+    await getItemsByTypeSlug('image', 1);
 
     expect(findMany.mock.calls[0][0]).toMatchObject({
       where: { userId: USER_ID, typeId: imageType.id },
@@ -657,7 +664,7 @@ describe('getItemsByTypeSlug', () => {
   });
 
   it('selects the file columns, without which no thumbnail could ever resolve', async () => {
-    await getItemsByTypeSlug('image');
+    await getItemsByTypeSlug('image', 1);
 
     expect(findMany.mock.calls[0][0]).toMatchObject({
       select: { fileUrl: true, fileName: true },
@@ -669,7 +676,7 @@ describe('getItemsByTypeSlug', () => {
       row({ fileUrl: `users/${USER_ID}/abc-123.png`, fileName: 'diagram.png' }),
     ]);
 
-    const result = await getItemsByTypeSlug('image');
+    const result = await getItemsByTypeSlug('image', 1);
 
     expect(result?.items[0]).toMatchObject({
       fileUrl: `users/${USER_ID}/abc-123.png`,
@@ -687,7 +694,7 @@ describe('getItemsByTypeSlug', () => {
       }),
     ]);
 
-    const result = await getItemsByTypeSlug('file');
+    const result = await getItemsByTypeSlug('file', 1);
 
     expect(result?.items[0]).toMatchObject({
       fileSize: 1_048_576,
@@ -702,7 +709,7 @@ describe('getItemsByTypeSlug', () => {
   it('keeps the file columns null on an item with no object', async () => {
     findMany.mockResolvedValue([row()]);
 
-    const result = await getItemsByTypeSlug('image');
+    const result = await getItemsByTypeSlug('image', 1);
 
     // Null rather than absent: the card branches on it, and an undefined that
     // typechecked would draw a placeholder for every item.
@@ -712,7 +719,7 @@ describe('getItemsByTypeSlug', () => {
   });
 
   it('selects the type slug, without which no card could decide what to copy', async () => {
-    await getItemsByTypeSlug('snippet');
+    await getItemsByTypeSlug('snippet', 1);
 
     expect(findMany.mock.calls[0][0]).toMatchObject({
       select: { type: { select: { slug: true } } },
@@ -722,7 +729,7 @@ describe('getItemsByTypeSlug', () => {
   it('carries the type slug onto a card, so its copy button knows its field', async () => {
     findMany.mockResolvedValue([row()]);
 
-    const result = await getItemsByTypeSlug('snippet');
+    const result = await getItemsByTypeSlug('snippet', 1);
 
     // The name is user-facing text and a custom type may reuse a system slug,
     // so the slug is the only stable thing a card can branch on.
@@ -733,16 +740,165 @@ describe('getItemsByTypeSlug', () => {
     lookupType.mockResolvedValue(null);
 
     // A typo is a 404, which reads differently from a type holding nothing.
-    expect(await getItemsByTypeSlug('nonsense')).toBeNull();
+    expect(await getItemsByTypeSlug('nonsense', 1)).toBeNull();
     expect(findMany).not.toHaveBeenCalled();
   });
 
   it('returns null without querying when nobody is signed in', async () => {
     currentUserId.mockResolvedValue(null);
 
-    expect(await getItemsByTypeSlug('image')).toBeNull();
+    expect(await getItemsByTypeSlug('image', 1)).toBeNull();
     expect(lookupType).not.toHaveBeenCalled();
     expect(findMany).not.toHaveBeenCalled();
+  });
+
+  it('fetches one page rather than every item of the type', async () => {
+    count.mockResolvedValue(60);
+
+    await getItemsByTypeSlug('snippet', 1);
+
+    expect(findMany.mock.calls[0][0]).toMatchObject({ skip: 0, take: 21 });
+  });
+
+  it('skips the earlier pages to reach the one asked for', async () => {
+    count.mockResolvedValue(60);
+
+    await getItemsByTypeSlug('snippet', 3);
+
+    expect(findMany.mock.calls[0][0]).toMatchObject({ skip: 42, take: 21 });
+  });
+
+  it('clamps a page past the end rather than fetching past it', async () => {
+    count.mockResolvedValue(22);
+
+    const result = await getItemsByTypeSlug('snippet', 99);
+
+    // Counted before the slice is fetched, which is what makes this possible:
+    // `?page=99` never becomes a real query with a skip to match.
+    expect(findMany.mock.calls[0][0]).toMatchObject({ skip: 21 });
+    expect(result?.pagination).toMatchObject({ page: 2, totalPages: 2, hasNextPage: false });
+  });
+
+  it('counts the same rows the page is cut from', async () => {
+    count.mockResolvedValue(60);
+
+    await getItemsByTypeSlug('snippet', 1);
+
+    // A count over a wider set than the slice would page the user through
+    // items they cannot see.
+    expect(count.mock.calls[0][0]).toMatchObject({
+      where: { userId: USER_ID, typeId: imageType.id },
+    });
+  });
+
+  it('reports the total across every page, which is what the count line reads', async () => {
+    count.mockResolvedValue(60);
+    findMany.mockResolvedValue([row()]);
+
+    const result = await getItemsByTypeSlug('snippet', 1);
+
+    expect(result?.pagination).toMatchObject({ total: 60, totalPages: 3 });
+    expect(result?.items).toHaveLength(1);
+  });
+});
+
+/**
+ * Backs `/collections/[id]`. The id arrives from the URL, so ownership is
+ * asserted on both sides of the join — the collection is the user's, and every
+ * item that comes back through it is too.
+ */
+describe('getItemsByCollectionId', () => {
+  const lookupCollection = prisma.collection.findFirst as unknown as Mock<
+    (args: unknown) => Promise<{
+      id: string;
+      name: string;
+      description: string | null;
+      isFavorite: boolean;
+    } | null>
+  >;
+  const filings = prisma.itemCollection.findMany as unknown as Mock<
+    (args: unknown) => Promise<{ item: DetailRow }[]>
+  >;
+  const count = prisma.itemCollection.count as unknown as Mock<
+    (args: unknown) => Promise<number>
+  >;
+
+  const collection = { id: 'coll_1', name: 'React Patterns', description: null, isFavorite: false };
+
+  beforeEach(() => {
+    lookupCollection.mockResolvedValue(collection);
+    filings.mockResolvedValue([]);
+    count.mockResolvedValue(0);
+  });
+
+  it('scopes the collection lookup to the signed-in user', async () => {
+    await getItemsByCollectionId('coll_1', 1);
+
+    // `findFirst` on { id, userId } rather than `findUnique` on the id alone:
+    // the id comes from the URL.
+    expect(lookupCollection.mock.calls[0][0]).toMatchObject({
+      where: { id: 'coll_1', userId: USER_ID },
+    });
+  });
+
+  it('scopes the items to the user as well as to the collection', async () => {
+    await getItemsByCollectionId('coll_1', 1);
+
+    expect(filings.mock.calls[0][0]).toMatchObject({
+      where: { collectionId: 'coll_1', item: { userId: USER_ID } },
+    });
+  });
+
+  it('fetches one page rather than every item filed in the collection', async () => {
+    count.mockResolvedValue(60);
+
+    await getItemsByCollectionId('coll_1', 2);
+
+    expect(filings.mock.calls[0][0]).toMatchObject({ skip: 21, take: 21 });
+  });
+
+  it('counts the same join rows the page is cut from', async () => {
+    await getItemsByCollectionId('coll_1', 1);
+
+    expect(count.mock.calls[0][0]).toMatchObject({
+      where: { collectionId: 'coll_1', item: { userId: USER_ID } },
+    });
+  });
+
+  it('clamps a page past the end to the last one', async () => {
+    count.mockResolvedValue(22);
+
+    const result = await getItemsByCollectionId('coll_1', 99);
+
+    expect(filings.mock.calls[0][0]).toMatchObject({ skip: 21 });
+    expect(result?.pagination).toMatchObject({ page: 2, totalPages: 2 });
+  });
+
+  it('reports the total across every page rather than the page it returned', async () => {
+    count.mockResolvedValue(60);
+    filings.mockResolvedValue([{ item: row() }]);
+
+    const result = await getItemsByCollectionId('coll_1', 1);
+
+    expect(result?.pagination.total).toBe(60);
+    expect(result?.items).toHaveLength(1);
+  });
+
+  it('returns null when the id names no collection of the user\'s', async () => {
+    lookupCollection.mockResolvedValue(null);
+
+    // Somebody else's id reads exactly like one that never existed.
+    expect(await getItemsByCollectionId('coll_other', 1)).toBeNull();
+    expect(filings).not.toHaveBeenCalled();
+    expect(count).not.toHaveBeenCalled();
+  });
+
+  it('returns null without querying when nobody is signed in', async () => {
+    currentUserId.mockResolvedValue(null);
+
+    expect(await getItemsByCollectionId('coll_1', 1)).toBeNull();
+    expect(lookupCollection).not.toHaveBeenCalled();
+    expect(filings).not.toHaveBeenCalled();
   });
 });
 

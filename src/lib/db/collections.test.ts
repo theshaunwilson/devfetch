@@ -26,6 +26,7 @@ const { getCurrentUserId } = await import('@/lib/db/user');
 const {
   createCollection,
   deleteCollection,
+  getAllCollections,
   getCollectionOptions,
   getOwnedCollectionIds,
   getRecentCollections,
@@ -62,6 +63,9 @@ const findCollections = prisma.collection.findMany as unknown as Mock<
 >;
 const findFilings = prisma.itemCollection.findMany as unknown as Mock<
   (args: unknown) => Promise<{ collectionId: string; item: { typeId: string } }[]>
+>;
+const countCollections = prisma.collection.count as unknown as Mock<
+  (args: unknown) => Promise<number>
 >;
 const findTypes = prisma.itemType.findMany as unknown as Mock<
   (args: unknown) => Promise<
@@ -334,6 +338,94 @@ describe('getRecentCollections', () => {
 
     await expect(getRecentCollections(6)).resolves.toEqual([]);
     expect(findFilings).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The `/collections` index. It was deliberately unbounded until it was paged,
+ * on the grounds that a ceiling would hide a user's own collections — so what
+ * is worth pinning is that the ceiling is a page rather than a cut: the total
+ * is reported in full, and a page past the end lands on the last one.
+ */
+describe('getAllCollections', () => {
+  beforeEach(() => {
+    findCollections.mockResolvedValue([{ id: 'coll_1', name: 'React Patterns' }]);
+    findFilings.mockResolvedValue([]);
+    countCollections.mockResolvedValue(0);
+  });
+
+  it('scopes both the count and the page to the signed-in user', async () => {
+    await getAllCollections(1);
+
+    expect(countCollections.mock.calls[0][0]).toMatchObject({ where: { userId: USER_ID } });
+    expect(findCollections.mock.calls[0][0]).toMatchObject({ where: { userId: USER_ID } });
+  });
+
+  it('fetches one page rather than every collection the user owns', async () => {
+    countCollections.mockResolvedValue(60);
+
+    await getAllCollections(1);
+
+    expect(findCollections.mock.calls[0][0]).toMatchObject({ skip: 0, take: 21 });
+  });
+
+  it('skips the earlier pages to reach the one asked for', async () => {
+    countCollections.mockResolvedValue(60);
+
+    await getAllCollections(3);
+
+    expect(findCollections.mock.calls[0][0]).toMatchObject({ skip: 42, take: 21 });
+  });
+
+  it('clamps a page past the end to the last one', async () => {
+    countCollections.mockResolvedValue(22);
+
+    const { pagination } = await getAllCollections(99);
+
+    expect(findCollections.mock.calls[0][0]).toMatchObject({ skip: 21 });
+    expect(pagination).toMatchObject({ page: 2, totalPages: 2, hasNextPage: false });
+  });
+
+  it('reports the total across every page, which is what the count line reads', async () => {
+    countCollections.mockResolvedValue(60);
+
+    const { collections, pagination } = await getAllCollections(1);
+
+    expect(pagination.total).toBe(60);
+    expect(collections).toHaveLength(1);
+  });
+
+  it('keeps favorites at the top of the first page', async () => {
+    await getAllCollections(1);
+
+    // Postgres sorts false before true, so `desc` on the boolean is what puts
+    // favorites first — and paging must not reorder them into the middle.
+    expect(findCollections.mock.calls[0][0]).toMatchObject({
+      orderBy: [{ isFavorite: 'desc' }, { updatedAt: 'desc' }],
+    });
+  });
+
+  it('aggregates only the page, not the whole index', async () => {
+    countCollections.mockResolvedValue(60);
+
+    await getAllCollections(1);
+
+    // The type usage is derived from the ids the page returned, so a user with
+    // a thousand collections does not pull a thousand collections' join rows.
+    expect(findFilings.mock.calls[0][0]).toMatchObject({
+      where: { collectionId: { in: ['coll_1'] }, item: { userId: USER_ID } },
+    });
+  });
+
+  it('returns an empty first page without querying when nobody is signed in', async () => {
+    currentUser.mockResolvedValue(null);
+
+    const { collections, pagination } = await getAllCollections(1);
+
+    expect(collections).toEqual([]);
+    expect(pagination).toMatchObject({ page: 1, totalPages: 1, total: 0 });
+    expect(countCollections).not.toHaveBeenCalled();
+    expect(findCollections).not.toHaveBeenCalled();
   });
 });
 

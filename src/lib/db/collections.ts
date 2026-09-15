@@ -5,7 +5,9 @@ import 'server-only';
 import { cache } from 'react';
 
 import { Prisma } from '@/generated/prisma/client';
+import { COLLECTIONS_PER_PAGE } from '@/lib/constants';
 import { getCurrentUserId } from '@/lib/db/user';
+import { buildPagination, pageSkip } from '@/lib/pagination';
 import { prisma } from '@/lib/prisma';
 import type {
   CreateCollectionData,
@@ -17,6 +19,7 @@ import type {
   CollectionStats,
   CreateCollectionOutcome,
   DashboardCollection,
+  PaginatedCollections,
   SidebarCollection,
   SidebarCollections,
   UpdateCollectionOutcome,
@@ -147,26 +150,48 @@ export async function getRecentCollections(limit: number): Promise<DashboardColl
 }
 
 /**
- * Every collection the signed-in user owns, for the `/collections` index.
+ * One page of the collections the signed-in user owns, for the `/collections`
+ * index.
  *
  * Favorites first, then the rest by most recently updated, so the star
  * `CollectionCard` already draws means something structural in an index rather
  * than only decorative. Postgres sorts `false` before `true`, so `desc` on the
  * boolean is what puts favorites at the top.
  *
- * Unbounded, like `getCollectionOptions` and the sidebar's favorites: a ceiling
- * on an index would silently hide some of the user's own collections, which is
- * the one list where that cannot be right. `getRecentCollections(limit)` stays
- * as it is — that one is the dashboard's six-card preview of this.
+ * This was deliberately unbounded, on the grounds that a ceiling on an index
+ * would silently hide some of the user's own collections. Paging is what makes
+ * a ceiling safe — nothing is hidden, it is on the next page — so the reason
+ * for the old decision is what reverses it. `getRecentCollections(limit)` stays
+ * as it is: that one is the dashboard's six-card preview of this, with no
+ * second page to reach.
+ *
+ * `getTypeUsage` runs over the page rather than the whole index, so it now
+ * aggregates at most `COLLECTIONS_PER_PAGE` collections' worth of join rows.
  */
-export async function getAllCollections(): Promise<DashboardCollection[]> {
+export async function getAllCollections(requestedPage: number): Promise<PaginatedCollections> {
   const userId = await getCurrentUserId();
 
-  if (!userId) return [];
+  if (!userId) {
+    return {
+      collections: [],
+      pagination: buildPagination({ total: 0, perPage: COLLECTIONS_PER_PAGE, requestedPage: 1 }),
+    };
+  }
+
+  // Counted before the slice is fetched: the page number arrives from the URL,
+  // and clamping it needs the total.
+  const total = await prisma.collection.count({ where: { userId } });
+  const pagination = buildPagination({
+    total,
+    perPage: COLLECTIONS_PER_PAGE,
+    requestedPage,
+  });
 
   const collections = await prisma.collection.findMany({
     where: { userId },
     orderBy: [{ isFavorite: 'desc' }, { updatedAt: 'desc' }],
+    skip: pageSkip(pagination.page, COLLECTIONS_PER_PAGE),
+    take: COLLECTIONS_PER_PAGE,
     select: {
       id: true,
       name: true,
@@ -180,7 +205,12 @@ export async function getAllCollections(): Promise<DashboardCollection[]> {
     collections.map((collection) => collection.id)
   );
 
-  return collections.map((collection) => toDashboardCollection(collection, usageByCollection));
+  return {
+    collections: collections.map((collection) =>
+      toDashboardCollection(collection, usageByCollection)
+    ),
+    pagination,
+  };
 }
 
 /**

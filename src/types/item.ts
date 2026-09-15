@@ -1,3 +1,5 @@
+import type { Pagination } from '@/types/pagination';
+
 /** Item type an item belongs to, drawn as its icon tile and left border. */
 export interface DashboardItemType {
   id: string;
@@ -63,20 +65,22 @@ export interface SidebarItemType {
   itemCount: number;
 }
 
-/** One item type together with the current user's items of that type. */
+/** One item type together with one page of the user's items of that type. */
 export interface ItemsByType {
   type: DashboardItemType;
   items: DashboardItem[];
+  pagination: Pagination;
 }
 
 /**
  * One collection together with the current user's items filed in it.
  *
  * The collection half is `DashboardCollection` minus the aggregates a card
- * needs: `/collections/[id]` renders the items themselves, so the item count
- * it shows is `items.length` and the type mix is visible in the grid — running
+ * needs: `/collections/[id]` renders the items themselves, so the item count it
+ * shows is `pagination.total` and the type mix is visible in the grid — running
  * `getTypeUsage` for it would re-derive from the join rows what the page is
- * already holding in full.
+ * already holding in full. The count came from `items.length` until the list
+ * was paged, at which point that became the length of one page.
  */
 export interface ItemsByCollection {
   collection: {
@@ -86,6 +90,7 @@ export interface ItemsByCollection {
     isFavorite: boolean;
   };
   items: DashboardItem[];
+  pagination: Pagination;
 }
 
 /** Collection an item is filed in, drawn as a badge in the detail drawer. */
