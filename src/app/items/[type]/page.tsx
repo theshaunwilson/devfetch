@@ -4,27 +4,37 @@ import { FileRow } from '@/components/items/FileRow';
 import { ImageCard } from '@/components/items/ImageCard';
 import { ItemCard } from '@/components/items/ItemCard';
 import { NewItemDialog } from '@/components/items/NewItemDialog';
+import { PaginationControls } from '@/components/pagination/PaginationControls';
 import { getCollectionOptions } from '@/lib/db/collections';
 import { getItemTypes } from '@/lib/db/item-types';
 import { getItemsByTypeSlug } from '@/lib/db/items';
 import { capitalize } from '@/lib/format';
+import { parsePageParam } from '@/lib/pagination';
 import { isImageUploadType, usesFileList } from '@/lib/uploads';
 import { cn } from '@/lib/utils';
 
 // Reads the signed-in user's items per request, so it cannot be prerendered.
 export const dynamic = 'force-dynamic';
 
-export async function generateMetadata({ params }: PageProps<'/items/[type]'>): Promise<Metadata> {
-  const { type } = await params;
-  const result = await getItemsByTypeSlug(type);
+export async function generateMetadata({
+  params,
+  searchParams,
+}: PageProps<'/items/[type]'>): Promise<Metadata> {
+  const [{ type }, { page }] = await Promise.all([params, searchParams]);
+  // The same page the component asks for, so the cached query is hit once
+  // rather than keyed twice.
+  const result = await getItemsByTypeSlug(type, parsePageParam(page));
 
   // An unknown slug renders notFound() below; the generic title covers it.
   return { title: result ? `${capitalize(result.type.name)} | Devfetch` : 'Items | Devfetch' };
 }
 
-export default async function ItemsByTypePage({ params }: PageProps<'/items/[type]'>) {
-  const { type } = await params;
-  const result = await getItemsByTypeSlug(type);
+export default async function ItemsByTypePage({
+  params,
+  searchParams,
+}: PageProps<'/items/[type]'>) {
+  const [{ type }, { page }] = await Promise.all([params, searchParams]);
+  const result = await getItemsByTypeSlug(type, parsePageParam(page));
 
   // A slug naming no visible type is a 404, so a typo reads differently from a
   // type that simply holds nothing.
@@ -32,7 +42,7 @@ export default async function ItemsByTypePage({ params }: PageProps<'/items/[typ
     notFound();
   }
 
-  const { items } = result;
+  const { items, pagination } = result;
   const typeName = capitalize(result.type.name);
 
   // Both free: `getItemTypes` and `getCollectionOptions` are request-cached and
@@ -55,8 +65,10 @@ export default async function ItemsByTypePage({ params }: PageProps<'/items/[typ
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-3xl font-semibold tracking-tight">{typeName}</h1>
+          {/* The total rather than this page's length, which is what it was
+              before the list was paged. */}
           <p className="mt-1 text-muted-foreground">
-            {items.length} {items.length === 1 ? 'item' : 'items'}
+            {pagination.total} {pagination.total === 1 ? 'item' : 'items'}
           </p>
         </div>
 
@@ -96,6 +108,10 @@ export default async function ItemsByTypePage({ params }: PageProps<'/items/[typ
       ) : (
         <p className="mt-8 text-sm text-muted-foreground">No items of this type yet.</p>
       )}
+
+      {/* Renders nothing when there is only one page, so it needs no guard of
+          its own — including on the empty state, which is always page 1. */}
+      <PaginationControls pagination={pagination} basePath={`/items/${type}`} />
     </div>
   );
 }

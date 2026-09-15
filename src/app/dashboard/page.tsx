@@ -4,6 +4,7 @@ import { CollectionCard } from '@/components/dashboard/CollectionCard';
 import { DashboardStats } from '@/components/dashboard/DashboardStats';
 import { ItemRow } from '@/components/dashboard/ItemRow';
 import { SectionHeader } from '@/components/dashboard/SectionHeader';
+import { DASHBOARD_COLLECTIONS_LIMIT, DASHBOARD_RECENT_ITEMS_LIMIT } from '@/lib/constants';
 import { getCollectionStats, getRecentCollections } from '@/lib/db/collections';
 import { getItemStats, getPinnedItems, getRecentItems } from '@/lib/db/items';
 
@@ -14,16 +15,13 @@ export const metadata: Metadata = {
 // Dashboard data is read per request, so the page cannot be prerendered.
 export const dynamic = 'force-dynamic';
 
-const RECENT_COLLECTION_LIMIT = 6;
-const RECENT_ITEM_LIMIT = 10;
-
 export default async function DashboardPage() {
   const [recentCollections, collectionStats, pinnedItems, recentItems, itemStats] =
     await Promise.all([
-      getRecentCollections(RECENT_COLLECTION_LIMIT),
+      getRecentCollections(DASHBOARD_COLLECTIONS_LIMIT),
       getCollectionStats(),
       getPinnedItems(),
-      getRecentItems(RECENT_ITEM_LIMIT),
+      getRecentItems(DASHBOARD_RECENT_ITEMS_LIMIT),
       getItemStats(),
     ]);
 

@@ -4,8 +4,10 @@ import 'server-only';
 
 import { cache } from 'react';
 
+import { ITEMS_PER_PAGE } from '@/lib/constants';
 import { visibleItemTypeFilter } from '@/lib/db/item-types';
 import { getCurrentUserId } from '@/lib/db/user';
+import { buildPagination, pageSkip } from '@/lib/pagination';
 import { prisma } from '@/lib/prisma';
 import { SEARCH_PREVIEW_LENGTH } from '@/lib/search';
 import type { CreateItemData, UpdateItemData } from '@/lib/validation/items';
@@ -107,37 +109,52 @@ export async function getRecentItems(limit: number): Promise<DashboardItem[]> {
 }
 
 /**
- * One item type resolved from its slug, with the current user's items of that
- * type, most recently updated first.
+ * One item type resolved from its slug, with one page of the current user's
+ * items of that type, most recently updated first.
  *
  * Returns null when the slug names no type the user can see, so the caller can
  * tell a bad slug from a type that simply holds no items.
  *
- * Cached, because the page and its `generateMetadata` both ask for it.
+ * Cached, because the page and its `generateMetadata` both ask for it — which
+ * means both have to pass the same `requestedPage`, or the two calls key
+ * differently and the request pays for the query twice.
  */
-export const getItemsByTypeSlug = cache(async (slug: string): Promise<ItemsByType | null> => {
-  const userId = await getCurrentUserId();
+export const getItemsByTypeSlug = cache(
+  async (slug: string, requestedPage: number): Promise<ItemsByType | null> => {
+    const userId = await getCurrentUserId();
 
-  if (!userId) return null;
+    if (!userId) return null;
 
-  const type = await prisma.itemType.findFirst({
-    where: { slug, ...visibleItemTypeFilter(userId) },
-    // @@unique([userId, slug]) allows a custom type to reuse a system slug, so
-    // two rows can match. Prefer the user's own.
-    orderBy: { userId: { sort: 'desc', nulls: 'last' } },
-    select: { id: true, name: true, slug: true, icon: true, color: true },
-  });
+    const type = await prisma.itemType.findFirst({
+      where: { slug, ...visibleItemTypeFilter(userId) },
+      // @@unique([userId, slug]) allows a custom type to reuse a system slug, so
+      // two rows can match. Prefer the user's own.
+      orderBy: { userId: { sort: 'desc', nulls: 'last' } },
+      select: { id: true, name: true, slug: true, icon: true, color: true },
+    });
 
-  if (!type) return null;
+    if (!type) return null;
 
-  const items = await prisma.item.findMany({
-    where: { userId, typeId: type.id },
-    orderBy: { updatedAt: 'desc' },
-    select: ITEM_SELECT,
-  });
+    const where = { userId, typeId: type.id };
 
-  return { type, items: items.map(toDashboardItem) };
-});
+    // Counted before the slice is fetched rather than beside it. The page
+    // number arrives from the URL and clamping it needs the total, and running
+    // the two in parallel would mean issuing `?page=99999` as a real query,
+    // skip and all, only to throw the result away and ask again.
+    const total = await prisma.item.count({ where });
+    const pagination = buildPagination({ total, perPage: ITEMS_PER_PAGE, requestedPage });
+
+    const items = await prisma.item.findMany({
+      where,
+      orderBy: { updatedAt: 'desc' },
+      skip: pageSkip(pagination.page, ITEMS_PER_PAGE),
+      take: ITEMS_PER_PAGE,
+      select: ITEM_SELECT,
+    });
+
+    return { type, items: items.map(toDashboardItem), pagination };
+  }
+);
 
 /**
  * One collection resolved from its id, with the current user's items filed in
@@ -159,10 +176,11 @@ export const getItemsByTypeSlug = cache(async (slug: string): Promise<ItemsByTyp
  * the collection is already known to be the user's, and `item: { userId }`
  * keeps that true of every row that comes back.
  *
- * Cached, because the page and its `generateMetadata` both ask for it.
+ * Cached, because the page and its `generateMetadata` both ask for it, on the
+ * same one-page-per-call-site condition as `getItemsByTypeSlug`.
  */
 export const getItemsByCollectionId = cache(
-  async (id: string): Promise<ItemsByCollection | null> => {
+  async (id: string, requestedPage: number): Promise<ItemsByCollection | null> => {
     const userId = await getCurrentUserId();
 
     if (!userId) return null;
@@ -174,13 +192,25 @@ export const getItemsByCollectionId = cache(
 
     if (!collection) return null;
 
+    const where = { collectionId: collection.id, item: { userId } };
+
+    // Counted first, for the reason `getItemsByTypeSlug` is.
+    const total = await prisma.itemCollection.count({ where });
+    const pagination = buildPagination({ total, perPage: ITEMS_PER_PAGE, requestedPage });
+
     const filings = await prisma.itemCollection.findMany({
-      where: { collectionId: collection.id, item: { userId } },
+      where,
       orderBy: { item: { updatedAt: 'desc' } },
+      skip: pageSkip(pagination.page, ITEMS_PER_PAGE),
+      take: ITEMS_PER_PAGE,
       select: { item: { select: ITEM_SELECT } },
     });
 
-    return { collection, items: filings.map((filing) => toDashboardItem(filing.item)) };
+    return {
+      collection,
+      items: filings.map((filing) => toDashboardItem(filing.item)),
+      pagination,
+    };
   }
 );
 

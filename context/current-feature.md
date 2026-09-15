@@ -1,12 +1,75 @@
-# Current Feature
+# Current Feature: Pagination
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
+- Paginate `/items/[type]` with numbered page links, at `ITEMS_PER_PAGE = 21`
+- Paginate `/collections/[id]` with numbered page links, at `ITEMS_PER_PAGE = 21`
+- Pagination controls sit at the bottom of the list: page numbers plus prev/next
+- Prev/next are greyed out and inert when there is no page in that direction
+- `ITEMS_PER_PAGE`, `COLLECTIONS_PER_PAGE`, `DASHBOARD_COLLECTIONS_LIMIT` and `DASHBOARD_RECENT_ITEMS_LIMIT` live as named constants
+- Each page fetches only the rows it renders — no fetch-everything-then-slice
+
 ## Notes
+
+Read from the spec and from the code the spec touches.
+
+**The spec names two pages but supplies three page sizes.** `COLLECTIONS_PER_PAGE`
+only fits `/collections`, the index — `/collections/[id]` lists *items*, so its
+page size is `ITEMS_PER_PAGE`. Either the index is in scope and the requirements
+line omits it, or the constant is unused. Settle at `start` rather than guessing;
+the index is the stronger reading, since `getAllCollections` is the only
+unbounded list the "do not fetch all at once" rule bites.
+
+**That rule reverses a documented decision.** `getAllCollections` is deliberately
+unbounded and says so: "a ceiling on an index would silently hide some of the
+user's own collections, which is the one list where that cannot be right."
+Pagination is exactly what makes a ceiling safe — nothing is hidden, it is on
+page 2 — so the doc comment has to change with the code rather than be left
+standing against it.
+
+**Every paged query now needs a total as well as a slice.** All three pages print
+a count line from `items.length` / `collections.length`, which after paging is
+the page's length, not the total — and the page numbers cannot be computed
+without the total either. So each query returns `{ rows, total }` (a `count`
+alongside the `findMany`), and the count lines read the total.
+
+**The three surfaces and their queries:**
+
+- `/items/[type]` → `getItemsByTypeSlug(slug)` in `src/lib/db/items.ts`, `findMany` on `{ userId, typeId }` ordered by `updatedAt desc` — covered by `@@index([userId, updatedAt(sort: Desc)])`, though the type filter means Postgres may prefer `@@index([userId, typeId])` and sort. Currently no `take` at all.
+- `/collections/[id]` → `getItemsByCollectionId(id)` in the same module, reading `ItemCollection` join rows ordered by `item.updatedAt desc`. The order is on the *related* row, so `skip`/`take` there is the one path worth looking at under `explain` before assuming it is cheap.
+- `/collections` → `getAllCollections()` in `src/lib/db/collections.ts`, ordered `isFavorite desc, updatedAt desc`. Note `getTypeUsage` runs after the slice, so paging shrinks that aggregation too — a win, not just a neutral change.
+
+**Both item queries are `cache()`d because the page and its `generateMetadata`
+both call them.** `cache` keys on arguments, so the page number has to be
+threaded through to *both* call sites or the two will fetch different pages and
+issue two queries instead of one.
+
+**Dashboard limits are already local constants** — `RECENT_COLLECTION_LIMIT = 6`
+and `RECENT_ITEM_LIMIT = 10` in `src/app/dashboard/page.tsx`. The spec renames
+them, so they move to `src/lib/constants.ts` beside the two page sizes.
+`AppShell`'s `SIDEBAR_COLLECTION_LIMIT` is not named by the spec and stays put.
+
+**`/collections/[id]` groups its items into cards / images / files sections.**
+Grouping happens after the slice, so a given page may show only one section, or
+a section with one row in it. That follows from paging a mixed list and is not a
+defect, but it is the visible consequence worth checking in the browser.
+
+**Settled at `start`:**
+
+- `/collections` **is** in scope, so all three lists page and `COLLECTIONS_PER_PAGE` is read rather than declared and ignored.
+- A bad `?page=` **clamps** rather than 404s: anything malformed or below 1 renders page 1, anything past the end renders the last page. The case that decides it is real rather than hypothetical — you are on page 3, delete some items, refresh, and page 3 no longer exists.
+- There is no `pagination` component in `src/components/ui/`. shadcn's generator has twice pulled a third-party `cn` package into this project (recorded for `select`, `progress` and `command`), so it is hand-adapt or hand-build, not `shadcn add` unchecked.
+
+**Testable under `coding-standards.md`:** the page-number maths — which numbers
+to render, when prev/next are disabled, how a bad `?page=` is normalised — is
+pure logic and belongs in a `src/lib/` module with tests. The three query
+functions are tested the way `db/items.test.ts` already tests them, by mocking
+`@/lib/prisma` at the module boundary. The controls themselves are a component,
+so they are verified in the browser.
 
 ## History
 

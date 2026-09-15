@@ -1,3 +1,5 @@
+import type { Pagination } from '@/types/pagination';
+
 /** Item type present in a collection, rendered as a small icon on its card. */
 export interface CollectionItemType {
   id: string;
@@ -17,6 +19,12 @@ export interface DashboardCollection {
   types: CollectionItemType[];
   /** Color of the most used type, drawn as the card's left border */
   accentColor: string | null;
+}
+
+/** One page of the `/collections` index, with where in the list it sits. */
+export interface PaginatedCollections {
+  collections: DashboardCollection[];
+  pagination: Pagination;
 }
 
 /**
