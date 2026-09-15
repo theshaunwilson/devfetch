@@ -1,6 +1,6 @@
 'use client';
 
-import { LogOut, User } from 'lucide-react';
+import { LogOut, Settings, User } from 'lucide-react';
 import Link from 'next/link';
 import { useId } from 'react';
 
@@ -24,7 +24,7 @@ interface SidebarUserProps {
 
 /**
  * User area pinned to the bottom of the sidebar. The row opens an account
- * menu holding the profile link and sign out.
+ * menu holding the profile and settings links, and sign out.
  */
 export function SidebarUser({ user }: SidebarUserProps) {
   const { closeMobile } = useSidebar();
@@ -73,6 +73,13 @@ export function SidebarUser({ user }: SidebarUserProps) {
             <Link href="/profile" onClick={closeMobile}>
               <User className="size-4" />
               Profile
+            </Link>
+          </DropdownMenuItem>
+
+          <DropdownMenuItem asChild>
+            <Link href="/settings" onClick={closeMobile}>
+              <Settings className="size-4" />
+              Settings
             </Link>
           </DropdownMenuItem>
 

@@ -3,8 +3,6 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { ChangePasswordDialog } from '@/components/profile/ChangePasswordDialog';
-import { DeleteAccountDialog } from '@/components/profile/DeleteAccountDialog';
 import { ProfileHeader } from '@/components/profile/ProfileHeader';
 import { ProfileStats } from '@/components/profile/ProfileStats';
 import { Button } from '@/components/ui/button';
@@ -46,23 +44,7 @@ export default async function ProfilePage() {
         </Link>
       </Button>
 
-      <ProfileHeader
-        user={user}
-        actions={
-          <>
-            {/* Only for accounts that sign in with a password. A GitHub
-                account has none to change — `hasPassword` is derived from
-                the column, never the column itself. */}
-            {user.hasPassword && <ChangePasswordDialog />}
-
-            <DeleteAccountDialog
-              email={user.email}
-              itemCount={itemStats.total}
-              collectionCount={collectionStats.total}
-            />
-          </>
-        }
-      />
+      <ProfileHeader user={user} />
 
       <ProfileStats items={itemStats} collections={collectionStats} itemTypes={itemTypes} />
     </div>

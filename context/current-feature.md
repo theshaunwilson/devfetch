@@ -1,14 +1,90 @@
-# Current Feature
+# Current Feature: Settings Page
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
+- A `/settings` page exists, protected the same way every other signed-in route is.
+- The sidebar's account menu (the user row at the bottom) carries a **Settings** link alongside Profile and Sign out.
+- The account actions move off `/profile` and onto `/settings`: **Delete account**, and the password action currently sitting there.
+- `/profile` keeps its identity card and stats, minus the action footer.
+- `npm run test`, `npm run lint`, `npx tsc --noEmit` and `npm run build` all pass.
+
 ## Notes
 
+### One thing to settle at `start`
+
+The request says "delete account and **forgot password**", but the profile page has no forgot-password action — it has
+`ChangePasswordDialog`, rendered only when `user.hasPassword`. `/forgot-password` is a separate **public** page for
+people who are signed out and cannot reach settings at all. Working assumption: this means **Change password**, and that
+is what moves. If a "Forgot password?" escape hatch is also wanted for a signed-in user who has forgotten their current
+password, that is a second, additive thing — ask before building it.
+
+### What the code already says
+
+- **Protection is one line in `src/proxy.ts`.** Its matcher lists `/collections/:path*`, `/dashboard/:path*`,
+  `/items/:path*`, `/profile/:path*` and nothing else, so a new top-level route is **unauthenticated until added**.
+  This is the exact gap the Items List View and Collections Pages features both hit. `:path*` matches zero segments, so
+  `/settings/:path*` covers bare `/settings`.
+- **`/profile` mounts no `AppShell`** — `src/app/profile/` holds `page.tsx` alone, no `layout.tsx`, so the page renders
+  standalone with a "Back to dashboard" button instead of the sidebar and top bar. Settings has to pick one:
+  match profile (standalone, consistent with the page it is taking actions from) or wrap in `AppShell` like
+  `/dashboard`, `/items` and `/collections` do. Worth knowing: no `AppShell` also means **no ⌘K palette** on the page,
+  already recorded as open for `/profile`.
+- **The infinite-redirect lesson applies directly.** `/profile` redirects a null user to
+  `/sign-in?callbackUrl=%2Fprofile`, and `/sign-in` resolves through `getCurrentUser()` rather than `auth()` alone
+  precisely so a stale JWT naming a deleted row does not loop. Settings needs the same guard for the same reason —
+  and it is the page that *deletes the account*, so it is the likeliest route to be standing on a dead session.
+- **The menu link is a `DropdownMenuItem asChild` wrapping a `Link` with `onClick={closeMobile}`**, the way the Profile
+  item already is — the desktop sidebar and the mobile drawer both render `SidebarUser`, so a link that does not close
+  the drawer leaves it open over the page it just navigated to.
+- **`ProfileHeader` takes a required `actions` prop** and renders it in a `CardFooter`. With the actions gone, that
+  prop and the footer both go, rather than being passed an empty fragment.
+- **The queries are already written.** `DeleteAccountDialog` needs `email`, `itemCount` and `collectionCount`, so
+  settings runs `getProfileUser()`, `getItemStats()` and `getCollectionStats()` — the same three `/profile` already
+  runs. `hasPassword` comes off `getProfileUser()` and is what decides whether the password action renders at all;
+  a GitHub account has no password to change. Note the profile page also runs `getItemTypes()` for its breakdown,
+  which settings does not need.
+
+### Settled during implementation
+
+- **The forgot-password ambiguity resolved as Change password**, as the load note assumed — that is the only password
+  action the profile had. Nothing about a signed-in "forgot my current password" escape hatch was built; say the word
+  and it is additive.
+- **Standalone, not `AppShell`** — `/settings` matches `/profile`, the page it is taking actions from: a centered
+  `max-w-3xl` column with a "Back to dashboard" button. Consequence, inherited from `/profile`: **no ⌘K palette
+  on the page**.
+- **The load note about protection was overstated and is corrected here.** The matcher was described as the only thing
+  standing between `/settings` and an anonymous request. Proven otherwise by removing it and re-requesting: the page's
+  own null-user guard catches it too, because `getProfileUser()` returns null with no session — a **307** from the page
+  rather than the matcher's **302**. So the matcher is defense in depth: it turns the request away at the edge without
+  running three Prisma queries, and keeps `/settings` consistent with every other signed-in route. `src/proxy.ts` was
+  restored byte-identical afterwards (shasum `9eace96c` both sides).
+- **The account actions moved folder, not just page.** `ChangePasswordDialog`, `ChangePasswordForm` and
+  `DeleteAccountDialog` are now `src/components/settings/`, which `coding-standards.md`'s `components/[feature]/` rule
+  asks for and which churned exactly one importer — the profile page, already being edited. `ProfileHeader` lost its
+  required `actions` prop and its `CardFooter` rather than being handed an empty fragment.
+- **A gap the profile feature recorded is now closed.** It noted that a GitHub user "sees only Delete account, with
+  nothing saying why there is no password option". The settings page has room for a sentence, so the Password row
+  renders an explanation instead of vanishing.
+- **No new tests.** Nothing here touches a server action or a utility — `src/actions/profile.ts` is untouched by a
+  move — and `coding-standards.md` scopes the suite to those two, so this rides on browser verification. The existing
+  546 stay green.
+
+### Constraints
+
+- No migration and no schema change — nothing here stores anything new.
+- No new dependency expected: `dialog`, `alert-dialog` and `sonner` are all already in `src/components/ui/`.
+  If a `shadcn add` does turn out to be needed, check the generated file's `cn` import — three earlier runs pulled in
+  a third-party `cn` package instead of `@/lib/utils`.
+- Mostly a move, so the components themselves should not change behaviour. `coding-standards.md` scopes the test suite
+  to server actions and utilities, so unchanged components ride on browser verification; `src/actions/profile.ts` is
+  untouched by a move and its existing tests should stay green.
+
 ## History
+
 
 
 <!-- Keep this updated. Earliest to latest -->
