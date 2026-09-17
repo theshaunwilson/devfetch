@@ -1,12 +1,90 @@
-# Current Feature
+# Current Feature: Favorites Sorting
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
+- `/favorites` gains a sort control offering **Name**, **Date** and **Item type**.
+- Sorting happens **client-side**: no refetch, no navigation, no new query — the page
+  keeps its two server queries and hands the rows to a client component that reorders
+  what it was given.
+- Both sections stay in place (Items, then Collections) with their counts unchanged;
+  sorting reorders rows within a section rather than merging the two.
+- The order is deterministic — every sort has a tie-break, so two rows that compare
+  equal do not swap between renders.
+- The sort logic lives in `src/lib/` as pure comparators so it can be unit tested,
+  since `coding-standards.md` scopes the suite to server actions and utilities.
+
 ## Notes
+
+### Open questions to settle at `start`
+
+1. **"Item type" and the Collections section.** A collection has no item type — the
+   Collections rows carry a literal `"Collection"` badge, and `FavoriteCollectionRow`
+   deliberately does not derive one (it would mean running the type-usage aggregation
+   for a 16px glyph). So a single Type sort is a no-op for that section. Either the
+   control governs both sections and Type falls back to the name order for collections,
+   or the control is scoped to Items only. Decide rather than assume.
+2. **Direction.** The request names three sort keys but no ascending/descending. A
+   one-way sort per key (name A→Z, date newest first, type A→Z) is the smaller build;
+   a direction toggle is the fuller one.
+3. **Default.** The page currently renders whatever the queries return, which is
+   `updatedAt desc` — so "Date" is already the status quo and is the obvious default.
+
+### Decisions settled at `start`
+
+1. **One control governs both sections.** Under the type key a collection has nothing
+   to compare, so it falls through to the shared name tie-break — which means "type
+   falls back to name for collections" comes out of the comparison chain that already
+   exists rather than a branch of its own that could drift from it. There is a test
+   asserting collections under Type come out in exactly the order Name gives.
+2. **The direction toggles**, and it flips the *whole* chain rather than the primary
+   key alone, so the arrow means "reverse this list" and no part of it stays sorted
+   the other way.
+3. **The default is date, newest first** — what both queries already order by, so the
+   page opens on exactly the order it rendered before the control existed.
+
+### What the code already says
+
+- **`/favorites` is a `force-dynamic` server component** calling `getFavoriteItems()`
+  and `getFavoriteCollections()` in a `Promise.all`. Client-side sorting means a
+  `'use client'` wrapper holding `useState`, with the server page still fetching.
+- **The rows cross the boundary cleanly.** `DashboardItem` and `FavoriteCollection`
+  are plain objects with `updatedAt` already serialized to ISO in the db layer, and
+  none of `FavoriteRow`'s dependencies (`getIcon`, `textColorClass`, `formatShortDate`,
+  `capitalize`, `SectionHeading`) import `server-only` — checked, not assumed — so
+  moving the list into the client bundle is safe.
+- **No new dependency and no `shadcn add`.** Both `select.tsx` and `dropdown-menu.tsx`
+  are already in `src/components/ui/`. `shadcn add` has pulled a third-party `cn`
+  package on four previous occasions (`select`, `progress`, `command`, `tabs`), so a
+  control should be built from what is installed.
+- **Sorting by date is sorting by a proxy.** There is no `favoritedAt` column; both
+  queries order by `updatedAt`, which moves on every title, tag or content edit. The
+  Favorite Toggle feature made that proxy *less* accurate, not more, since starring
+  deliberately preserves `updatedAt` via raw SQL. The doc comments on both queries
+  already say so; the sort label should not claim more than the data supports.
+- **Tie-breaks are not hypothetical.** History records that three favorited items share
+  an identical `updatedAt`, so a date sort with no secondary key leaves their order
+  arbitrary. `Array.prototype.sort` is stable in V8, but "stable over whatever the
+  database happened to return" is not a defined order.
+- **Name sorting needs a stated rule.** Titles are user text, so `localeCompare` with
+  explicit case handling beats `<`, which sorts every uppercase letter before every
+  lowercase one.
+
+### Constraints
+
+- Anti-drift rule: derive from the existing helpers rather than adding a parallel list,
+  the way `usesCodeEditor`, `requiredFieldsFor`, `usesFileList` and `groupItemsByShape`
+  all do.
+- No server action and no query change is expected — if one turns out to be needed, that
+  is a finding worth raising rather than absorbing.
+- The page's existing behaviour must survive: an item row opens the detail drawer with
+  focus returning to the exact row on Escape, a collection row navigates, the empty state
+  reads "No favorites yet.", and each section hides when empty.
+- `/favorites` rows have no favorite toggle of their own (recorded as open), so nothing
+  can leave the list while it is open — a row cannot be unstarred out from under a sort.
 
 ## History
 
