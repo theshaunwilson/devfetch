@@ -1,12 +1,87 @@
-# Current Feature
+# Current Feature: Pinned Items
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
+- `toggleItemPin` server action, following the favorite pattern: takes the value
+  to store rather than flipping the row, Zod-parses the boolean, resolves the
+  owner from the session, and reports somebody else's item identically to one
+  that never existed
+- The drawer's Pin button becomes live — it has rendered inert since the Item
+  Drawer feature built the action bar, with a comment saying so
+- Optimistic UI, so the pin fills on click rather than after a round trip
+- Toast on success **and** on error
+- Pinned items sort to the top of listings
+- Items only; nothing pins a collection
+- The pin on `ItemCard` stays a static indicator
+
 ## Notes
+
+**No migration.** `Item.isPinned` has been in the schema since the Prisma
+feature, and `@@index([userId, isPinned])` is already there — the same index
+`getPinnedItems` reads through. No new dependency either: `sonner` is mounted in
+`AppShell`.
+
+**The favorite pattern is a real pattern here, not a loose analogy**, and three
+of its four pieces transfer unchanged:
+
+- `src/actions/items.ts` → `setItemFavorite`: session guard, `z.boolean()`
+  parse, delegate to the db layer, map "no row matched" to a not-found message.
+- `src/lib/db/items.ts` → `setItemFavorite`: ownership in the `WHERE` of the
+  write itself, absolute value rather than a toggle so two clicks landing out of
+  order settle on the last one, affected-row count as the answer.
+- `src/hooks/use-favorite-toggle.ts`: `useOptimistic` handed the **prop**, so the
+  confirmed value arrives when the server re-renders and there is nothing to roll
+  back; `router.refresh()` inside the transition.
+
+**The one piece that does not transfer is `updatedAt`.** The Favorite Toggle
+feature dropped to `$executeRaw` specifically so starring an item would not stamp
+`@updatedAt` and jump it to the top of every list ordered by that column. Pinning
+has the same problem and needs the same answer — and it matters more here,
+because `updatedAt` is exactly the secondary sort a pinned-first ordering falls
+back to.
+
+**Three things settled at `start`** (the first two put to the user):
+
+1. **Which lists are "listings".** `getItemsByTypeSlug` (`/items/[type]`) and
+   `getItemsByCollectionId` (`/collections/[id]`) are the obvious two. The
+   dashboard's Recent list is not: the dashboard already renders a separate
+   Pinned section from `getPinnedItems`, so reordering Recent would show the same
+   items twice, one above the other. `/favorites` sorts in the browser and the
+   search palette scores, so neither is a database ordering at all.
+2. **Success toast.** `useFavoriteToggle` deliberately has *no* success toast —
+   "the star filling is its own confirmation, and a grid of cards would stack
+   them". The spec asks for one here. Following the spec means either
+   generalizing the hook with a flag or writing a second one; following the
+   existing pattern means dropping the success toast. The spec wins unless
+   there is a reason it cannot, but the divergence should be deliberate.
+3. **Drawer state.** The drawer's `item` is client state set when it opened, so
+   `router.refresh()` does not reach it — favouriting needed an
+   `onFavoriteChanged` callback threaded through `ItemDrawer` to the provider,
+   and `ItemDetail extends DashboardItem`, so **both** copies have to be updated
+   or edit mode is handed a stale item. Pinning needs the identical wiring.
+
+**Pagination interacts.** `/items/[type]` and `/collections/[id]` both paginate,
+and the ordering is applied in SQL before the slice, so pinned-first holds across
+pages rather than only within one — which is the correct behaviour but worth
+checking on page 2.
+
+**Resolved:** listings are `/items/[type]` and `/collections/[id]` only — the
+dashboard's Recent list is untouched, confirmed in the browser with `useDebounce
+Hook` still sitting 5th in Recent while heading the Pinned section. The pin
+toasts and the star does not: the "grid would stack them" objection does not
+apply to a control that exists in exactly one place, and pinning's effect
+happens behind the open drawer where nothing confirms it. `useFavoriteToggle`
+became `useFlagToggle` with an optional `successMessage` rather than a second
+near-identical hook — four favorite call sites repointed, their behaviour
+unchanged and re-verified.
+
+**Doc comments to correct rather than leave standing:** `ItemDrawerActions`'
+header says "Pinning and copying still need mutations that do not exist yet", and
+`getPinnedItems` is described in terms of a flag nothing writes.
 
 ## History
 

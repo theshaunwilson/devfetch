@@ -162,6 +162,12 @@ export function ItemDrawerProvider({
     setDetail((current) => (current ? { ...current, isFavorite } : current));
   }, []);
 
+  /** As `handleFavoriteChanged`, for the pin, and for the same reason. */
+  const handlePinChanged = useCallback((isPinned: boolean) => {
+    setItem((current) => (current ? { ...current, isPinned } : current));
+    setDetail((current) => (current ? { ...current, isPinned } : current));
+  }, []);
+
   // Memoized, or every drawer transition — open, fetch resolve, edit toggle,
   // close — would change the context identity and re-render every
   // OpenItemButton on the page. There is one per card and the lists are
@@ -201,6 +207,7 @@ export function ItemDrawerProvider({
         onSaved={handleSaved}
         onDeleted={handleDeleted}
         onFavoriteChanged={handleFavoriteChanged}
+        onPinChanged={handlePinChanged}
       />
     </ItemDrawerContext.Provider>
   );

@@ -4,7 +4,7 @@ import { Star } from 'lucide-react';
 
 import { setItemFavorite } from '@/actions/items';
 import { Button } from '@/components/ui/button';
-import { useFavoriteToggle } from '@/hooks/use-favorite-toggle';
+import { useFlagToggle } from '@/hooks/use-flag-toggle';
 import { cn } from '@/lib/utils';
 
 interface FavoriteItemButtonProps {
@@ -34,10 +34,10 @@ export function FavoriteItemButton({
   isFavorite: stored,
   className,
 }: FavoriteItemButtonProps) {
-  const { isFavorite, toggle } = useFavoriteToggle({
+  const { value: isFavorite, toggle } = useFlagToggle({
     id: itemId,
-    isFavorite: stored,
-    setFavorite: setItemFavorite,
+    value: stored,
+    setValue: setItemFavorite,
   });
 
   return (

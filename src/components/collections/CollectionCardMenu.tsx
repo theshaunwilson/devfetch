@@ -14,7 +14,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useFavoriteToggle } from '@/hooks/use-favorite-toggle';
+import { useFlagToggle } from '@/hooks/use-flag-toggle';
 import { cn } from '@/lib/utils';
 import type { CollectionMeta } from '@/types/collection';
 
@@ -44,10 +44,10 @@ export function CollectionCardMenu({ collection, isFavorite }: CollectionCardMen
   const [deleteOpen, setDeleteOpen] = useState(false);
   const router = useRouter();
 
-  const favorite = useFavoriteToggle({
+  const favorite = useFlagToggle({
     id: collection.id,
-    isFavorite,
-    setFavorite: setCollectionFavorite,
+    value: isFavorite,
+    setValue: setCollectionFavorite,
   });
 
   return (
@@ -63,9 +63,9 @@ export function CollectionCardMenu({ collection, isFavorite }: CollectionCardMen
         <DropdownMenuContent align="end">
           <DropdownMenuItem onSelect={favorite.toggle}>
             <Star
-              className={cn('size-4', favorite.isFavorite && 'fill-yellow-500 text-yellow-500')}
+              className={cn('size-4', favorite.value && 'fill-yellow-500 text-yellow-500')}
             />
-            {favorite.isFavorite ? 'Unfavorite' : 'Favorite'}
+            {favorite.value ? 'Unfavorite' : 'Favorite'}
           </DropdownMenuItem>
 
           <DropdownMenuItem onSelect={() => setEditOpen(true)}>

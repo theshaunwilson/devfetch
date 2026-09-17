@@ -148,6 +148,13 @@ export type DeleteItemResult = { success: true } | { success: false; error: stri
 export type SetItemFavoriteResult = { success: true } | { success: false; error: string };
 
 /**
+ * What `setItemPinned` returns — the same shape as the favorite result above,
+ * and kept as its own name rather than aliased so the two can diverge without a
+ * rename.
+ */
+export type SetItemPinnedResult = { success: true } | { success: false; error: string };
+
+/**
  * An item type reduced to what a create needs: the id to file the item under,
  * and the slug that says which fields that type requires.
  */

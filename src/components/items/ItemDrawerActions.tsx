@@ -2,10 +2,10 @@
 
 import { Copy, Pencil, Pin, Star } from 'lucide-react';
 
-import { setItemFavorite } from '@/actions/items';
+import { setItemFavorite, setItemPinned } from '@/actions/items';
 import { DeleteItemDialog } from '@/components/items/DeleteItemDialog';
 import { Button } from '@/components/ui/button';
-import { useFavoriteToggle } from '@/hooks/use-favorite-toggle';
+import { useFlagToggle } from '@/hooks/use-flag-toggle';
 import { cn } from '@/lib/utils';
 
 interface ItemDrawerActionsProps {
@@ -26,14 +26,22 @@ interface ItemDrawerActionsProps {
    * landed.
    */
   onFavoriteChanged: (isFavorite: boolean) => void;
+  /** As `onFavoriteChanged`, for the pin, and needed for the same reason. */
+  onPinChanged: (isPinned: boolean) => void;
 }
 
 /**
  * The drawer's action bar.
  *
- * Edit, delete and favouriting are live. Pinning and copying still need
- * mutations that do not exist yet, so those two stay inert; their state still
- * renders, since it comes from the item itself.
+ * Edit, delete, favouriting and pinning are live. Copying still needs a
+ * mutation that does not exist yet, so that one stays inert.
+ *
+ * The pin toasts and the star does not, which is deliberate rather than an
+ * inconsistency. The star appears on every card, where a confirmation per click
+ * would stack, and it fills in a list the user is already looking at. The pin
+ * exists only here, and what it does — sorting the item to the top of its
+ * listings and into the dashboard's Pinned section — happens behind the open
+ * drawer, out of sight.
  */
 export function ItemDrawerActions({
   itemId,
@@ -44,25 +52,37 @@ export function ItemDrawerActions({
   canEdit,
   onDeleted,
   onFavoriteChanged,
+  onPinChanged,
 }: ItemDrawerActionsProps) {
-  const favorite = useFavoriteToggle({
+  const favorite = useFlagToggle({
     id: itemId,
-    isFavorite,
-    setFavorite: setItemFavorite,
+    value: isFavorite,
+    setValue: setItemFavorite,
     onToggled: onFavoriteChanged,
+  });
+
+  const pin = useFlagToggle({
+    id: itemId,
+    value: isPinned,
+    setValue: setItemPinned,
+    onToggled: onPinChanged,
+    successMessage: (pinned) => (pinned ? 'Item pinned' : 'Item unpinned'),
   });
 
   return (
     // Wraps rather than overflows: buttons are `shrink-0`, so on a narrow
     // screen the bar would otherwise run past the drawer's edge.
     <div className="flex flex-wrap items-center gap-1">
-      <Button variant="ghost" size="sm" onClick={favorite.toggle} aria-pressed={favorite.isFavorite}>
-        <Star className={cn('size-4', favorite.isFavorite && 'fill-yellow-500 text-yellow-500')} />
+      <Button variant="ghost" size="sm" onClick={favorite.toggle} aria-pressed={favorite.value}>
+        <Star className={cn('size-4', favorite.value && 'fill-yellow-500 text-yellow-500')} />
         Favorite
       </Button>
 
-      <Button variant="ghost" size="sm">
-        <Pin className={cn('size-4', isPinned && 'fill-current')} />
+      {/* A stable name with a pressed state rather than a label flipping
+          between Pin and Unpin, matching the star beside it: the name says what
+          the button is, `aria-pressed` says which way it currently sits. */}
+      <Button variant="ghost" size="sm" onClick={pin.toggle} aria-pressed={pin.value}>
+        <Pin className={cn('size-4', pin.value && 'fill-current')} />
         Pin
       </Button>
 

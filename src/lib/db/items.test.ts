@@ -43,6 +43,7 @@ const {
   getItemsByTypeSlug,
   getSearchItems,
   setItemFavorite,
+  setItemPinned,
   updateItem,
 } = await import('./items');
 const { Prisma } = await import('@/generated/prisma/client');
@@ -661,6 +662,17 @@ describe('getItemsByTypeSlug', () => {
     });
   });
 
+  it('orders pinned items first, then by most recently updated', async () => {
+    await getItemsByTypeSlug('image', 1);
+
+    // Both keys, in this order. Ordering only within the page that came back
+    // would leave a pinned item on what should be page one sitting at the top
+    // of page three instead.
+    expect(findMany.mock.calls[0][0]).toMatchObject({
+      orderBy: [{ isPinned: 'desc' }, { updatedAt: 'desc' }],
+    });
+  });
+
   it('scopes the items to the signed-in user and the resolved type', async () => {
     await getItemsByTypeSlug('image', 1);
 
@@ -852,6 +864,16 @@ describe('getItemsByCollectionId', () => {
 
     expect(filings.mock.calls[0][0]).toMatchObject({
       where: { collectionId: 'coll_1', item: { userId: USER_ID } },
+    });
+  });
+
+  it('orders pinned items first, then by most recently updated', async () => {
+    await getItemsByCollectionId('coll_1', 1);
+
+    // Through the join, since the flag belongs to the item rather than to the
+    // filing row the query is actually reading.
+    expect(filings.mock.calls[0][0]).toMatchObject({
+      orderBy: [{ item: { isPinned: 'desc' } }, { item: { updatedAt: 'desc' } }],
     });
   });
 
@@ -1153,5 +1175,82 @@ describe('setItemFavorite', () => {
     executeRaw.mockRejectedValue(new Error('connection lost'));
 
     await expect(setItemFavorite(ITEM_ID, true)).rejects.toThrow('connection lost');
+  });
+});
+
+describe('setItemPinned', () => {
+  beforeEach(() => {
+    executeRaw.mockResolvedValue(1);
+  });
+
+  /** The interpolated values of the tagged-template call, in order. */
+  function values() {
+    return executeRaw.mock.calls[0].slice(1);
+  }
+
+  /** The SQL text, with the parameter holes closed up. */
+  function sql() {
+    return (executeRaw.mock.calls[0][0] as unknown as string[]).join('?').replace(/\s+/g, ' ');
+  }
+
+  it('scopes the update to the signed-in user, in the WHERE clause itself', async () => {
+    // The id comes from the client, exactly as it does for the star, so the
+    // ownership filter has to be part of the write rather than a check in
+    // front of it.
+    await setItemPinned(ITEM_ID, true);
+
+    expect(sql()).toContain('WHERE "id" = ? AND "userId" = ?');
+    expect(values()).toEqual([true, ITEM_ID, USER_ID]);
+  });
+
+  it('writes the value it was given rather than reading the row first', async () => {
+    await setItemPinned(ITEM_ID, true);
+    expect(values()[0]).toBe(true);
+
+    executeRaw.mockClear();
+    await setItemPinned(ITEM_ID, false);
+    expect(values()[0]).toBe(false);
+
+    expect(findFirst).not.toHaveBeenCalled();
+  });
+
+  it('leaves updatedAt alone', async () => {
+    // Load-bearing here in a way it is not for the star: pinning sorts an item
+    // to the top of its listings and the sort below it is `updatedAt`, so a
+    // Prisma write stamping the column would reorder the list you are looking
+    // at as a side effect of pinning something in it.
+    await setItemPinned(ITEM_ID, true);
+
+    expect(sql()).not.toContain('updatedAt');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('writes nothing but the flag', async () => {
+    await setItemPinned(ITEM_ID, true);
+
+    expect(sql()).toContain('SET "isPinned" = ?');
+    expect(sql()).toContain('UPDATE "Item"');
+    expect(sql()).not.toContain('isFavorite');
+  });
+
+  it('never writes without a session', async () => {
+    currentUserId.mockResolvedValue(null);
+
+    await expect(setItemPinned(ITEM_ID, true)).resolves.toBe(false);
+    expect(executeRaw).not.toHaveBeenCalled();
+  });
+
+  it('reports no row matched as not written', async () => {
+    // A raw UPDATE matching nothing is not an error, so the affected-row count
+    // is what says so. An unknown id and somebody else's id both land here.
+    executeRaw.mockResolvedValue(0);
+
+    await expect(setItemPinned(ITEM_ID, true)).resolves.toBe(false);
+  });
+
+  it('rethrows a database failure rather than reporting it as not found', async () => {
+    executeRaw.mockRejectedValue(new Error('connection lost'));
+
+    await expect(setItemPinned(ITEM_ID, true)).rejects.toThrow('connection lost');
   });
 });
