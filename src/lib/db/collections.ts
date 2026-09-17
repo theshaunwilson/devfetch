@@ -19,6 +19,7 @@ import type {
   CollectionStats,
   CreateCollectionOutcome,
   DashboardCollection,
+  FavoriteCollection,
   PaginatedCollections,
   SidebarCollection,
   SidebarCollections,
@@ -211,6 +212,36 @@ export async function getAllCollections(requestedPage: number): Promise<Paginate
     ),
     pagination,
   };
+}
+
+/**
+ * Every favorited collection, most recently updated first.
+ *
+ * Unlimited and unaggregated, unlike every other collection read here: the
+ * compact `/favorites` row draws neither the item count nor the type mix, so
+ * this costs none of `getTypeUsage`'s join-row reads — three columns and one
+ * indexed query.
+ *
+ * Ordered on `updatedAt` for the same reason `getFavoriteItems` is: the schema
+ * records no `favoritedAt`, so it is a proxy for "most recently favorited"
+ * rather than the thing itself.
+ */
+export async function getFavoriteCollections(): Promise<FavoriteCollection[]> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) return [];
+
+  const collections = await prisma.collection.findMany({
+    where: { userId, isFavorite: true },
+    orderBy: { updatedAt: 'desc' },
+    select: { id: true, name: true, updatedAt: true },
+  });
+
+  return collections.map((collection) => ({
+    id: collection.id,
+    name: collection.name,
+    updatedAt: collection.updatedAt.toISOString(),
+  }));
 }
 
 /**
