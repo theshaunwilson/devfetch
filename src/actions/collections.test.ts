@@ -14,6 +14,7 @@ vi.mock('@/lib/db/collections', () => ({
   createCollection: vi.fn(),
   updateCollection: vi.fn(),
   deleteCollection: vi.fn(),
+  setCollectionFavorite: vi.fn(),
 }));
 
 const { auth } = await import('@/auth');
@@ -21,13 +22,16 @@ const {
   createCollection: createCollectionRow,
   updateCollection: updateCollectionRow,
   deleteCollection: deleteCollectionRow,
+  setCollectionFavorite: setCollectionFavoriteRow,
 } = await import('@/lib/db/collections');
-const { createCollection, updateCollection, deleteCollection } = await import('./collections');
+const { createCollection, updateCollection, deleteCollection, setCollectionFavorite } =
+  await import('./collections');
 
 const session = vi.mocked(auth);
 const createRow = vi.mocked(createCollectionRow);
 const updateRow = vi.mocked(updateCollectionRow);
 const deleteRow = vi.mocked(deleteCollectionRow);
+const favoriteRow = vi.mocked(setCollectionFavoriteRow);
 
 const USER_ID = 'user_1';
 
@@ -52,6 +56,7 @@ beforeEach(() => {
   createRow.mockResolvedValue({ ok: true, collection: saved });
   updateRow.mockResolvedValue({ ok: true });
   deleteRow.mockResolvedValue(true);
+  favoriteRow.mockResolvedValue(true);
 });
 
 describe('createCollection', () => {
@@ -315,6 +320,69 @@ describe('deleteCollection', () => {
     expect(result).toEqual({
       success: false,
       error: 'Could not delete this collection. Please try again.',
+    });
+    expect(logged).toHaveBeenCalled();
+
+    logged.mockRestore();
+  });
+});
+
+describe('setCollectionFavorite', () => {
+  it('writes the value it was given rather than flipping the row', async () => {
+    // Absolute, not a toggle: two clicks landing out of order settle on what
+    // the last one asked for, where two toggles would cancel out.
+    await setCollectionFavorite('collection_1', true);
+    expect(favoriteRow).toHaveBeenCalledWith('collection_1', true);
+
+    await setCollectionFavorite('collection_1', false);
+    expect(favoriteRow).toHaveBeenCalledWith('collection_1', false);
+  });
+
+  it('reports success once the row is written', async () => {
+    await expect(setCollectionFavorite('collection_1', true)).resolves.toEqual({ success: true });
+  });
+
+  it('refuses to write without a session', async () => {
+    session.mockResolvedValue(null as unknown as never);
+
+    const result = await setCollectionFavorite('collection_1', true);
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Your session has expired. Sign in again.',
+    });
+    expect(favoriteRow).not.toHaveBeenCalled();
+  });
+
+  it('refuses a flag that is not a boolean', async () => {
+    // The argument is whatever the caller posted, so its TypeScript type is not
+    // a guarantee — and a non-boolean reaching Prisma is a 500 where it should
+    // be a refusal.
+    const result = await setCollectionFavorite('collection_1', 'yes' as unknown as boolean);
+
+    expect(result.success).toBe(false);
+    expect(favoriteRow).not.toHaveBeenCalled();
+  });
+
+  it('reports a row it could not write as not found', async () => {
+    // Somebody else's collection reads exactly like one that never existed.
+    favoriteRow.mockResolvedValue(false);
+
+    const result = await setCollectionFavorite('collection_1', true);
+
+    expect(result).toEqual({ success: false, error: 'That collection could not be found.' });
+  });
+
+  it('does not leak a thrown database error to the caller', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    favoriteRow.mockRejectedValue(new Error('connection lost'));
+
+    const result = await setCollectionFavorite('collection_1', true);
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Could not update that collection. Please try again.',
     });
     expect(logged).toHaveBeenCalled();
 

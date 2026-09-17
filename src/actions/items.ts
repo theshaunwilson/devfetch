@@ -8,6 +8,7 @@ import { getItemTypeById } from '@/lib/db/item-types';
 import {
   createItem as createItemRow,
   deleteItem as deleteItemRow,
+  setItemFavorite as setItemFavoriteRow,
   updateItem as updateItemRow,
 } from '@/lib/db/items';
 import { requiredFieldsFor } from '@/lib/items';
@@ -15,7 +16,12 @@ import { deleteObject } from '@/lib/r2';
 import { keyBelongsTo } from '@/lib/uploads';
 import { createItemSchema, updateItemSchema } from '@/lib/validation/items';
 import type { CreateItemInput, UpdateItemInput } from '@/lib/validation/items';
-import type { CreateItemResult, DeleteItemResult, UpdateItemResult } from '@/types/item';
+import type {
+  CreateItemResult,
+  DeleteItemResult,
+  SetItemFavoriteResult,
+  UpdateItemResult,
+} from '@/types/item';
 
 /**
  * Narrows the collection ids a caller sent to the ones they actually own.
@@ -254,5 +260,50 @@ export async function deleteItem(itemId: string): Promise<DeleteItemResult> {
     console.error('Could not delete the item:', error);
 
     return { success: false, error: 'Could not delete this item. Please try again.' };
+  }
+}
+
+/**
+ * Favorites or unfavorites one item belonging to the signed-in user.
+ *
+ * Takes the value to store rather than flipping whatever is in the row: the
+ * user clicked a star that was showing them a particular state, and honouring
+ * that is both idempotent and one statement. See `setItemFavorite` in
+ * `@/lib/db/items`, where the ownership filter that makes the id safe to accept
+ * lives.
+ *
+ * The flag is parsed rather than trusted to its type. A server action is a
+ * public endpoint, so the argument is whatever the caller posted — and a
+ * non-boolean reaching Prisma is a 500 where it should be a refusal.
+ */
+export async function setItemFavorite(
+  itemId: string,
+  isFavorite: boolean,
+): Promise<SetItemFavoriteResult> {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    return { success: false, error: 'Your session has expired. Sign in again.' };
+  }
+
+  const parsed = z.boolean().safeParse(isFavorite);
+
+  if (!parsed.success) {
+    return { success: false, error: 'Could not update that item. Please try again.' };
+  }
+
+  try {
+    const updated = await setItemFavoriteRow(itemId, parsed.data);
+
+    if (!updated) {
+      // Somebody else's item reads exactly like one that does not exist.
+      return { success: false, error: 'That item could not be found.' };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Could not update the item favorite:', error);
+
+    return { success: false, error: 'Could not update that item. Please try again.' };
   }
 }

@@ -16,6 +16,7 @@ vi.mock('@/lib/prisma', () => ({
     item: { groupBy: vi.fn() },
     itemCollection: { findMany: vi.fn() },
     itemType: { findMany: vi.fn() },
+    $executeRaw: vi.fn(),
   },
 }));
 
@@ -31,11 +32,15 @@ const {
   getFavoriteCollections,
   getOwnedCollectionIds,
   getRecentCollections,
+  setCollectionFavorite,
   updateCollection,
 } = await import('./collections');
 const { Prisma } = await import('@/generated/prisma/client');
 
 const currentUser = vi.mocked(getCurrentUserId);
+const executeRaw = prisma.$executeRaw as unknown as Mock<
+  (strings: TemplateStringsArray, ...values: unknown[]) => Promise<number>
+>;
 
 /** What the `select` narrows a `Collection` row down to. */
 interface CollectionRow {
@@ -618,5 +623,77 @@ describe('getFavoriteCollections', () => {
 
     await expect(getFavoriteCollections()).resolves.toEqual([]);
     expect(findCollections).not.toHaveBeenCalled();
+  });
+});
+
+describe('setCollectionFavorite', () => {
+  beforeEach(() => {
+    executeRaw.mockResolvedValue(1);
+  });
+
+  /** The interpolated values of the tagged-template call, in order. */
+  function values() {
+    return executeRaw.mock.calls[0].slice(1);
+  }
+
+  /** The SQL text, with the parameter holes closed up. */
+  function sql() {
+    return (executeRaw.mock.calls[0][0] as unknown as string[]).join('?').replace(/\s+/g, ' ');
+  }
+
+  it('scopes the update to the signed-in user, in the WHERE clause itself', async () => {
+    await setCollectionFavorite('collection_1', true);
+
+    expect(sql()).toContain('WHERE "id" = ? AND "userId" = ?');
+    expect(values()).toEqual([true, 'collection_1', USER_ID]);
+  });
+
+  it('writes the value it was given rather than reading the row first', async () => {
+    await setCollectionFavorite('collection_1', true);
+    expect(values()[0]).toBe(true);
+
+    executeRaw.mockClear();
+    await setCollectionFavorite('collection_1', false);
+    expect(values()[0]).toBe(false);
+
+    expect(findCollections).not.toHaveBeenCalled();
+  });
+
+  it('leaves updatedAt alone', async () => {
+    // This collection's page, the dashboard grid and the sidebar's recent list
+    // are all sorted by that column, and starring is not editing.
+    await setCollectionFavorite('collection_1', true);
+
+    expect(sql()).not.toContain('updatedAt');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('writes nothing but the flag, leaving the name and description alone', async () => {
+    await setCollectionFavorite('collection_1', true);
+
+    expect(sql()).toContain('UPDATE "Collection"');
+    expect(sql()).toContain('SET "isFavorite" = ?');
+    expect(sql()).not.toContain('name');
+  });
+
+  it('never writes without a session', async () => {
+    currentUser.mockResolvedValue(null);
+
+    await expect(setCollectionFavorite('collection_1', true)).resolves.toBe(false);
+    expect(executeRaw).not.toHaveBeenCalled();
+  });
+
+  it('reports no row matched as not written', async () => {
+    // A raw UPDATE matching nothing is not an error, so the affected-row count
+    // is what says so.
+    executeRaw.mockResolvedValue(0);
+
+    await expect(setCollectionFavorite('collection_1', true)).resolves.toBe(false);
+  });
+
+  it('rethrows a database failure rather than reporting it as not found', async () => {
+    executeRaw.mockRejectedValue(new Error('connection lost'));
+
+    await expect(setCollectionFavorite('collection_1', true)).rejects.toThrow('connection lost');
   });
 });

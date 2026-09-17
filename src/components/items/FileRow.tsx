@@ -1,5 +1,6 @@
 import { Download } from 'lucide-react';
 
+import { FavoriteItemButton } from '@/components/items/FavoriteItemButton';
 import { ItemMarkers } from '@/components/items/ItemMarkers';
 import { OpenItemButton } from '@/components/items/OpenItemButton';
 import { TypeIconTile } from '@/components/items/TypeIconTile';
@@ -59,7 +60,7 @@ export function FileRow({ item }: FileRowProps) {
           <p className="truncate text-sm font-medium" title={item.fileName ?? item.title}>
             {item.fileName ?? item.title}
           </p>
-          <ItemMarkers isPinned={item.isPinned} isFavorite={item.isFavorite} />
+          <ItemMarkers isPinned={item.isPinned} />
         </div>
 
         {/* Stacked below `sm`, where the two values would otherwise crowd the
@@ -70,6 +71,8 @@ export function FileRow({ item }: FileRowProps) {
           <span>{formatShortDate(item.createdAt)}</span>
         </div>
       </div>
+
+      <FavoriteItemButton itemId={item.id} title={item.title} isFavorite={item.isFavorite} />
 
       {item.fileUrl && item.fileName && (
         // z-20 rather than a click handler that stops propagation: the row's

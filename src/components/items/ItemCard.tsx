@@ -1,4 +1,5 @@
 import { CopyItemButton } from '@/components/items/CopyItemButton';
+import { FavoriteItemButton } from '@/components/items/FavoriteItemButton';
 import { ItemMarkers } from '@/components/items/ItemMarkers';
 import { OpenItemButton } from '@/components/items/OpenItemButton';
 import { TypeIconTile } from '@/components/items/TypeIconTile';
@@ -52,14 +53,25 @@ export function ItemCard({ item }: ItemCardProps) {
                 width and is clipped by the card with no ellipsis. */}
             <CardTitle className="flex min-w-0 items-center gap-2">
               <span className="truncate">{item.title}</span>
-              <ItemMarkers isPinned={item.isPinned} isFavorite={item.isFavorite} />
+              <ItemMarkers isPinned={item.isPinned} />
             </CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">{formatShortDate(item.updatedAt)}</p>
           </div>
 
-          {copyableField && (
-            <CopyItemButton itemId={item.id} field={copyableField} title={item.title} />
-          )}
+          {/* One cluster at `gap-0.5`: the row's own `gap-3` is spacing between
+              the card's parts, and two icon buttons that far apart read as two
+              unrelated controls rather than as this item's actions. */}
+          <div className="flex shrink-0 items-center gap-0.5">
+            <FavoriteItemButton
+              itemId={item.id}
+              title={item.title}
+              isFavorite={item.isFavorite}
+            />
+
+            {copyableField && (
+              <CopyItemButton itemId={item.id} field={copyableField} title={item.title} />
+            )}
+          </div>
         </div>
       </CardHeader>
 

@@ -4,9 +4,11 @@ import { Pencil, Star, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { setCollectionFavorite } from '@/actions/collections';
 import { DeleteCollectionDialog } from '@/components/collections/DeleteCollectionDialog';
 import { EditCollectionDialog } from '@/components/collections/EditCollectionDialog';
 import { Button } from '@/components/ui/button';
+import { useFavoriteToggle } from '@/hooks/use-favorite-toggle';
 import { cn } from '@/lib/utils';
 import type { CollectionMeta } from '@/types/collection';
 
@@ -18,10 +20,6 @@ interface CollectionActionsProps {
 /**
  * The action row on a collection's own page.
  *
- * Favouriting still needs a mutation that does not exist, so that button is
- * inert — rendered and enabled, with the collection's current state drawn on
- * it, which is how the item drawer's action bar carries its unbuilt actions.
- *
  * Edit and delete open dialogs held here rather than nested in their triggers,
  * so the same two components serve this row and the card menu.
  */
@@ -29,6 +27,15 @@ export function CollectionActions({ collection, isFavorite }: CollectionActionsP
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const router = useRouter();
+
+  // This page is server-rendered, so the refresh the toggle issues is what
+  // brings the confirmed value back — no client state to keep in step, unlike
+  // the item drawer.
+  const favorite = useFavoriteToggle({
+    id: collection.id,
+    isFavorite,
+    setFavorite: setCollectionFavorite,
+  });
 
   function handleDeleted() {
     // `replace`, not `push`: this page is about a collection that no longer
@@ -42,8 +49,13 @@ export function CollectionActions({ collection, isFavorite }: CollectionActionsP
     // Wraps rather than overflows: buttons are `shrink-0`, so on a narrow screen
     // the row would otherwise run past the page's edge.
     <div className="flex flex-wrap items-center gap-2">
-      <Button variant="outline" size="sm">
-        <Star className={cn('size-4', isFavorite && 'fill-yellow-500 text-yellow-500')} />
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={favorite.toggle}
+        aria-pressed={favorite.isFavorite}
+      >
+        <Star className={cn('size-4', favorite.isFavorite && 'fill-yellow-500 text-yellow-500')} />
         Favorite
       </Button>
 

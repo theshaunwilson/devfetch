@@ -6,6 +6,7 @@ import { auth } from '@/auth';
 import {
   createCollection as createCollectionRow,
   deleteCollection as deleteCollectionRow,
+  setCollectionFavorite as setCollectionFavoriteRow,
   updateCollection as updateCollectionRow,
 } from '@/lib/db/collections';
 import { createCollectionSchema, updateCollectionSchema } from '@/lib/validation/collections';
@@ -16,6 +17,7 @@ import type {
 import type {
   CreateCollectionResult,
   DeleteCollectionResult,
+  SetCollectionFavoriteResult,
   UpdateCollectionResult,
 } from '@/types/collection';
 
@@ -155,5 +157,45 @@ export async function deleteCollection(collectionId: string): Promise<DeleteColl
     console.error('Could not delete the collection:', error);
 
     return { success: false, error: 'Could not delete this collection. Please try again.' };
+  }
+}
+
+/**
+ * Favorites or unfavorites one collection belonging to the signed-in user.
+ *
+ * Takes the value to store rather than flipping whatever is in the row, for the
+ * same reasons `setItemFavorite` does, and parses the flag rather than trusting
+ * its type — a server action is a public endpoint and the argument is whatever
+ * the caller posted.
+ */
+export async function setCollectionFavorite(
+  collectionId: string,
+  isFavorite: boolean,
+): Promise<SetCollectionFavoriteResult> {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    return { success: false, error: 'Your session has expired. Sign in again.' };
+  }
+
+  const parsed = z.boolean().safeParse(isFavorite);
+
+  if (!parsed.success) {
+    return { success: false, error: 'Could not update that collection. Please try again.' };
+  }
+
+  try {
+    const updated = await setCollectionFavoriteRow(collectionId, parsed.data);
+
+    if (!updated) {
+      // Somebody else's collection reads exactly like one that does not exist.
+      return { success: false, error: 'That collection could not be found.' };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Could not update the collection favorite:', error);
+
+    return { success: false, error: 'Could not update that collection. Please try again.' };
   }
 }

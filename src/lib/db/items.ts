@@ -517,6 +517,45 @@ export async function updateItem(id: string, data: UpdateItemData): Promise<Item
 }
 
 /**
+ * Sets one item's favorite flag, returning whether it was this user's to set.
+ *
+ * Scoped in the `WHERE` of the update itself, exactly like `updateItem` and
+ * `deleteItem`: the id comes from the client, so the ownership filter has to be
+ * part of the write rather than a check in front of it. No row matched reads as
+ * false, so somebody else's item is indistinguishable from one that never
+ * existed.
+ *
+ * Takes the value to store rather than flipping what is already there. An
+ * absolute value is one statement where a toggle would need the current value
+ * first, and it is idempotent, which matters more than it looks: two clicks
+ * landing out of order settle on what the last one asked for, where two toggles
+ * would cancel out and leave the database disagreeing with the star on screen.
+ *
+ * **Raw SQL so that `updatedAt` is left alone.** It is `@updatedAt`, so any
+ * Prisma write stamps it — and starring an item is not editing it, so a
+ * favorite would otherwise jump the item to the top of Recent Items and reorder
+ * every list sorted by that column. Pinning it to its own value instead would
+ * mean reading the row first, which is the race this avoids. `getSearchItems`
+ * above is the precedent for dropping to SQL where Prisma cannot express what
+ * the query needs.
+ */
+export async function setItemFavorite(id: string, isFavorite: boolean): Promise<boolean> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) return false;
+
+  // Affected-row count rather than an exception: a raw UPDATE that matches
+  // nothing is not an error, so there is no P2025 to catch here.
+  const updated = await prisma.$executeRaw`
+    UPDATE "Item"
+    SET "isFavorite" = ${isFavorite}
+    WHERE "id" = ${id} AND "userId" = ${userId}
+  `;
+
+  return updated === 1;
+}
+
+/**
  * Deletes one item, returning whether it was this user's to delete.
  *
  * Scoped in the `where` of the delete itself, exactly like `updateItem`: the id

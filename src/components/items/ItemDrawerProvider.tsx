@@ -150,6 +150,18 @@ export function ItemDrawerProvider({
     router.refresh();
   }, [router]);
 
+  /**
+   * The star was written, so the drawer's own copies of the item have to move
+   * with it: both are client state set when the drawer opened, and the
+   * `router.refresh()` the toggle issues re-renders the lists behind rather
+   * than this. `ItemDetail extends DashboardItem`, so the flag is on both —
+   * leaving `detail` behind would hand edit mode a stale item.
+   */
+  const handleFavoriteChanged = useCallback((isFavorite: boolean) => {
+    setItem((current) => (current ? { ...current, isFavorite } : current));
+    setDetail((current) => (current ? { ...current, isFavorite } : current));
+  }, []);
+
   // Memoized, or every drawer transition — open, fetch resolve, edit toggle,
   // close — would change the context identity and re-render every
   // OpenItemButton on the page. There is one per card and the lists are
@@ -188,6 +200,7 @@ export function ItemDrawerProvider({
         onModeChange={setMode}
         onSaved={handleSaved}
         onDeleted={handleDeleted}
+        onFavoriteChanged={handleFavoriteChanged}
       />
     </ItemDrawerContext.Provider>
   );

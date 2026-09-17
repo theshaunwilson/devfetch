@@ -30,6 +30,8 @@ interface ItemDrawerProps {
   onSaved: (item: ItemDetail) => void;
   /** Called once the item has been deleted. */
   onDeleted: () => void;
+  /** Called with the new value once the star has been written. */
+  onFavoriteChanged: (isFavorite: boolean) => void;
 }
 
 /**
@@ -55,6 +57,7 @@ export function ItemDrawer({
   onModeChange,
   onSaved,
   onDeleted,
+  onFavoriteChanged,
 }: ItemDrawerProps) {
   // Edit needs the fields only the detail request carries, so it cannot open
   // until that has landed.
@@ -116,6 +119,7 @@ export function ItemDrawer({
                   onEdit={() => onModeChange('edit')}
                   canEdit={detail !== null}
                   onDeleted={onDeleted}
+                  onFavoriteChanged={onFavoriteChanged}
                 />
               </SheetHeader>
 

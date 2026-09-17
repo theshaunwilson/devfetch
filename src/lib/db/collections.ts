@@ -469,6 +469,33 @@ export async function updateCollection(
 }
 
 /**
+ * Sets one collection's favorite flag, returning whether it was this user's to
+ * set.
+ *
+ * Ownership rides in the `WHERE` for the same reason the update and the delete
+ * do, and no row matched reads as false so somebody else's collection is
+ * indistinguishable from one that never existed.
+ *
+ * Raw SQL, takes the value rather than toggling, and reports the affected-row
+ * count — see `setItemFavorite` in `@/lib/db/items`, where all three are argued.
+ * The `updatedAt` point matters here too: this collection's own page, the
+ * dashboard grid and the sidebar's recent list are all sorted by that column.
+ */
+export async function setCollectionFavorite(id: string, isFavorite: boolean): Promise<boolean> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) return false;
+
+  const updated = await prisma.$executeRaw`
+    UPDATE "Collection"
+    SET "isFavorite" = ${isFavorite}
+    WHERE "id" = ${id} AND "userId" = ${userId}
+  `;
+
+  return updated === 1;
+}
+
+/**
  * Deletes one collection belonging to the signed-in user.
  *
  * **The items it held are not deleted.** `ItemCollection.collection` is

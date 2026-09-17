@@ -4,6 +4,7 @@ import { MoreHorizontal, Pencil, Star, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { setCollectionFavorite } from '@/actions/collections';
 import { DeleteCollectionDialog } from '@/components/collections/DeleteCollectionDialog';
 import { EditCollectionDialog } from '@/components/collections/EditCollectionDialog';
 import { Button } from '@/components/ui/button';
@@ -13,6 +14,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useFavoriteToggle } from '@/hooks/use-favorite-toggle';
 import { cn } from '@/lib/utils';
 import type { CollectionMeta } from '@/types/collection';
 
@@ -33,12 +35,20 @@ interface CollectionCardMenuProps {
  *
  * The dialogs are siblings of the menu, not children of its items: a
  * `DropdownMenuItem` unmounts when the menu closes, which would tear a nested
- * dialog down on the click that opened it.
+ * dialog down on the click that opened it. The favorite toggle is held here for
+ * the same reason — the transition outlives the item that started it, because
+ * it belongs to this component rather than to the row inside the menu.
  */
 export function CollectionCardMenu({ collection, isFavorite }: CollectionCardMenuProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const router = useRouter();
+
+  const favorite = useFavoriteToggle({
+    id: collection.id,
+    isFavorite,
+    setFavorite: setCollectionFavorite,
+  });
 
   return (
     <div className="relative z-20">
@@ -51,12 +61,11 @@ export function CollectionCardMenu({ collection, isFavorite }: CollectionCardMen
         </DropdownMenuTrigger>
 
         <DropdownMenuContent align="end">
-          {/* Inert, as on the collection's own page: favouriting needs a
-              mutation that does not exist yet. The state still renders, since
-              it comes from the collection itself. */}
-          <DropdownMenuItem>
-            <Star className={cn('size-4', isFavorite && 'fill-yellow-500 text-yellow-500')} />
-            Favorite
+          <DropdownMenuItem onSelect={favorite.toggle}>
+            <Star
+              className={cn('size-4', favorite.isFavorite && 'fill-yellow-500 text-yellow-500')}
+            />
+            {favorite.isFavorite ? 'Unfavorite' : 'Favorite'}
           </DropdownMenuItem>
 
           <DropdownMenuItem onSelect={() => setEditOpen(true)}>
