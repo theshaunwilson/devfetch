@@ -92,6 +92,33 @@ export async function getPinnedItems(): Promise<DashboardItem[]> {
   return items.map(toDashboardItem);
 }
 
+/**
+ * Every favorited item, most recently updated first.
+ *
+ * Unlimited, for the reason `getPinnedItems` is: favoriting is a deliberate
+ * act, so the list is expected to stay short, and a ceiling on the one page
+ * whose whole job is to show what you starred would hide rows with nowhere
+ * to reach them.
+ *
+ * "Most recently favorited" is what the page orders by, but `updatedAt` is the
+ * closest the schema gets: there is no `favoritedAt`, and nothing writes
+ * `isFavorite` yet, so this is a proxy — an item starred months ago sorts to
+ * the top if its tags were edited this morning.
+ */
+export async function getFavoriteItems(): Promise<DashboardItem[]> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) return [];
+
+  const items = await prisma.item.findMany({
+    where: { userId, isFavorite: true },
+    orderBy: { updatedAt: 'desc' },
+    select: ITEM_SELECT,
+  });
+
+  return items.map(toDashboardItem);
+}
+
 /** Most recently updated items, whether pinned or not. */
 export async function getRecentItems(limit: number): Promise<DashboardItem[]> {
   const userId = await getCurrentUserId();

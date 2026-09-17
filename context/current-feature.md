@@ -1,12 +1,123 @@
-# Current Feature
+# Current Feature: Favorites Page
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
+- Add a star icon button to the top bar linking to `/favorites`
+- Create the `/favorites` route, protected like every other signed-in route
+- Fetch every item and collection the signed-in user has favourited
+- Render them as a compact, high-density list — no cards, no heavy borders
+- Each row carries a type icon, the title, a type badge and a date
+- Separate Items and Collections sections, each with its own count
+- Clicking an item row opens the existing `ItemDrawer`; clicking a collection row navigates to `/collections/[id]`
+- Empty state when the account has no favourites
+- Ordered by most recently favourited, which the spec defines as `updatedAt` desc
+- Monospace or semi-monospace type, minimal padding, subtle hover, clean lines only
+
 ## Notes
+
+**Decision at `start`: the page only, read-only.** Asked rather than assumed,
+and the answer was to build exactly what the spec asks — the route, the compact
+list and the top-bar star — leaving the three stars inert and the order on
+`updatedAt`. No toggle mutation and no `favoritedAt` migration. So the page is
+populated by whatever is already flagged in the database, which on the seeded
+branch is a real set of rows; it follows this project's precedent of shipping
+the spec and recording what stays open, and favourite/pin mutations have been
+listed as unbuilt since the Item Drawer feature built the action bar.
+
+Read from the code before implementation. Four of these change what gets built
+and are decisions for `start`, not assumptions to make quietly.
+
+**Nothing writes `isFavorite`.** Every star in the app is inert: the drawer's
+`ItemDrawerActions` star, `CollectionActions` and `CollectionCardMenu` all
+render the flag and none of them mutate it — the Collection Actions entry in
+History records the collection star as "rendered, enabled and inert" and
+confirms a click writes nothing. So a favorites page built as specified is
+populated **only by seeded rows**, and a user cannot add to it or remove from
+it from anywhere in the app. Either the toggle mutation comes into scope, or
+the page ships read-only over data the user cannot change. This is the one
+question that decides how big the feature is.
+
+**"Most recently favorited (updatedAt)" is not a thing the schema records.**
+There is no `favoritedAt` column; `Item.updatedAt` moves on every title, tag or
+content edit, and `Collection.updatedAt` the same. So the order is "recently
+touched", not "recently starred" — an item favourited months ago jumps to the
+top because its tags were edited this morning. The same shape as the File List
+View feature's `createdAt`-versus-`updatedAt` call, which was settled on the
+mechanics rather than on taste. Options: follow the spec literally and accept
+`updatedAt` as a proxy (no migration), or add a nullable `favoritedAt` stamped
+by the toggle (a migration, and only meaningful if the toggle is in scope).
+
+**A top-level route needs two things the spec does not mention.** There is no
+root app shell — it lives in per-section layouts (`dashboard/layout.tsx`,
+`items/layout.tsx`, `collections/layout.tsx`), so `/favorites` renders with no
+sidebar or top bar until it gets its own thin `AppShell` wrapper; clicking the
+new star would otherwise kill the chrome it was clicked from, the trap both the
+Items List View and Collections Pages features hit. And `src/proxy.ts` matches
+`/collections`, `/dashboard`, `/items`, `/profile` and `/settings` only, so the
+page is **unauthenticated** until `/favorites/:path*` is added.
+
+**The drawer takes a full card payload, not an id.** `openItem(item, trigger)`
+wants a `DashboardItem`, which is why the search palette carries full rows
+rather than the light search rows its spec described. The favourites query must
+therefore go through `ITEM_SELECT` and `toDashboardItem` in `src/lib/db/items.ts`
+rather than selecting a narrow row of its own. `ItemDrawerProvider` already
+wraps the whole shell, so a row anywhere on the page can call it.
+
+Smaller things worth knowing:
+
+- `getItemStats()` and `getCollectionStats()` already count favourites for the
+  dashboard tiles, so the section counts may not need new queries — but the
+  rows themselves do, since nothing currently reads favourited rows except
+  `getSidebarCollections`, which returns favourite collections for the sidebar.
+- `--font-mono` is not defined anywhere; `src/app/layout.tsx` loads Geist
+  (sans) only and `globals.css` falls back to a system stack. Tailwind's
+  `font-mono` will resolve to the system mono stack, which costs no extra font
+  fetch — a semi-monospace webfont would be a new dependency and a decision.
+- The top bar's action cluster sits behind `ml-auto`, and "New Collection" is
+  `hidden md:inline-flex`, which History already records as leaving collection
+  creation unreachable on a phone. An icon-only star is narrow enough to stay
+  visible at every width; the 390px header budget is already tight at 358px.
+
+## Implementation Findings
+
+**A real regression the diff does not show.** Adding the star to the top bar
+took 48px from the search field, and the palette trigger's label then
+truncated: it needs 92px and had 56px at 390px, 62px at 768px. The field is
+`flex-1` with `sm:pr-16` reserving 64px for the ⌘K hint, so the label only fits
+once the field is ~190px. A first fix at `sm` was wrong — measuring showed 768px
+still clipped — because **what binds is the header's width, which is the
+viewport less the open sidebar's 256px**, a container measurement no viewport
+breakpoint can see (the same limit the items grid recorded). Settled at `lg`,
+where the field is 418px with the sidebar open; below it the trigger reads
+"Search". With the sidebar collapsed there is room sooner and the short label
+shows anyway, which is harmless where a clipped one is not.
+
+**Two readings of mine were measurement artifacts** and are recorded so they
+are not re-investigated. The row dividers looked absent at `border-top: 0px` —
+Tailwind v4's `divide-y` sets `border-bottom` on every child but the last, and
+measuring that edge shows 1px on all but the last row, correctly. And the first
+counterfactual for the search regression hid the *whole* action cluster rather
+than the star, because `asChild` makes the Button render **as** the Link, so
+the link's parent is the `ml-auto` div — it reported the field gaining 166px
+instead of the real 48px.
+
+**`SectionHeading` was extracted rather than copied**, out of
+`/collections/[id]` where it was local, since this page needs the identical
+labelled-section-with-count heading. One importer churned, and it was
+re-verified rendering identically on the collections page (14px, weight 500,
+muted, with icon). `OpenItemButton` gained an optional `className` so a flat row
+can drop the card radius; `cn` merges it correctly, the two being the same
+variant group rather than the prefixed-variant trap the drawer's width hit.
+
+**Ordering note:** three favorited items share an identical `updatedAt`, so
+their relative order is arbitrary. No tie-break was added — `getPinnedItems`
+and `getRecentItems` have none either, and nothing here paginates, so it
+matches rather than diverging.
+
 
 ## History
 

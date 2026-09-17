@@ -21,6 +21,21 @@ export interface DashboardCollection {
   accentColor: string | null;
 }
 
+/**
+ * A collection as rendered on the `/favorites` list.
+ *
+ * Deliberately narrower than `DashboardCollection`: the compact row draws a
+ * folder icon, the name and a date, so it needs neither the description, the
+ * item count nor the type mix — which is what lets its query skip the
+ * type-usage aggregation every card-shaped read pays for.
+ */
+export interface FavoriteCollection {
+  id: string;
+  name: string;
+  /** ISO string — the row formats it with `formatShortDate` */
+  updatedAt: string;
+}
+
 /** One page of the `/collections` index, with where in the list it sits. */
 export interface PaginatedCollections {
   collections: DashboardCollection[];

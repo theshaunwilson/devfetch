@@ -38,6 +38,7 @@ const {
   getItemDetail,
   getItemFile,
   getItemsByCollectionId,
+  getFavoriteItems,
   getItemsByTypeSlug,
   getSearchItems,
   updateItem,
@@ -1007,6 +1008,66 @@ describe('getSearchItems', () => {
       id: ITEM_ID,
       title: 'useDebounce Hook',
       type: { slug: 'snippet' },
+      tags: ['hooks', 'react'],
+      updatedAt: '2026-08-18T21:56:33.193Z',
+    });
+  });
+});
+
+describe('getFavoriteItems', () => {
+  const findMany = prisma.item.findMany as unknown as Mock<
+    (args: unknown) => Promise<DetailRow[]>
+  >;
+
+  beforeEach(() => {
+    findMany.mockResolvedValue([]);
+  });
+
+  it('returns only the signed-in user\'s favorited items', async () => {
+    await getFavoriteItems();
+
+    // Both halves matter: `isFavorite` is what the page is for, and `userId`
+    // is the only thing standing between it and another account's rows.
+    expect(findMany.mock.calls[0][0]).toMatchObject({
+      where: { userId: USER_ID, isFavorite: true },
+    });
+  });
+
+  it('orders by most recently updated', async () => {
+    await getFavoriteItems();
+
+    expect(findMany.mock.calls[0][0]).toMatchObject({
+      orderBy: { updatedAt: 'desc' },
+    });
+  });
+
+  it('does not cap the list', async () => {
+    await getFavoriteItems();
+
+    // Favoriting is a deliberate act, so the list stays short — and a ceiling
+    // on the one page whose job is to show what you starred would hide rows
+    // with nowhere to reach them.
+    expect(findMany.mock.calls[0][0]).not.toHaveProperty('take');
+  });
+
+  it('returns nothing and never queries without a session', async () => {
+    currentUserId.mockResolvedValue(null);
+
+    await expect(getFavoriteItems()).resolves.toEqual([]);
+    expect(findMany).not.toHaveBeenCalled();
+  });
+
+  it('carries the whole card, which is what opens the drawer', async () => {
+    findMany.mockResolvedValue([row()]);
+
+    const [item] = await getFavoriteItems();
+
+    // `openItem` takes a `DashboardItem`, not an id, so a narrower row could
+    // not open the drawer at all.
+    expect(item).toMatchObject({
+      id: ITEM_ID,
+      title: 'useDebounce Hook',
+      type: { slug: 'snippet', icon: 'Code', color: '#3b82f6' },
       tags: ['hooks', 'react'],
       updatedAt: '2026-08-18T21:56:33.193Z',
     });

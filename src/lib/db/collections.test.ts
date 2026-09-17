@@ -28,6 +28,7 @@ const {
   deleteCollection,
   getAllCollections,
   getCollectionOptions,
+  getFavoriteCollections,
   getOwnedCollectionIds,
   getRecentCollections,
   updateCollection,
@@ -57,9 +58,13 @@ const remove = prisma.collection.delete as unknown as Mock<
   (args: unknown) => Promise<{ id: string }>
 >;
 const findCollections = prisma.collection.findMany as unknown as Mock<
-  // `_count` is optional here because the other callers of `collection.findMany`
-  // in this file do not select it; `getCollectionOptions` is the one that does.
-  (args: unknown) => Promise<{ id: string; name: string; _count?: { items: number } }[]>
+  // `_count` and `updatedAt` are optional because the callers of
+  // `collection.findMany` in this file select different columns:
+  // `getCollectionOptions` is the one that counts, and
+  // `getFavoriteCollections` the one that reads the date.
+  (args: unknown) => Promise<
+    { id: string; name: string; _count?: { items: number }; updatedAt?: Date }[]
+  >
 >;
 const findFilings = prisma.itemCollection.findMany as unknown as Mock<
   (args: unknown) => Promise<{ collectionId: string; item: { typeId: string } }[]>
@@ -557,5 +562,61 @@ describe('deleteCollection', () => {
     remove.mockRejectedValue(new Error('connection lost'));
 
     await expect(deleteCollection('collection_1')).rejects.toThrow('connection lost');
+  });
+});
+
+describe('getFavoriteCollections', () => {
+  beforeEach(() => {
+    findCollections.mockResolvedValue([]);
+  });
+
+  it('returns only the signed-in user\'s favorited collections', async () => {
+    await getFavoriteCollections();
+
+    expect(findCollections.mock.calls[0][0]).toMatchObject({
+      where: { userId: USER_ID, isFavorite: true },
+    });
+  });
+
+  it('orders by most recently updated', async () => {
+    await getFavoriteCollections();
+
+    expect(findCollections.mock.calls[0][0]).toMatchObject({
+      orderBy: { updatedAt: 'desc' },
+    });
+  });
+
+  it('runs no type-usage aggregation, which the compact row does not need', async () => {
+    findCollections.mockResolvedValue([
+      { id: 'collection_1', name: 'React Patterns', updatedAt: new Date() },
+    ]);
+
+    await getFavoriteCollections();
+
+    // Every other collection read here folds in the item count and type mix.
+    // This row draws neither, so it must not pay for the join-row read.
+    expect(findFilings).not.toHaveBeenCalled();
+    expect(findTypes).not.toHaveBeenCalled();
+  });
+
+  it('serializes the date, which a client row cannot format from a Date', async () => {
+    findCollections.mockResolvedValue([
+      {
+        id: 'collection_1',
+        name: 'React Patterns',
+        updatedAt: new Date('2026-08-18T21:56:33.193Z'),
+      },
+    ]);
+
+    await expect(getFavoriteCollections()).resolves.toEqual([
+      { id: 'collection_1', name: 'React Patterns', updatedAt: '2026-08-18T21:56:33.193Z' },
+    ]);
+  });
+
+  it('returns nothing and never queries without a session', async () => {
+    currentUser.mockResolvedValue(null);
+
+    await expect(getFavoriteCollections()).resolves.toEqual([]);
+    expect(findCollections).not.toHaveBeenCalled();
   });
 });

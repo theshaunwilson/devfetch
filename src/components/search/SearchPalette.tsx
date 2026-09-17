@@ -142,10 +142,21 @@ export function SearchPalette({
           className="flex h-10 w-full min-w-0 items-center gap-2 rounded-lg border border-input bg-transparent py-1 pr-3 pl-2.5 text-left text-sm text-muted-foreground transition-colors outline-none hover:border-ring/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 sm:pr-16 dark:bg-input/30"
         >
           <Search className="size-4 shrink-0" />
-          {/* The shorter phrase the field has always carried: at 390px the row
-              is 152px wide and the fuller wording truncates mid-word. The
-              palette's own input says it in full, where there is room. */}
-          <span className="truncate">Search items...</span>
+          {/* Shortened twice over, both times because the row is not as wide
+              as the wording wants. The fuller phrase truncated mid-word in the
+              152px row this had at 390px; the top bar's favorites star then
+              took 48px more, and the label needs 92px against the 64px the
+              `sm:pr-16` hint already reserves. What actually binds is the
+              header's width, which is the viewport less the open sidebar's
+              256px — a container measurement no viewport breakpoint can see,
+              so `lg` is where the field is wide enough with the sidebar open,
+              and below it the label drops to the verb alone. With the sidebar
+              collapsed there is room sooner and the short label simply shows
+              anyway, which is harmless where a clipped one is not. The
+              palette's own input says it in full, where there is always room. */}
+          <span className="truncate">
+            Search<span className="hidden lg:inline"> items...</span>
+          </span>
         </button>
         <kbd className="pointer-events-none absolute top-1/2 right-3 hidden -translate-y-1/2 rounded border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground sm:block">
           {isMac ? '⌘ K' : 'Ctrl K'}

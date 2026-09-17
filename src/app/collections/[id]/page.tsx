@@ -5,6 +5,7 @@ import { CollectionActions } from '@/components/collections/CollectionActions';
 import { FileRow } from '@/components/items/FileRow';
 import { ImageCard } from '@/components/items/ImageCard';
 import { ItemCard } from '@/components/items/ItemCard';
+import { SectionHeading } from '@/components/layout/SectionHeading';
 import { PaginationControls } from '@/components/pagination/PaginationControls';
 import { getItemsByCollectionId } from '@/lib/db/items';
 import { groupItemsByShape } from '@/lib/items';
@@ -127,30 +128,5 @@ export default async function CollectionPage({
           its own — including on the empty state, which is always page 1. */}
       <PaginationControls pagination={pagination} basePath={`/collections/${id}`} />
     </div>
-  );
-}
-
-interface SectionHeadingProps {
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  count: number;
-}
-
-/**
- * Title row above an uploads section, with the count that section holds.
- *
- * Deliberately quieter than the page's own `h1`: these label a group within the
- * collection rather than announce a new page, and at `text-xl font-semibold`
- * they competed with the collection's name. The treatment is the drawer's
- * `SectionLabel` — the pattern this codebase already uses for a labelled
- * section inside a larger view.
- */
-function SectionHeading({ icon: Icon, title, count }: SectionHeadingProps) {
-  return (
-    <h2 className="mb-3 flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
-      <Icon className="size-4" />
-      {title}
-      <span className="text-xs">{count}</span>
-    </h2>
   );
 }
