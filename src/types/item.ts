@@ -140,6 +140,14 @@ export type UpdateItemResult =
 export type DeleteItemResult = { success: true } | { success: false; error: string };
 
 /**
+ * What `setItemFavorite` returns. Nothing on success: the caller asked for a
+ * specific value, so there is nothing to report back that it does not already
+ * know — only whether the write happened. Shaped per domain rather than shared
+ * with the collection one, as the delete results above already are.
+ */
+export type SetItemFavoriteResult = { success: true } | { success: false; error: string };
+
+/**
  * An item type reduced to what a create needs: the id to file the item under,
  * and the slug that says which fields that type requires.
  */

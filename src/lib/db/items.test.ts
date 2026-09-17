@@ -25,6 +25,7 @@ vi.mock('@/lib/prisma', () => ({
     collection: { findFirst: vi.fn() },
     itemCollection: { findMany: vi.fn(), count: vi.fn() },
     $queryRaw: vi.fn(),
+    $executeRaw: vi.fn(),
   },
 }));
 
@@ -41,6 +42,7 @@ const {
   getFavoriteItems,
   getItemsByTypeSlug,
   getSearchItems,
+  setItemFavorite,
   updateItem,
 } = await import('./items');
 const { Prisma } = await import('@/generated/prisma/client');
@@ -77,6 +79,9 @@ const destroy = prisma.item.delete as unknown as Mock<
   (args: unknown) => Promise<{ fileUrl: string | null }>
 >;
 const create = prisma.item.create as unknown as Mock<(args: unknown) => Promise<DetailRow>>;
+const executeRaw = prisma.$executeRaw as unknown as Mock<
+  (strings: TemplateStringsArray, ...values: unknown[]) => Promise<number>
+>;
 const currentUserId = vi.mocked(getCurrentUserId);
 
 const USER_ID = 'user_1';
@@ -1071,5 +1076,82 @@ describe('getFavoriteItems', () => {
       tags: ['hooks', 'react'],
       updatedAt: '2026-08-18T21:56:33.193Z',
     });
+  });
+});
+
+describe('setItemFavorite', () => {
+  beforeEach(() => {
+    executeRaw.mockResolvedValue(1);
+  });
+
+  /** The interpolated values of the tagged-template call, in order. */
+  function values() {
+    return executeRaw.mock.calls[0].slice(1);
+  }
+
+  /** The SQL text, with the parameter holes closed up. */
+  function sql() {
+    return (executeRaw.mock.calls[0][0] as unknown as string[]).join('?').replace(/\s+/g, ' ');
+  }
+
+  it('scopes the update to the signed-in user, in the WHERE clause itself', async () => {
+    // The id comes from the client, so the ownership filter has to be part of
+    // the write: a read-then-write could be raced, and the id alone would reach
+    // another user's item.
+    await setItemFavorite(ITEM_ID, true);
+
+    expect(sql()).toContain('WHERE "id" = ? AND "userId" = ?');
+    expect(values()).toEqual([true, ITEM_ID, USER_ID]);
+  });
+
+  it('writes the value it was given rather than reading the row first', async () => {
+    await setItemFavorite(ITEM_ID, true);
+    expect(values()[0]).toBe(true);
+
+    executeRaw.mockClear();
+    await setItemFavorite(ITEM_ID, false);
+    expect(values()[0]).toBe(false);
+
+    // One statement and no read: a toggle would need the current value, which
+    // is the race this avoids.
+    expect(findFirst).not.toHaveBeenCalled();
+  });
+
+  it('leaves updatedAt alone', async () => {
+    // The whole reason this is raw SQL. `updatedAt` is `@updatedAt`, so any
+    // Prisma write would stamp it and starring an item would jump it to the top
+    // of every list sorted by that column.
+    await setItemFavorite(ITEM_ID, true);
+
+    expect(sql()).not.toContain('updatedAt');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('writes nothing but the flag', async () => {
+    await setItemFavorite(ITEM_ID, true);
+
+    expect(sql()).toContain('SET "isFavorite" = ?');
+    expect(sql()).toContain('UPDATE "Item"');
+  });
+
+  it('never writes without a session', async () => {
+    currentUserId.mockResolvedValue(null);
+
+    await expect(setItemFavorite(ITEM_ID, true)).resolves.toBe(false);
+    expect(executeRaw).not.toHaveBeenCalled();
+  });
+
+  it('reports no row matched as not written', async () => {
+    // A raw UPDATE matching nothing is not an error, so the affected-row count
+    // is what says so. An unknown id and somebody else's id both land here.
+    executeRaw.mockResolvedValue(0);
+
+    await expect(setItemFavorite(ITEM_ID, true)).resolves.toBe(false);
+  });
+
+  it('rethrows a database failure rather than reporting it as not found', async () => {
+    executeRaw.mockRejectedValue(new Error('connection lost'));
+
+    await expect(setItemFavorite(ITEM_ID, true)).rejects.toThrow('connection lost');
   });
 });

@@ -1,3 +1,4 @@
+import { FavoriteItemButton } from '@/components/items/FavoriteItemButton';
 import { ItemMarkers } from '@/components/items/ItemMarkers';
 import { OpenItemButton } from '@/components/items/OpenItemButton';
 import { TypeIconTile } from '@/components/items/TypeIconTile';
@@ -67,15 +68,23 @@ export function ImageCard({ item }: ImageCardProps) {
       </div>
 
       <CardHeader>
-        {/* min-w-0 is what makes `truncate` below do anything: CardTitle is a
-            grid item of CardHeader, and a grid item's min-width is auto, so
-            without it the title grows to its content width and is clipped by
-            the card with no ellipsis rather than shrinking to fit. */}
-        <CardTitle className="flex min-w-0 items-center gap-2">
-          <span className="truncate">{item.title}</span>
-          <ItemMarkers isPinned={item.isPinned} isFavorite={item.isFavorite} />
-        </CardTitle>
-        <p className="mt-1 text-xs text-muted-foreground">{formatShortDate(item.updatedAt)}</p>
+        {/* The star sits beside the title block rather than inside the title,
+            so a long name truncates against the button instead of pushing it
+            off the card. min-w-0 all the way down for the same reason it was
+            already on CardTitle: a grid item and a flex item both take a min
+            width of auto, so without it the title grows to its content width
+            and is clipped with no ellipsis rather than shrinking to fit. */}
+        <div className="flex min-w-0 items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <CardTitle className="flex min-w-0 items-center gap-2">
+              <span className="truncate">{item.title}</span>
+              <ItemMarkers isPinned={item.isPinned} />
+            </CardTitle>
+            <p className="mt-1 text-xs text-muted-foreground">{formatShortDate(item.updatedAt)}</p>
+          </div>
+
+          <FavoriteItemButton itemId={item.id} title={item.title} isFavorite={item.isFavorite} />
+        </div>
       </CardHeader>
     </Card>
   );

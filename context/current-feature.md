@@ -1,12 +1,88 @@
-# Current Feature
+# Current Feature: Favorite toggle
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
+- `toggleItemFavorite(itemId)` and `toggleCollectionFavorite(collectionId)` server
+  actions, each backed by a query in `src/lib/db/items.ts` / `src/lib/db/collections.ts`
+  that carries ownership in the `where` clause of the update itself, the way
+  `updateItem`, `deleteItem`, `updateCollection` and `deleteCollection` already do.
+- The item drawer's Favorite button becomes live, and the drawer's own star
+  reflects the new value immediately rather than waiting for a refresh.
+- `/collections/[id]`'s Favorite button in `CollectionActions` becomes live.
+- `CollectionCardMenu`'s Favorite item becomes live, on both the dashboard grid
+  and `/collections`.
+- A star toggle on all four item card shapes — `ItemCard`, `ImageCard`, `FileRow`
+  and `ItemRow` — sitting above the `OpenItemButton` overlay, so clicking it
+  toggles the flag without opening the drawer.
+- Favoriting from any of those surfaces reaches every surface that reads the
+  flag: `/favorites`, the sidebar's Favorites group, the dashboard's two favorite
+  stat tiles, and `/collections`' favorites-first ordering.
+- Unit tests for both actions and both queries, in the established
+  mocked-module-boundary style.
+
 ## Notes
+
+### What exists today
+
+Nothing in the app writes `isFavorite`. Three stars are already rendered and
+deliberately inert, each with a comment saying so:
+
+- `ItemDrawerActions` — "Favouriting, pinning and copying still need mutations
+  that do not exist yet".
+- `CollectionActions` (the `/collections/[id]` row).
+- `CollectionCardMenu` (the "…" menu on every collection card).
+
+`ItemMarkers` draws a read-only star on all four item card shapes, and its own
+comment notes it was extracted precisely so favorite and pin mutations would not
+need changing in four places when they land. This feature is what the Favorites
+Page history entry recorded as open: "favoriting is still unbuilt, so the page is
+read-only over data the user cannot change".
+
+### No migration
+
+`Item.isFavorite` and `Collection.isFavorite` have been in the schema since the
+Prisma feature, both defaulting to `false`, and `@@index([userId, isFavorite])`
+already exists on both tables for the reads that filter on them.
+
+### Decisions to settle at `start`
+
+- **Where the new value comes from.** Reading the row and writing its negation is
+  two statements with a race between them. A single `update` that sets the value
+  the client asked for keeps it to one statement but trusts the caller's idea of
+  the current state; toggling in SQL avoids that. Decide and write down which,
+  and what a stale optimistic star does on a failed write.
+- **Item cards have no menu**, so the toggle is new UI rather than a wiring-up.
+  `CopyItemButton`'s `relative z-20` over `OpenItemButton`'s `absolute inset-0
+  z-10` is the established mechanic — the overlay is a sibling, not a wrapper, so
+  there is no click to stop. `ItemCard` already renders a copy button in that
+  slot; `ImageCard`, `FileRow` and `ItemRow` do not, so each needs a place put
+  for it without disturbing the shape it deliberately has.
+- **`ItemMarkers` becomes partly redundant** on the cards that gain a button: a
+  star indicator beside a star toggle reads as two stars. Decide whether the
+  toggle replaces the favorite half of `ItemMarkers` on cards, leaving it drawing
+  the pin alone.
+- **Whether the toggle is optimistic.** Every other mutation in the app toasts
+  and refreshes; a star that waits a round trip before filling reads as broken,
+  but an optimistic one has to roll back on failure.
+- **Whether it toasts.** `sonner` is mounted in `AppShell`, and the app toasts on
+  create, update and delete — but a toast per star on a grid of cards may be
+  noise. A failed toggle almost certainly should say so.
+
+### Constraints
+
+- A server action is a public endpoint: the id arrives from the client, the owner
+  comes from the session only, and a row that is not the caller's must read
+  exactly like one that never existed (`P2025` → not-found), as `updateItem` and
+  `deleteCollection` both do.
+- `AppShell` is `force-dynamic`, so one `router.refresh()` reaches the sidebar in
+  the layout as well as the page — the mechanic the Collection Create and
+  Collection Actions features both verified.
+- `coding-standards.md` scopes the test suite to server actions and utilities, so
+  the components ride on browser verification rather than assertions.
 
 ## History
 

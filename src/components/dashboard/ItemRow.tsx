@@ -1,4 +1,5 @@
 import { CopyItemButton } from '@/components/items/CopyItemButton';
+import { FavoriteItemButton } from '@/components/items/FavoriteItemButton';
 import { ItemMarkers } from '@/components/items/ItemMarkers';
 import { OpenItemButton } from '@/components/items/OpenItemButton';
 import { TypeIconTile } from '@/components/items/TypeIconTile';
@@ -40,21 +41,26 @@ export function ItemRow({ item }: ItemRowProps) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h3 className="truncate font-medium">{item.title}</h3>
-            <ItemMarkers isPinned={item.isPinned} isFavorite={item.isFavorite} />
+            <ItemMarkers isPinned={item.isPinned} />
             <span className="ml-auto shrink-0 text-xs text-muted-foreground">
               {formatShortDate(item.updatedAt)}
             </span>
 
-            {/* On the title line rather than beside the block, so it lines up
-                with the date instead of floating over the description. */}
-            {copyableField && (
-              <CopyItemButton
+            {/* On the title line rather than beside the block, so they line up
+                with the date instead of floating over the description. One
+                cluster, so the star keeps its own spacing on the rows that get
+                no copy button — file and image items. */}
+            <div className="-my-1 -mr-1 flex shrink-0 items-center gap-0.5">
+              <FavoriteItemButton
                 itemId={item.id}
-                field={copyableField}
                 title={item.title}
-                className="-my-1 -mr-1"
+                isFavorite={item.isFavorite}
               />
-            )}
+
+              {copyableField && (
+                <CopyItemButton itemId={item.id} field={copyableField} title={item.title} />
+              )}
+            </div>
           </div>
 
           {item.description && (

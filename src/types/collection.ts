@@ -143,3 +143,10 @@ export type UpdateCollectionResult =
  * the caller either navigates away or refreshes.
  */
 export type DeleteCollectionResult = { success: true } | { success: false; error: string };
+
+/**
+ * What `setCollectionFavorite` returns. Nothing on success, for the same reason
+ * `setItemFavorite` reports nothing: the caller asked for a specific value and
+ * already knows what it was.
+ */
+export type SetCollectionFavoriteResult = { success: true } | { success: false; error: string };
