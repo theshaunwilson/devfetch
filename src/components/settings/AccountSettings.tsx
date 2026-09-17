@@ -1,5 +1,6 @@
 import { ChangePasswordDialog } from '@/components/settings/ChangePasswordDialog';
 import { DeleteAccountDialog } from '@/components/settings/DeleteAccountDialog';
+import { SettingsRow } from '@/components/settings/SettingsRow';
 import {
   Card,
   CardContent,
@@ -15,41 +16,6 @@ interface AccountSettingsProps {
   hasPassword: boolean;
   itemCount: number;
   collectionCount: number;
-}
-
-interface SettingsRowProps {
-  title: string;
-  description: string;
-  action: React.ReactNode;
-  /** Tints the heading for a destructive action, matching its button. */
-  destructive?: boolean;
-}
-
-/**
- * One labelled action. The text block carries `min-w-0` so a long word cannot
- * push the action out of the card, and the row stacks below `sm` so neither
- * half is squeezed narrower than its own content on a phone.
- */
-function SettingsRow({
-  title,
-  description,
-  action,
-  destructive = false,
-}: SettingsRowProps) {
-  return (
-    <div className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
-      <div className="min-w-0">
-        <h3
-          className={`text-sm font-medium ${destructive ? 'text-destructive' : ''}`}
-        >
-          {title}
-        </h3>
-        <p className="text-sm text-muted-foreground">{description}</p>
-      </div>
-
-      <div className="sm:shrink-0">{action}</div>
-    </div>
-  );
 }
 
 /** The account actions: change password where there is one, and delete. */

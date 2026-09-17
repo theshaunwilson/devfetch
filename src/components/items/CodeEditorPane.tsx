@@ -4,9 +4,11 @@ import { useCallback, useId, useRef, useState } from 'react';
 import Editor from '@monaco-editor/react';
 import type { OnMount } from '@monaco-editor/react';
 
-import { EDITOR_THEME, configureMonaco } from '@/lib/monaco';
+import { useEditorPreferences } from '@/components/editor/EditorPreferencesProvider';
+import { configureMonaco, monacoThemeId } from '@/lib/monaco';
 import { monacoLanguage } from '@/lib/code-language';
 import { EDITOR_MAX_HEIGHT } from '@/lib/constants';
+import { editorLineHeight } from '@/lib/editor-preferences';
 
 interface CodeEditorPaneProps {
   value: string;
@@ -34,6 +36,10 @@ export function CodeEditorPane({
   minHeight,
   ariaLabel,
 }: CodeEditorPaneProps) {
+  // The user's own settings, applied to display and editing alike — a snippet
+  // should look the same being read as being written.
+  const preferences = useEditorPreferences();
+
   const [height, setHeight] = useState(minHeight);
   const heightRef = useRef(minHeight);
 
@@ -73,7 +79,7 @@ export function CodeEditorPane({
       value={value}
       onChange={(next) => onChange?.(next ?? '')}
       language={monacoLanguage(language)}
-      theme={EDITOR_THEME}
+      theme={monacoThemeId(preferences.theme)}
       beforeMount={configureMonaco}
       onMount={handleMount}
       height={height}
@@ -87,12 +93,19 @@ export function CodeEditorPane({
         // editor, so it reads as a code block rather than a disabled input.
         domReadOnly: readOnly,
         renderLineHighlight: readOnly ? 'none' : 'line',
-        minimap: { enabled: false },
+        minimap: { enabled: preferences.minimap },
+        // Monaco's own default is 'off', which is what this was before the
+        // setting existed. On means long lines wrap rather than scrolling
+        // sideways, which also keeps the fluid height honest: a wrapped line
+        // is taller, and `onDidContentSizeChange` reports that.
+        wordWrap: preferences.wordWrap ? 'on' : 'off',
         // Required for getContentHeight() to mean "how tall is the text".
         scrollBeyondLastLine: false,
         automaticLayout: true,
-        fontSize: 12,
-        lineHeight: 20,
+        fontSize: preferences.fontSize,
+        // Derived rather than fixed: a 20px line box around 16px text would be
+        // cramped. The ratio reproduces the 20 this had at the default size.
+        lineHeight: editorLineHeight(preferences.fontSize),
         fontFamily:
           'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
         padding: { top: 12, bottom: 12 },
@@ -120,7 +133,7 @@ export function CodeEditorPane({
         hover: { enabled: 'off' },
         occurrencesHighlight: 'off',
         renderWhitespace: 'none',
-        tabSize: 2,
+        tabSize: preferences.tabSize,
       }}
     />
   );

@@ -1,12 +1,111 @@
-# Current Feature
+# Editor Preferences Settings
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
+- A JSON column `editorPreferences` on `User`, added by a hand-checked
+  migration — never `db push`, per `coding-standards.md`
+- Font size dropdown
+- Tab size dropdown
+- Word wrap toggle, default on
+- Minimap toggle, default off
+- Theme dropdown — vs-dark, monokai, github-dark, default vs-dark
+- A server action that updates the preferences
+- The preferences applied to the Monaco editor component
+- Auto-save on change, with no save button
+- A success toast on save
+- An `EditorPreferencesContext` for the client components that need them
+
 ## Notes
+
+### The spec's theme list is two-thirds unbuildable as written
+
+Monaco ships exactly four themes. Verified rather than recalled —
+`node_modules/monaco-editor/esm/vs/editor/standalone/common/themes.js` ends
+`export { hc_black, hc_light, vs, vs_dark }`, and `standaloneThemeService.js`
+names the same four ids. **`monokai` and `github-dark` do not exist in Monaco.**
+Selecting either would silently fall back rather than error, so the dropdown
+would appear to work and change nothing.
+
+Three ways forward, and the choice is yours:
+
+1. Hand-author both as `defineTheme` colour/token maps next to `devfetch-dark`
+   in `src/lib/monaco.ts` — no dependency, but the palettes are ours to get
+   right and each is ~40 token rules to be faithful.
+2. Add `monaco-themes` (ships Monokai and ~50 others as JSON) — a new runtime
+   dependency, and it carries no `github-dark`, so that one is still hand-work.
+3. Offer a list Monaco actually has: the app's own `devfetch-dark`, plus `vs`
+   (light), `vs-dark` and `hc-black`.
+
+### "vs-dark" as the default would undo the editor's current look
+
+The editor does not run `vs-dark` today. It runs `devfetch-dark` — vs-dark's
+token colours inherited, with the app's own surfaces over them (`#171717` is
+`--card`, which is the shade the drawer's code block has always had). Making
+raw `vs-dark` the default swaps that back to VS Code's `#1e1e1e` and the editor
+stops matching the card it sits in. My assumption unless you say otherwise:
+the default stays the app's theme, listed under a name the user recognises.
+
+### The settings page does not mount `AppShell`, so one provider cannot cover both
+
+`/settings` renders standalone (`src/app/settings/page.tsx`), while every
+Monaco editor is inside `AppShell` — the drawer's read-only pane via
+`ItemDrawerProvider`, and both item forms via the drawer and the top bar's
+create dialog. So the context has to be mounted in two places, or hoisted.
+Root layout is the wrong home: it is not `force-dynamic` and reads no session,
+so a provider there would put a user query on the sign-in and register pages
+too. Plan: a small provider component mounted by `AppShell` and by
+`/settings`, each fetching through the same `cache()`d read.
+
+`getCurrentUser()` already runs per `AppShell` render and selects four columns;
+adding the preferences to it is one more column on a query that is already
+happening, rather than a second round trip.
+
+### Auto-save with no save button, times a toast on every change
+
+Five controls, each firing a write and a toast on change. Two dropdowns and
+three toggles in a row is five toasts stacked in the corner. Worth deciding at
+`start`: debounce the write and confirm once when it settles, or drop the toast
+to a quieter inline "Saved" the way the spec's own "no save button" implies.
+I will raise the concrete options then rather than guess now.
+
+### A JSON column is unvalidated on read
+
+Postgres will hand back whatever was last written, and Prisma types it as
+`JsonValue`. A row written by an older shape — or by hand — reaches Monaco as
+`options` with no schema in between. Both the write and the **read** parse
+through one Zod schema in `src/lib/validation/`, with the defaults applied on
+the way out, so a missing or malformed column yields working preferences rather
+than a broken editor. That schema and the normalizer are also the testable half
+of this feature, alongside the action and the query — components are not tested,
+per `coding-standards.md`.
+
+### Word wrap defaulting to on is a behaviour change
+
+Monaco's `wordWrap` is unset today, so it is off — recorded deliberately in
+History ("long lines scroll horizontally exactly as the `<pre>` it replaced
+did"). The spec asks for on by default, which is a fine call, but it changes
+how every existing snippet renders for a user who never opens settings.
+
+### Settled at `start`
+
+- **Themes**: all three hand-authored in `src/lib/monaco.ts`, no new dependency.
+  `vs-dark` keeps the app's own surfaces (it is the existing `devfetch-dark`
+  under a name the user recognises); Monokai and GitHub Dark keep their own
+  backgrounds, since choosing a named theme means choosing its look.
+- **Saving**: debounced 600ms, so a run of changes is one write and one toast.
+- The dropdowns' values: font size 12/13/14/16 and tab size 2/4/8, current
+  values first, so an existing user sees no change.
+- `CodeEditor` is one component for both modes, so preferences apply to the
+  drawer's read-only display as well as the edit forms. I read that as correct —
+  a snippet should look the same being read as being written — but it is a
+  consequence worth naming.
+- The markdown editor is a `<textarea>`, so none of this reaches notes and
+  prompts. The spec says "apply to the Monaco editor component", so that is the
+  scope taken.
 
 ## History
 

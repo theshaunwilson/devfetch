@@ -24,6 +24,16 @@ model User {
   // Null for OAuth-only users
   password      String?
 
+  // The code editor's font size, tab size, theme and toggles. JSON rather than
+  // five columns: they are one set, always read and written together, and
+  // nothing queries or sorts on any of them. Nullable means "never set" — the
+  // defaults live in `src/lib/editor-preferences.ts` and are applied on read,
+  // so no row has to be written for an account to have working preferences.
+  //
+  // Postgres constrains nothing about the shape, so every read goes through
+  // `parseEditorPreferences` rather than being trusted.
+  editorPreferences Json?
+
   isPro                Boolean @default(false)
   stripeCustomerId     String? @unique
   stripeSubscriptionId String? @unique
