@@ -101,9 +101,9 @@ export async function getPinnedItems(): Promise<DashboardItem[]> {
  * to reach them.
  *
  * "Most recently favorited" is what the page orders by, but `updatedAt` is the
- * closest the schema gets: there is no `favoritedAt`, and nothing writes
- * `isFavorite` yet, so this is a proxy — an item starred months ago sorts to
- * the top if its tags were edited this morning.
+ * closest the schema gets: there is no `favoritedAt`, and the star deliberately
+ * leaves `updatedAt` alone, so this is a proxy — an item starred months ago
+ * sorts to the top if its tags were edited this morning.
  */
 export async function getFavoriteItems(): Promise<DashboardItem[]> {
   const userId = await getCurrentUserId();
@@ -137,7 +137,7 @@ export async function getRecentItems(limit: number): Promise<DashboardItem[]> {
 
 /**
  * One item type resolved from its slug, with one page of the current user's
- * items of that type, most recently updated first.
+ * items of that type, pinned first and then most recently updated.
  *
  * Returns null when the slug names no type the user can see, so the caller can
  * tell a bad slug from a type that simply holds no items.
@@ -173,7 +173,10 @@ export const getItemsByTypeSlug = cache(
 
     const items = await prisma.item.findMany({
       where,
-      orderBy: { updatedAt: 'desc' },
+      // Pinned first, then most recently updated. Applied in SQL rather than to
+      // the page that comes back, so a pinned item on what would have been page
+      // three is on page one rather than at the top of page three.
+      orderBy: [{ isPinned: 'desc' }, { updatedAt: 'desc' }],
       skip: pageSkip(pagination.page, ITEMS_PER_PAGE),
       take: ITEMS_PER_PAGE,
       select: ITEM_SELECT,
@@ -185,7 +188,7 @@ export const getItemsByTypeSlug = cache(
 
 /**
  * One collection resolved from its id, with the current user's items filed in
- * it, most recently updated first.
+ * it, pinned first and then most recently updated.
  *
  * Lives here rather than in `collections.ts` for the reason `getItemsByTypeSlug`
  * does: it resolves a parent entity and then returns items, which needs the
@@ -227,7 +230,9 @@ export const getItemsByCollectionId = cache(
 
     const filings = await prisma.itemCollection.findMany({
       where,
-      orderBy: { item: { updatedAt: 'desc' } },
+      // Pinned first, then most recently updated, as on a type page — through
+      // the join, since the flag is the item's rather than the filing's.
+      orderBy: [{ item: { isPinned: 'desc' } }, { item: { updatedAt: 'desc' } }],
       skip: pageSkip(pagination.page, ITEMS_PER_PAGE),
       take: ITEMS_PER_PAGE,
       select: { item: { select: ITEM_SELECT } },
@@ -549,6 +554,34 @@ export async function setItemFavorite(id: string, isFavorite: boolean): Promise<
   const updated = await prisma.$executeRaw`
     UPDATE "Item"
     SET "isFavorite" = ${isFavorite}
+    WHERE "id" = ${id} AND "userId" = ${userId}
+  `;
+
+  return updated === 1;
+}
+
+/**
+ * Sets one item's pinned flag, returning whether it was this user's to set.
+ *
+ * `setItemFavorite` above in every respect that matters, and deliberately so:
+ * ownership in the `WHERE` of the write itself, an absolute value rather than a
+ * flip so two clicks landing out of order settle on what the last one asked
+ * for, the affected-row count as the answer, and raw SQL to leave `updatedAt`
+ * alone.
+ *
+ * That last one is load-bearing here in a way it was not for the star. Pinning
+ * sorts an item to the top of its listings, and the sort below it is
+ * `updatedAt` — so a Prisma write stamping the column would reorder the list
+ * you are looking at as a side effect of pinning something in it.
+ */
+export async function setItemPinned(id: string, isPinned: boolean): Promise<boolean> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) return false;
+
+  const updated = await prisma.$executeRaw`
+    UPDATE "Item"
+    SET "isPinned" = ${isPinned}
     WHERE "id" = ${id} AND "userId" = ${userId}
   `;
 

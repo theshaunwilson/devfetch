@@ -8,7 +8,7 @@ import { setCollectionFavorite } from '@/actions/collections';
 import { DeleteCollectionDialog } from '@/components/collections/DeleteCollectionDialog';
 import { EditCollectionDialog } from '@/components/collections/EditCollectionDialog';
 import { Button } from '@/components/ui/button';
-import { useFavoriteToggle } from '@/hooks/use-favorite-toggle';
+import { useFlagToggle } from '@/hooks/use-flag-toggle';
 import { cn } from '@/lib/utils';
 import type { CollectionMeta } from '@/types/collection';
 
@@ -31,10 +31,10 @@ export function CollectionActions({ collection, isFavorite }: CollectionActionsP
   // This page is server-rendered, so the refresh the toggle issues is what
   // brings the confirmed value back — no client state to keep in step, unlike
   // the item drawer.
-  const favorite = useFavoriteToggle({
+  const favorite = useFlagToggle({
     id: collection.id,
-    isFavorite,
-    setFavorite: setCollectionFavorite,
+    value: isFavorite,
+    setValue: setCollectionFavorite,
   });
 
   function handleDeleted() {
@@ -53,9 +53,9 @@ export function CollectionActions({ collection, isFavorite }: CollectionActionsP
         variant="outline"
         size="sm"
         onClick={favorite.toggle}
-        aria-pressed={favorite.isFavorite}
+        aria-pressed={favorite.value}
       >
-        <Star className={cn('size-4', favorite.isFavorite && 'fill-yellow-500 text-yellow-500')} />
+        <Star className={cn('size-4', favorite.value && 'fill-yellow-500 text-yellow-500')} />
         Favorite
       </Button>
 

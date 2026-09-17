@@ -19,6 +19,7 @@ vi.mock('@/lib/db/items', () => ({
   updateItem: vi.fn(),
   deleteItem: vi.fn(),
   setItemFavorite: vi.fn(),
+  setItemPinned: vi.fn(),
 }));
 
 const { auth } = await import('@/auth');
@@ -30,8 +31,11 @@ const {
   updateItem: updateItemRow,
   deleteItem: deleteItemRow,
   setItemFavorite: setItemFavoriteRow,
+  setItemPinned: setItemPinnedRow,
 } = await import('@/lib/db/items');
-const { createItem, deleteItem, setItemFavorite, updateItem } = await import('./items');
+const { createItem, deleteItem, setItemFavorite, setItemPinned, updateItem } = await import(
+  './items'
+);
 
 const session = vi.mocked(auth);
 const writeRow = vi.mocked(updateItemRow);
@@ -41,6 +45,7 @@ const findType = vi.mocked(getItemTypeById);
 const findCollections = vi.mocked(getOwnedCollectionIds);
 const removeObject = vi.mocked(deleteObject);
 const favoriteRow = vi.mocked(setItemFavoriteRow);
+const pinRow = vi.mocked(setItemPinnedRow);
 
 const USER_ID = 'user_1';
 const ITEM_ID = 'item_1';
@@ -73,6 +78,7 @@ beforeEach(() => {
   deleteRow.mockResolvedValue({ deleted: true, fileKey: null });
   createRow.mockResolvedValue(saved);
   favoriteRow.mockResolvedValue(true);
+  pinRow.mockResolvedValue(true);
   findType.mockResolvedValue({ id: 'type_1', slug: 'snippet' });
   // Owns whatever it is asked about, unless a test says otherwise.
   findCollections.mockImplementation(async (ids: string[]) => ids);
@@ -569,6 +575,71 @@ describe('setItemFavorite', () => {
     favoriteRow.mockRejectedValue(new Error('connection lost'));
 
     const result = await setItemFavorite(ITEM_ID, true);
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Could not update that item. Please try again.',
+    });
+    expect(logged).toHaveBeenCalled();
+
+    logged.mockRestore();
+  });
+});
+
+describe('setItemPinned', () => {
+  it('writes the value it was given rather than flipping the row', async () => {
+    // Absolute, not a toggle, for the reason the star is: two clicks landing
+    // out of order settle on what the last one asked for.
+    await setItemPinned(ITEM_ID, true);
+    expect(pinRow).toHaveBeenCalledWith(ITEM_ID, true);
+
+    await setItemPinned(ITEM_ID, false);
+    expect(pinRow).toHaveBeenCalledWith(ITEM_ID, false);
+  });
+
+  it('reports success once the row is written', async () => {
+    await expect(setItemPinned(ITEM_ID, true)).resolves.toEqual({ success: true });
+  });
+
+  it('refuses to write without a session', async () => {
+    session.mockResolvedValue(null as unknown as never);
+
+    const result = await setItemPinned(ITEM_ID, true);
+
+    expect(result).toEqual({ success: false, error: 'Your session has expired. Sign in again.' });
+    expect(pinRow).not.toHaveBeenCalled();
+  });
+
+  it('refuses a flag that is not a boolean', async () => {
+    // A server action is a public endpoint, so the argument is whatever the
+    // caller posted and its TypeScript type guarantees nothing.
+    const result = await setItemPinned(ITEM_ID, 'true' as unknown as boolean);
+
+    expect(result.success).toBe(false);
+    expect(pinRow).not.toHaveBeenCalled();
+  });
+
+  it('reports a row it could not write as not found', async () => {
+    // Somebody else's item reads exactly like one that never existed.
+    pinRow.mockResolvedValue(false);
+
+    const result = await setItemPinned(ITEM_ID, true);
+
+    expect(result).toEqual({ success: false, error: 'That item could not be found.' });
+  });
+
+  it('does not touch the favorite flag', async () => {
+    await setItemPinned(ITEM_ID, true);
+
+    expect(favoriteRow).not.toHaveBeenCalled();
+  });
+
+  it('does not leak a thrown database error to the caller', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    pinRow.mockRejectedValue(new Error('connection lost'));
+
+    const result = await setItemPinned(ITEM_ID, true);
 
     expect(result).toEqual({
       success: false,

@@ -9,6 +9,7 @@ import {
   createItem as createItemRow,
   deleteItem as deleteItemRow,
   setItemFavorite as setItemFavoriteRow,
+  setItemPinned as setItemPinnedRow,
   updateItem as updateItemRow,
 } from '@/lib/db/items';
 import { requiredFieldsFor } from '@/lib/items';
@@ -20,6 +21,7 @@ import type {
   CreateItemResult,
   DeleteItemResult,
   SetItemFavoriteResult,
+  SetItemPinnedResult,
   UpdateItemResult,
 } from '@/types/item';
 
@@ -303,6 +305,50 @@ export async function setItemFavorite(
     return { success: true };
   } catch (error) {
     console.error('Could not update the item favorite:', error);
+
+    return { success: false, error: 'Could not update that item. Please try again.' };
+  }
+}
+
+/**
+ * Pins or unpins one item belonging to the signed-in user.
+ *
+ * `setItemFavorite` above, for the pin, and identical in every decision it
+ * makes: the value to store rather than a flip, the flag parsed rather than
+ * trusted to its type, and a row that was not this user's reported exactly like
+ * one that never existed.
+ *
+ * Named `setItemPinned` rather than the spec's `toggleItemPin` for the reason
+ * the favorite actions carry the names they do — the UI is a toggle, the
+ * endpoint sets, and a name saying otherwise would be a lie about the contract.
+ */
+export async function setItemPinned(
+  itemId: string,
+  isPinned: boolean,
+): Promise<SetItemPinnedResult> {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    return { success: false, error: 'Your session has expired. Sign in again.' };
+  }
+
+  const parsed = z.boolean().safeParse(isPinned);
+
+  if (!parsed.success) {
+    return { success: false, error: 'Could not update that item. Please try again.' };
+  }
+
+  try {
+    const updated = await setItemPinnedRow(itemId, parsed.data);
+
+    if (!updated) {
+      // Somebody else's item reads exactly like one that does not exist.
+      return { success: false, error: 'That item could not be found.' };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Could not update the item pin:', error);
 
     return { success: false, error: 'Could not update that item. Please try again.' };
   }
