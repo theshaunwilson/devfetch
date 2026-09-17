@@ -5,8 +5,11 @@ import 'server-only';
 import { cache } from 'react';
 
 import { auth } from '@/auth';
+import { DEFAULT_EDITOR_PREFERENCES, parseEditorPreferences } from '@/lib/editor-preferences';
 import { prisma } from '@/lib/prisma';
+import type { EditorPreferences } from '@/types/editor';
 import type { CurrentUser, ProfileUser } from '@/types/user';
+import type { EditorPreferencesData } from '@/lib/validation/editor-preferences';
 
 /**
  * The signed-in user's profile, or null when nobody is signed in. Cached so
@@ -80,3 +83,57 @@ export const getProfileUser = cache(async (): Promise<ProfileUser | null> => {
     hasPassword: password !== null,
   };
 });
+
+/**
+ * The signed-in user's editor preferences, or the defaults for anyone without
+ * a row to read.
+ *
+ * Its own query rather than a column added to `getCurrentUser`, which the app
+ * shell already runs on every request. Widening that one would have been a
+ * free column on a query that is happening anyway, but `ProfileUser` extends
+ * `CurrentUser`, so the preferences would have followed into the profile and
+ * settings pages' own user lookup as well — two types carrying a field
+ * neither renders. One small keyed lookup is the cheaper thing to explain.
+ *
+ * `cache`d like the rest, so the shell and the settings page each resolve it
+ * once however many components ask.
+ */
+export const getEditorPreferences = cache(async (): Promise<EditorPreferences> => {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    return DEFAULT_EDITOR_PREFERENCES;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { editorPreferences: true },
+  });
+
+  // Never null and never throws: this feeds the editor, and an unreadable
+  // preference must cost the user their chosen font size, not the editor.
+  return parseEditorPreferences(user?.editorPreferences);
+});
+
+/**
+ * Replaces the signed-in user's editor preferences, returning false when
+ * there is nobody to write them for.
+ *
+ * The whole object is written rather than merged into what is there: the
+ * caller has already validated a complete set, and a merge would preserve
+ * fields from an older shape that nothing can now clear.
+ */
+export async function saveEditorPreferences(
+  preferences: EditorPreferencesData,
+): Promise<boolean> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) return false;
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { editorPreferences: preferences },
+  });
+
+  return true;
+}

@@ -3,13 +3,14 @@ import { cookies } from 'next/headers';
 import { Sidebar } from '@/components/dashboard/Sidebar';
 import { SidebarProvider } from '@/components/dashboard/SidebarProvider';
 import { Topbar } from '@/components/dashboard/Topbar';
+import { EditorPreferencesProvider } from '@/components/editor/EditorPreferencesProvider';
 import { ItemDrawerProvider } from '@/components/items/ItemDrawerProvider';
 import { Toaster } from '@/components/ui/sonner';
 import { MAIN_CONTENT_ID } from '@/lib/constants';
 import { getCollectionOptions, getSidebarCollections } from '@/lib/db/collections';
 import { getItemTypes } from '@/lib/db/item-types';
 import { getSearchItems } from '@/lib/db/items';
-import { getCurrentUser } from '@/lib/db/user';
+import { getCurrentUser, getEditorPreferences } from '@/lib/db/user';
 import { SEARCH_ITEM_LIMIT } from '@/lib/search';
 import { isSidebarOpen, SIDEBAR_COOKIE } from '@/lib/sidebar';
 
@@ -21,8 +22,15 @@ const SIDEBAR_COLLECTION_LIMIT = 5;
  * sidebar reads its types and collections per request.
  */
 export async function AppShell({ children }: { children: React.ReactNode }) {
-  const [itemTypes, collections, collectionOptions, searchItems, user, cookieStore] =
-    await Promise.all([
+  const [
+    itemTypes,
+    collections,
+    collectionOptions,
+    searchItems,
+    user,
+    editorPreferences,
+    cookieStore,
+  ] = await Promise.all([
       getItemTypes(),
       getSidebarCollections(SIDEBAR_COLLECTION_LIMIT),
       // The full list, for the item forms' collections picker and the command
@@ -33,6 +41,9 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
       // rather than queried per keystroke.
       getSearchItems(SEARCH_ITEM_LIMIT),
       getCurrentUser(),
+      // Every Monaco editor in the app is under this shell, and each reads its
+      // font size, theme and the rest from context rather than fetching them.
+      getEditorPreferences(),
       cookies(),
     ]);
 
@@ -54,28 +65,32 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
           does, so it has to sit under this. Its edit form's collection options
           are handed in rather than fetched by the drawer: it is the same list
           the top bar's dialog uses, so one query serves both. */}
-      <ItemDrawerProvider collectionOptions={collectionOptions}>
-        <div className="flex h-svh overflow-hidden">
-          <Sidebar itemTypes={itemTypes} collections={collections} user={user} />
-          <div className="flex min-w-0 flex-1 flex-col">
-            <Topbar
-              itemTypes={itemTypes}
-              collectionOptions={collectionOptions}
-              searchItems={searchItems}
-            />
-            {/* `tabIndex={-1}` so focus has somewhere to land when the element
-                it would have returned to is gone — see the drawer's
-                `onCloseAutoFocus`. */}
-            <main
-              id={MAIN_CONTENT_ID}
-              tabIndex={-1}
-              className="flex-1 overflow-y-auto outline-none"
-            >
-              {children}
-            </main>
+      {/* Above the drawer, since the drawer's own editors read from it — and
+          around the top bar too, whose create dialog renders one as well. */}
+      <EditorPreferencesProvider preferences={editorPreferences}>
+        <ItemDrawerProvider collectionOptions={collectionOptions}>
+          <div className="flex h-svh overflow-hidden">
+            <Sidebar itemTypes={itemTypes} collections={collections} user={user} />
+            <div className="flex min-w-0 flex-1 flex-col">
+              <Topbar
+                itemTypes={itemTypes}
+                collectionOptions={collectionOptions}
+                searchItems={searchItems}
+              />
+              {/* `tabIndex={-1}` so focus has somewhere to land when the element
+                  it would have returned to is gone — see the drawer's
+                  `onCloseAutoFocus`. */}
+              <main
+                id={MAIN_CONTENT_ID}
+                tabIndex={-1}
+                className="flex-1 overflow-y-auto outline-none"
+              >
+                {children}
+              </main>
+            </div>
           </div>
-        </div>
-      </ItemDrawerProvider>
+        </ItemDrawerProvider>
+      </EditorPreferencesProvider>
     </SidebarProvider>
   );
 }

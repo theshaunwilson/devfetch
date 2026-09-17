@@ -15,7 +15,8 @@ const config = vi.fn();
 
 vi.mock('@monaco-editor/react', () => ({ loader: { config } }));
 
-const { EDITOR_THEME, configureMonaco } = await import('./monaco');
+const { EDITOR_THEME, configureMonaco, monacoThemeId } = await import('./monaco');
+const { DEFAULT_EDITOR_PREFERENCES, EDITOR_THEMES } = await import('./editor-preferences');
 
 /** Only the slice of the Monaco API that `configureMonaco` touches. */
 interface FakeMonaco {
@@ -129,5 +130,119 @@ describe('configureMonaco', () => {
 
     expect(() => configure(monaco)).not.toThrow();
     expect(monaco.editor.defineTheme).toHaveBeenCalledWith(EDITOR_THEME, expect.any(Object));
+  });
+});
+
+/**
+ * Monaco ships exactly four themes — `vs`, `vs-dark`, `hc-black`, `hc-light` —
+ * so Monokai and GitHub Dark are ours to define. `setTheme` with a name Monaco
+ * has not been given does not throw: it leaves whatever was showing in place.
+ * So a theme offered in the dropdown but never registered, or registered under
+ * a different id, is a setting that silently does nothing.
+ */
+describe('the offered themes', () => {
+  /** Every id handed to `defineTheme` on one pass. */
+  function registered() {
+    const monaco = fakeMonaco();
+    configure(monaco);
+
+    return monaco.editor.defineTheme.mock.calls.map(([id]) => id as string);
+  }
+
+  it('registers one Monaco theme for every theme the dropdown offers', () => {
+    const ids = registered();
+
+    for (const { id } of EDITOR_THEMES) {
+      expect([id, ids.includes(monacoThemeId(id))]).toEqual([id, true]);
+    }
+  });
+
+  it('registers no theme the dropdown cannot reach', () => {
+    const reachable = EDITOR_THEMES.map((theme) => monacoThemeId(theme.id));
+
+    expect(registered().sort()).toEqual(reachable.sort());
+  });
+
+  // Defining a theme under a built-in's name would replace it globally, and
+  // this one is not VS Code's vs-dark — it is vs-dark over the app's surfaces.
+  it('registers nothing under a name Monaco already uses', () => {
+    const builtIn = ['vs', 'vs-dark', 'hc-black', 'hc-light'];
+
+    for (const id of registered()) {
+      expect([id, builtIn.includes(id)]).toEqual([id, false]);
+    }
+  });
+
+  it('gives each theme its own id, so one cannot overwrite another', () => {
+    const ids = registered();
+
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('paints each theme its own background, or they are the same theme twice', () => {
+    const monaco = fakeMonaco();
+    configure(monaco);
+
+    const backgrounds = monaco.editor.defineTheme.mock.calls.map(
+      ([, theme]) => (theme as { colors: Record<string, string> }).colors['editor.background'],
+    );
+
+    expect(new Set(backgrounds).size).toBe(backgrounds.length);
+  });
+
+  // Monaco's tokenizer produces fewer scopes than the grammars these palettes
+  // come from, so anything unnamed has to inherit rather than fall to plain
+  // text — which is what `inherit` off would do.
+  it('inherits vs-dark on every theme, so unnamed tokens still colour', () => {
+    const monaco = fakeMonaco();
+    configure(monaco);
+
+    for (const [, theme] of monaco.editor.defineTheme.mock.calls) {
+      expect(theme).toMatchObject({ base: 'vs-dark', inherit: true });
+    }
+  });
+
+  it('gives the two hand-written themes real token rules', () => {
+    const monaco = fakeMonaco();
+    configure(monaco);
+
+    const withRules = monaco.editor.defineTheme.mock.calls.filter(
+      ([, theme]) => (theme as { rules: unknown[] }).rules.length > 0,
+    );
+
+    // Every theme but the default, which inherits vs-dark's tokens unchanged.
+    expect(withRules).toHaveLength(EDITOR_THEMES.length - 1);
+  });
+
+  it('writes every token colour as a hex value without its hash, as Monaco wants', () => {
+    const monaco = fakeMonaco();
+    configure(monaco);
+
+    for (const [, theme] of monaco.editor.defineTheme.mock.calls) {
+      for (const rule of (theme as { rules: { foreground: string }[] }).rules) {
+        expect(rule.foreground).toMatch(/^[0-9a-f]{6}$/);
+      }
+    }
+  });
+});
+
+describe('monacoThemeId', () => {
+  it('maps the default preference to the theme the editor renders by default', () => {
+    expect(monacoThemeId(DEFAULT_EDITOR_PREFERENCES.theme)).toBe(EDITOR_THEME);
+  });
+
+  it('gives a different id for every theme offered', () => {
+    const ids = EDITOR_THEMES.map((theme) => monacoThemeId(theme.id));
+
+    expect(new Set(ids).size).toBe(EDITOR_THEMES.length);
+  });
+
+  // A stored value that is no longer offered would otherwise pass through and
+  // leave the editor on whichever theme was set last.
+  it.each([
+    ['a theme that was dropped', 'solarized'],
+    ['nothing at all', undefined],
+  ])('falls back to the default for %s', (_label, value) => {
+    expect(monacoThemeId(value as never)).toBe(EDITOR_THEME);
   });
 });
