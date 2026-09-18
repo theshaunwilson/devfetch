@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Layers } from 'lucide-react';
+import { BrandMark } from '@/components/brand/BrandMark';
 import { cn } from '@/lib/utils';
 
 interface BrandProps {
@@ -15,9 +15,7 @@ interface BrandProps {
 export function Brand({ className, href }: BrandProps) {
   const content = (
     <>
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-        <Layers className="size-4.5" />
-      </span>
+      <BrandMark />
       {/*
         `sr-only` rather than `hidden` below `sm`: the mark itself is an
         unlabelled icon, so hiding the wordmark outright would leave this with
