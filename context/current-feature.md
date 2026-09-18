@@ -1,12 +1,115 @@
-# Current Feature
+# Current Feature: Homepage Mockup
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
+- A standalone marketing homepage prototype at `prototypes/homepage/` — `index.html`,
+  `styles.css`, `script.js` — dark themed, using the spec's seven item-type accent
+  colors.
+- Hero section carrying the "chaos to order" concept: a "Your knowledge today..."
+  container holding 8 floating source icons (Notion, GitHub, Slack, VS Code, browser
+  tabs, terminal, text file, bookmark), a pulsing transform arrow, and a
+  "...with DevFetch" dashboard preview with a nav sidebar and a card grid whose cards
+  carry coloured top borders.
+- Chaos icons animated in JavaScript on `requestAnimationFrame`: drift, bounce off the
+  container walls, subtle rotation and scale pulsing, and repulsion from the mouse
+  cursor.
+- Seven further sections: fixed navigation, hero text with a gradient headline and CTA
+  buttons, a 6-card feature grid (Code Snippets, AI Prompts, Instant Search, Commands,
+  Files & Docs, Collections) each in its type's accent colour, an AI section with a Pro
+  badge and capability checklist beside a code-editor mockup demoing AI generated tags,
+  pricing with Free and a highlighted "Most Popular" Pro card plus a monthly/yearly
+  toggle, a closing CTA, and a footer whose copyright year is the current one.
+- Supporting animation: CSS pulse on the arrow, fade-in on scroll into view, and a
+  navbar that grows more opaque as the page scrolls.
+- Responsive: chaos / arrow / dashboard stack vertically on mobile with the arrow
+  rotated 90° to point down, and all grids collapse to a single column.
+
 ## Notes
+
+- **This is a prototype, not app code.** `prototypes/` does not exist yet and sits
+  outside `src/`, so it is vanilla HTML/CSS/JS rather than Next.js, React or Tailwind —
+  none of `coding-standards.md`'s React/Next/Tailwind rules apply to it, and nothing
+  here is wired to Prisma, auth or the real dashboard.
+- **No unit tests are expected.** Vitest's include glob is `src/**/*.test.ts` and
+  `coding-standards.md` scopes the suite to server actions and utilities; this feature
+  adds neither, so verification is the browser, as it has been for every UI-only
+  feature in History.
+- **ESLint will see `prototypes/script.js`.** Flat config does not read `.gitignore`,
+  which is the trap that OOM-crashed `npm run lint` on `public/monaco/**` during the
+  Monaco feature. A browser script with no module system may need
+  `prototypes/**` added to `globalIgnores` in `eslint.config.mjs` — check by running
+  lint rather than assuming either way.
+- **The spec's palette is not the app's palette**, and this is worth a decision at
+  `start` rather than a silent choice. Only Snippet (`#3b82f6`) and Image (`#ec4899`)
+  match the seeded item types; the spec's Prompt is amber where the app is violet
+  (`#8b5cf6`), Command cyan where the app is orange (`#f97316`), Note green where the
+  app is yellow (`#fde047`), File slate where the app is gray (`#6b7280`), and the
+  spec's "URL" is indigo where the app's type is named **link** and is emerald
+  (`#10b981`). As written, a visitor coming from the homepage would meet different
+  colours in the product.
+- Pricing in the spec agrees with `context/project-overview.md` — Free at $0 with 50
+  items and 3 collections, Pro at $8/mo or $72/yr — so the numbers need no
+  reconciliation. Billing itself is unbuilt, so the CTA and pricing buttons have
+  nowhere real to point.
+- The spec does not say where the nav's "Sign In" / "Get Started" buttons should link.
+  The app has `/sign-in` and `/register`, but a standalone prototype opened from the
+  filesystem cannot reach them — settle this at `start`.
+- The footer's copyright year must be "the current year", so it is computed in
+  JavaScript rather than hardcoded.
+
+### Decisions settled at `start`
+
+- **Palette: the app's real seeded colours, not the spec's.** Snippet `#3b82f6` and
+  Image `#ec4899` were already the same; Prompt is violet `#8b5cf6`, Command orange
+  `#f97316`, Note yellow `#fde047`, File gray `#6b7280`, and the spec's "URL" is the
+  app's **Link** type, emerald `#10b981`. A visitor arriving from the homepage now
+  meets the same colours in the product.
+- **Links point at the real app paths.** Sign in goes to `/sign-in`; Get started and
+  every pricing and CTA button go to `/register`. Features and Pricing in the nav are
+  in-page anchors, since those sections are on this page. The consequence, accepted:
+  opening `index.html` straight off the filesystem leaves the auth links dead, so the
+  prototype is meant to be served.
+- **Feature-card colours cover six of the seven types.** Snippets blue, Prompts violet,
+  Search emerald, Commands orange, Files & Docs pink, Collections yellow. File gray is
+  deliberately left to the dashboard preview — a gray accent on a feature card reads as
+  a disabled card.
+- **The spec's "colored top borders" are kept** on the dashboard preview's cards even
+  though the real `ItemCard` uses a left border (`borderColorClass` returns
+  `border-l-*`). The spec is explicit, and a preview is a stylization rather than a
+  screenshot.
+
+### Found while implementing
+
+- **ESLint needed no change** — settled by running it rather than assuming. Flat config
+  does lint `prototypes/homepage/script.js` (confirmed by pointing eslint straight at
+  the file), and it passes clean, so no `globalIgnores` entry was added.
+- **Four defects were found by measuring in the browser, none visible in the diff.**
+  The hero visual — the spec's "main focus" — sat entirely below the fold at 1440x900
+  until the vertical rhythm was tightened. The mobile arrow used the independent
+  `rotate` property, which turns the painted glyph without changing the layout box, so
+  a 52x26 arrow painted 26x52 and overlapped the panel below by 2px. Below 420px a rule
+  of mine hid the Sign in button outright, leaving a phone visitor no way into an
+  account; tightening the nav gap fits both actions instead, and below 380px the
+  wordmark drops so the fixed nav stops clipping Get started. And the section links
+  were hidden from 860px down, where 704px of bar was still free — moved to 640px.
+- **A happy accident worth keeping:** because CSS composes `rotate` before `transform`,
+  the arrow's `translateX` keyframe becomes screen-vertical once rotated, so on mobile
+  it pulses downward — the direction it points — with no extra code. Measured at 9.9px
+  of vertical travel and 0px horizontal.
+- **The Free plan had no note line**, so its feature list started 30px above Pro's;
+  giving it real copy ("No card required.") fixed the alignment rather than an empty
+  spacer. Both lists now start at the same y.
+- **Two readings of mine were measurement artifacts** and are recorded so they are not
+  re-investigated: a 4-second run of the chaos field reported zero wall escapes but also
+  **zero wall contacts**, so the bounce was unproven until the pointer was swept around
+  the field to drive chips into all four walls; and an attempt to freeze the chips to
+  inspect a glyph did nothing, because the rAF loop rewrites `transform` every frame.
+- **Screenshot capture works in this session** when the `filename` argument is omitted;
+  passing one wrote a file that could not then be found on disk.
 
 ## History
 
