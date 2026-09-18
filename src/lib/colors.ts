@@ -64,3 +64,24 @@ export function borderColorClass(hex: string | null | undefined): string {
 export function softBgColorClass(hex: string | null | undefined): string {
   return (hex && SOFT_BG_COLORS[hex]) || 'bg-muted';
 }
+
+/**
+ * The seeded accent for each system item type, keyed by slug.
+ *
+ * The homepage represents item types without reading any of them from the
+ * database, so it needs the same hexes `prisma/seed.ts` writes. Naming them
+ * here — beside the maps that resolve them — means a typo is one place rather
+ * than scattered through marketing copy, where it would silently fall back to
+ * a muted class instead of failing.
+ */
+export const ITEM_TYPE_ACCENTS = {
+  snippet: '#3b82f6',
+  prompt: '#8b5cf6',
+  command: '#f97316',
+  note: '#fde047',
+  file: '#6b7280',
+  image: '#ec4899',
+  link: '#10b981',
+} as const;
+
+export type ItemTypeSlug = keyof typeof ITEM_TYPE_ACCENTS;

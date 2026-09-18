@@ -1,12 +1,138 @@
-# Current Feature
+# Current Feature: Homepage
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
+- Replace the placeholder `/` with the real marketing homepage, rebuilt in React +
+  Tailwind v4 + shadcn from `prototypes/homepage/` — same sections, copy and behaviour.
+  The prototype stays in place as the reference and is not deleted.
+- `/` stays public (already outside the proxy matcher). A signed-in visitor gets a single
+  **Go to dashboard** link in the nav instead of Sign in / Get started, resolved with
+  `getCurrentUser()` in the page.
+- Page metadata takes the title and description from the prototype's `<head>`.
+- Server components by default: `src/app/page.tsx` composes the sections and resolves the
+  session; nav shell, hero copy, dashboard preview, features grid, AI section, pricing plan
+  content, closing CTA and footer are all server-rendered, including the footer's
+  `new Date().getFullYear()`.
+- Four client components in `src/components/home/`, one job each: `ChaosField` (rAF drift,
+  wall bounce, rotation/scale pulse, pointer repel, pausing offscreen and on tab hide),
+  `NavScrollState` (nav background and border past 8px of scroll), `Reveal`
+  (IntersectionObserver fade-in wrapper taking `children`), `BillingToggle` (monthly/yearly
+  switch owning the Pro amount, period and note).
+- All seven sections match the prototype: skip link + fixed nav, hero (headline, subhead,
+  CTAs, chaos panel → arrow → dashboard preview), 6 feature cards in item-type accents, AI
+  section with Pro badge and editor mockup, pricing with both plans and "Most popular" on
+  Pro, closing CTA, footer.
+- Every link lands on a route that exists: `/sign-in`, `/register`, `/dashboard`,
+  `#features`, `#pricing`, `#top`. Footer Resources and Company entries (Docs, Guides,
+  Changelog, About, Blog, Contact) render as plain text, not links.
+- **The binding styling rule:** the homepage uses the dashboard's colorway exactly. Every
+  colour resolves to a theme token in `globals.css` or a class from `lib/colors.ts` — no hex
+  literals, no `color-mix`, no inline styles, none of the prototype's custom properties.
+  Chrome is grayscale; colour only ever comes from an item type.
+- Buttons are shadcn `Button` variants unchanged (`default`/`outline`/`ghost`); `Card` for
+  feature and plan cards, `Badge` for "Pro" and "Most popular", `Switch` for billing. All
+  four already exist in `src/components/ui/`.
+- Space Grotesk and JetBrains Mono load through `next/font/google` in the root layout as CSS
+  variables — self-hosted, no `<link>` to Google. Geist stays the default `--font-sans`.
+- One shared `BrandMark`: the prototype's three-layer stack with no filled tile, gradient
+  running `blue-500` → `emerald-500` (purple midpoint dropped), a unique SVG gradient id per
+  instance, used by both the homepage and the app shell.
+- `prefers-reduced-motion` honoured in all four client components; skip link,
+  `aria-hidden` on decorative SVGs, `role="switch"` + `aria-checked` on the billing toggle,
+  a visible focus ring on every interactive element, and `scroll-padding-top` clearing the
+  fixed nav.
+- Chaos, arrow and preview stack below `lg`, with the mobile arrow rotated via a transformed
+  SVG plus vertical margin rather than the `rotate` property. Nav section links hide below
+  `sm`, the wordmark drops below 380px, both auth actions stay reachable at every width, and
+  there is no horizontal page overflow at 320, 390, 768 or 1440.
+- Keep it DRY: one `Reveal`, one `BrandMark`, one data-driven feature-card component, one
+  plan component taking props, section copy in module-level arrays rather than repeated JSX.
+
 ## Notes
+
+Read from the code at load, not assumed — things the spec implies that the codebase does
+not currently have:
+
+- **`useId` is a hook, so `BrandMark` cannot be a server component.** The spec asks for a
+  unique gradient id via `useId` and also lists the nav shell as a server component. Server
+  Components cannot call hooks, so `BrandMark` needs `'use client'` — a small leaf, but a
+  fifth client component beyond the four the spec tables. The alternative is taking the id
+  as a prop, which pushes uniqueness onto every caller. Decide at `start`.
+- **Retiring the filled tile changes the app shell, not just the homepage.**
+  `src/components/dashboard/Brand.tsx` is the only consumer of `--sidebar-primary`
+  (`globals.css:112`), through `bg-sidebar-primary` on its `size-8` tile. Dropping it
+  touches three existing call sites — `SidebarContent` (desktop sidebar), `TopbarBrand`
+  (mobile top bar) and the `(auth)` layout — so the sign-in, register, forgot-password and
+  reset-password pages all change appearance too. That is the spec's intent ("what makes the
+  two colorways identical rather than merely similar"), but it is wider than `/`.
+- **The wordmark already handles the narrow case, and does it by a deliberate rule.**
+  `Brand` uses `sr-only` → `sm:not-sr-only` rather than `hidden`, with a comment explaining
+  why: the mark is an unlabelled icon, so hiding the wordmark outright would leave the link
+  with no accessible name. The homepage's "wordmark drops below 380px" must keep that
+  property rather than reintroducing `hidden`.
+- **`getCurrentUser()` makes `/` dynamic.** It is `cache()`d, imports `server-only` and calls
+  `auth()`, which reads cookies — so the root route stops being static and starts issuing a
+  Prisma query per request. Expected given the signed-in nav, but the build's route list will
+  change `/` from static to dynamic, and that is worth stating rather than discovering.
+- **The prototype's favicon is chrome purple** (`#8b5cf6` in the inline data URI, which is
+  also the Prompt accent). Under the "every chrome purple → `blue-500`" rule the icon becomes
+  blue; it is an `<head>` asset rather than a component, so it needs deciding separately from
+  the page.
+- **`lib/colors.ts` is keyed by hex, not by slug.** `textColorClass`/`borderColorClass`/
+  `softBgColorClass` each take a hex string and fall back to a muted class when it is unknown,
+  and `borderColorClass` returns `border-l-*` specifically. The prototype's feature and preview
+  cards use a **top** border, so either the card uses the left border the dashboard uses or the
+  accent arrives some other way through the same module — a hex typo would silently fall back
+  to gray rather than failing.
+- **`--font-heading` already exists** in `globals.css` and currently aliases `--font-sans`.
+  Space Grotesk can land there rather than inventing a new variable name.
+- **No unit tests are in scope**, per the spec and `coding-standards.md`: no server action,
+  no utility, no database work. Verification is the browser. The suite stays at 688 tests
+  across 33 files unless something unexpectedly testable appears.
+- The prototype's existing `script.js` already passes `npm run lint` (checked when it was
+  built), so `prototypes/` needs no `globalIgnores` entry and none was added.
+
+Settled at `start` (both put to the user):
+
+- **Hero title: gradient.** `from-foreground from-38% via-blue-500 via-68% to-emerald-500`,
+  which keeps the prototype's distribution — mostly near-white, colour in the tail — and
+  matches the `BrandMark`'s own two stops.
+- **`--sidebar-primary` stays declared but unused.** It is part of the shadcn-generated
+  token block; nothing renders it now, so the two colorways are identical on screen.
+
+Found while building, none of it visible in the diff:
+
+- **A real overflow defect: 169px of horizontal page overflow at 390px** (239 at 320, 180
+  at 379), traced to the AI section. Stacked below `lg` it had no explicit base track, and
+  an implicit `auto` grid column is sized by its content's min-content — the editor's code
+  block made the track 539px wide inside a 390px viewport. Both candidate fixes were tested
+  in the live DOM before choosing; `grid-cols-1` won, because Tailwind's numeric
+  `grid-cols-*` emit `minmax(0, 1fr)` for exactly this reason. Applied to the four grids
+  whose base was an implicit single column.
+- **Purple went back into the chrome by accident and was corrected.** The mocked editor's
+  function tokens were violet; the prototype's own function colour is pale yellow
+  (`#dcdcaa`), so they are now `yellow-300`. Keyword blue and number emerald already matched
+  the prototype's hues.
+- **`useId` forced `BrandMark` to be a client component**, as flagged at load. Verified live:
+  two marks per document with distinct ids and no dangling `url(#…)` references.
+- **`stop-color: currentColor` driven by a Tailwind text class** is what keeps the gradient
+  free of hex literals. Measured byte-identical to `text-blue-500` / `text-emerald-500`.
+- **The footer's three columns crowded at 320px** — "Resources" and "Changelog" are 79px in
+  a 77px column — so the gutter narrows to 16px below `sm`, giving 83px.
+- **`html:has(#home-root)`** scopes the smooth scrolling and the 88px `scroll-padding-top`
+  to this one route; `/sign-in` measures `auto` for both.
+- The two display faces are declared as **new `--font-display` / `--font-code` tokens**
+  rather than taking over `--font-heading` or `--font-mono`, so the app's own typography is
+  untouched — verified: `font-sans`, `font-heading` and `font-mono` all still resolve to
+  Geist / Geist / system mono.
+- `WindowDots` is reused from `components/items/EditorChrome` for the three window lights.
+  It carries the macOS hexes, but reusing the dashboard's own component is a truer reading
+  of the binding rule than writing fresh hex literals would be.
+- `/` is now **`ƒ` dynamic** in the build's route list, as predicted at load.
 
 ## History
 
