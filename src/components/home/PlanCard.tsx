@@ -13,6 +13,12 @@ type PlanCardProps = PlanCopy;
  *
  * The flag sits inside the card rather than straddling its top edge: `Card`
  * clips its overflow, so an overhanging badge would be cut in half.
+ *
+ * The featured card is deliberately NOT reordered ahead of Free on narrow
+ * screens. `order` moves a box visually without moving it in the DOM, so a
+ * keyboard user would reach Free first while seeing Pro first, and flipping
+ * the DOM instead only moves that mismatch to the side-by-side layout. The
+ * ring and the flag carry the emphasis instead, at every width.
  */
 export function PlanCard({
   name,
@@ -28,7 +34,7 @@ export function PlanCard({
     <Card
       className={cn(
         'h-full gap-0 px-7 py-7.5',
-        featured && 'ring-2 ring-blue-500/40 max-sm:order-first'
+        featured && 'ring-2 ring-blue-500/40'
       )}
     >
       <div className="flex items-start justify-between gap-3">
