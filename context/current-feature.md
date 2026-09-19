@@ -1,13 +1,63 @@
-# Current Feature
+# Current Feature: Homepage UI Review Fixes
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
+- **Mobile navigation below 640px.** The Features and Pricing links measure 0x0 at
+  375px and nothing replaces them, so a phone visitor cannot reach Pricing — the
+  page's conversion target — except by scrolling the whole page. Give the two
+  section links a mobile route (a small menu, or keep Pricing visible).
+- **The six dead footer entries.** Docs, Guides, Changelog, About, Blog and
+  Contact render as plain grey `<span>`s under link-styled column headings, so
+  they read as broken links. Drop the Resources and Company columns (or the
+  individual entries) until those pages exist.
+- **The wordmark hidden at 375px.** `max-[380px]:sr-only` hides "DevFetch" on the
+  iPhone SE / 12 mini / 13 mini width, leaving an unlabelled 26px glyph. Measured,
+  the header uses 168px of 375, so roughly 200px is spare and the threshold buys
+  nothing. Lower it to around 340px, or remove it.
+- **The pricing toggle's hit target and its inert labels.** The switch measures
+  32x18, failing WCAG 2.5.8's 24x24 minimum on height, and "Monthly" / "Yearly"
+  are non-interactive `<span>`s — the words people aim at do nothing. Enlarge the
+  switch and make the labels operate it.
+- **Pro's visual order against its focus order on mobile.** `max-sm:order-first`
+  moves the Pro card above Free visually while the DOM order is unchanged, so a
+  keyboard user reaches Free first and sees Pro first (WCAG 2.4.3). Reorder in the
+  DOM and use `order` for the desktop arrangement instead.
+- **The "hooks" AI tag's contrast.** Measured at 4.47:1 against its composited
+  tint at 11px, marginally under AA's 4.5. The other three tags pass (react 5.18,
+  typescript 7.73, performance 6.69), so only the violet needs changing.
+- **The small nav targets.** Features and Pricing are 20px tall and the nav CTA is
+  36px at mobile — above the 24px floor but below the 44px touch guidance, on the
+  page's primary conversion control.
+
 ## Notes
 
+These are the homepage findings from a browser UI review run at 375, 768 and
+1280px against the running dev server. Each was measured in the DOM rather than
+read from source; the figures quoted above are the measurements.
+
+**Social proof was the review's top finding and is deliberately NOT a goal here.**
+The page carries no testimonials, logos, user counts or GitHub link, which is the
+largest gap against the marketing criteria — but closing it means publishing
+claims about real people or real usage, which cannot be invented. It needs
+content from the user, so it is recorded here and left out of scope.
+
+What the review found healthy, so regressions here are worth checking at the end:
+zero horizontal page overflow at all three widths; a visible focus indicator on
+every focusable element; all reveal animations firing on a natural scroll; body
+text at 7.66:1; and no `<img>` elements at all, so alt text is a non-issue.
+
+Two scope boundaries. The dashboard findings from the same review — the `/items`
+404 behind Recent's "View all", the 768px sidebar squeeze, the clipped item-row
+titles at 375px, the 28x28 action buttons, the 32px hamburger, the unnamed
+landmarks, the unlabelled type icons and the bare date spans — are **not** part of
+this feature. And the homepage nav was measured while signed in, so the header
+showed "Go to dashboard" rather than the signed-out "Sign in / Get started" pair;
+the signed-out header is wider and should be re-measured when fixing the wordmark
+and mobile-nav goals.
 
 ## History
 

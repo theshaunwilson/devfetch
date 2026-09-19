@@ -51,8 +51,47 @@ const SOFT_BG_COLORS: Record<string, string> = {
   '#6b7280': 'bg-gray-500/10',
 };
 
+/**
+ * A brighter tier of the same accents, for small text sitting on a tinted
+ * background of its own colour.
+ *
+ * The 500-level entries above are tuned for icons and borders, where a shape
+ * carries the colour. Behind 11px text on a 10% tint of the same hue they run
+ * out of contrast: measured against the homepage's tag badges, violet-500
+ * lands at 4.47:1 and gray-500 at 3.77:1, both under AA's 4.5, while blue-500
+ * only just clears it at 4.79. The 400 level clears it for every accent, the
+ * narrowest being violet at 6.41.
+ *
+ * Two keys keep their base class rather than stepping to 400: `#fde047` and
+ * `#e2e8f0` are already the light end of their families, so a 400 would be
+ * darker than what they have.
+ */
+const BRIGHT_TEXT_COLORS: Record<string, string> = {
+  '#3b82f6': 'text-blue-400',
+  '#38bdf8': 'text-sky-300',
+  '#22c55e': 'text-green-400',
+  '#a855f7': 'text-purple-400',
+  '#ec4899': 'text-pink-400',
+  '#f97316': 'text-orange-400',
+  '#eab308': 'text-yellow-400',
+  '#94a3b8': 'text-slate-300',
+  '#e2e8f0': 'text-slate-200',
+  '#8b5cf6': 'text-violet-400',
+  '#10b981': 'text-emerald-400',
+  '#fde047': 'text-yellow-300',
+  '#6b7280': 'text-gray-400',
+};
+
 export function textColorClass(hex: string | null | undefined): string {
   return (hex && TEXT_COLORS[hex]) || 'text-muted-foreground';
+}
+
+/**
+ * Accent text bright enough to read as small type on a tint of its own colour.
+ * Falls back to the same muted class `textColorClass` uses.
+ */
+export function brightTextColorClass(hex: string | null | undefined): string {
+  return (hex && BRIGHT_TEXT_COLORS[hex]) || 'text-muted-foreground';
 }
 
 /** Left accent border used on collection and item cards. */

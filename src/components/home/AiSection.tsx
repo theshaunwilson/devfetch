@@ -3,7 +3,7 @@ import { Reveal } from '@/components/home/Reveal';
 import { AI_CHECKLIST, AI_TAGS, SHELL } from '@/components/home/content';
 import { WindowDots } from '@/components/items/EditorChrome';
 import { Badge } from '@/components/ui/badge';
-import { softBgColorClass, textColorClass } from '@/lib/colors';
+import { brightTextColorClass, softBgColorClass } from '@/lib/colors';
 import { cn } from '@/lib/utils';
 
 /**
@@ -130,7 +130,7 @@ export function AiSection() {
                   className={cn(
                     'font-code text-[0.6875rem]',
                     softBgColorClass(accent),
-                    textColorClass(accent)
+                    brightTextColorClass(accent)
                   )}
                 >
                   {label}

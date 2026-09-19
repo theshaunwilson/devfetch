@@ -173,10 +173,17 @@ export const PRO_BILLING = {
 
 export interface FooterColumn {
   heading: string;
-  /** Entries without an `href` render as plain text — those pages do not exist. */
-  entries: { label: string; href?: string }[];
+  entries: { label: string; href: string }[];
 }
 
+/**
+ * Every entry resolves to somewhere real.
+ *
+ * Resources (Docs, Guides, Changelog) and Company (About, Blog, Contact) used
+ * to sit here without hrefs, rendering as plain text under link-styled
+ * headings — which reads as six broken links rather than as six pages that do
+ * not exist yet. They come back when they have somewhere to point.
+ */
 export const FOOTER_COLUMNS: FooterColumn[] = [
   {
     heading: 'Product',
@@ -185,13 +192,5 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
       { label: 'Pricing', href: '#pricing' },
       { label: 'Get started', href: REGISTER_PATH },
     ],
-  },
-  {
-    heading: 'Resources',
-    entries: [{ label: 'Docs' }, { label: 'Guides' }, { label: 'Changelog' }],
-  },
-  {
-    heading: 'Company',
-    entries: [{ label: 'About' }, { label: 'Blog' }, { label: 'Contact' }],
   },
 ];
