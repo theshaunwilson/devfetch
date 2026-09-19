@@ -1,10 +1,9 @@
 import Link from 'next/link';
 import { Star } from 'lucide-react';
 
-import { NewCollectionDialog } from '@/components/collections/NewCollectionDialog';
+import { CreateMenu } from '@/components/dashboard/CreateMenu';
 import { TopbarBrand } from '@/components/dashboard/TopbarBrand';
 import { TopbarToggle } from '@/components/dashboard/TopbarToggle';
-import { NewItemDialog } from '@/components/items/NewItemDialog';
 import { SearchPalette } from '@/components/search/SearchPalette';
 import { Button } from '@/components/ui/button';
 import type { CollectionOption } from '@/types/collection';
@@ -33,12 +32,12 @@ export function Topbar({
 
       <TopbarBrand />
 
-      <SearchPalette items={searchItems} collections={collectionOptions} />
+      {/* Three icons, all the same size, so the bar fits a phone without any
+          of them being hidden — which is what the old wide search field and
+          two labelled create buttons could not do. */}
+      <div className="ml-auto flex shrink-0 items-center gap-1">
+        <SearchPalette items={searchItems} collections={collectionOptions} />
 
-      <div className="ml-auto flex shrink-0 items-center gap-2">
-        {/* Icon only, and visible at every width unlike the two create
-            buttons: it is narrow enough to fit the 390px header, and a link
-            is the one thing here that costs nothing to reach on a phone. */}
         <Button asChild variant="ghost" size="icon" className="size-10">
           <Link href="/favorites">
             <Star className="size-4" />
@@ -46,8 +45,7 @@ export function Topbar({
           </Link>
         </Button>
 
-        <NewCollectionDialog />
-        <NewItemDialog itemTypes={itemTypes} collectionOptions={collectionOptions} />
+        <CreateMenu itemTypes={itemTypes} collectionOptions={collectionOptions} />
       </div>
     </header>
   );

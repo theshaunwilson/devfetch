@@ -1,7 +1,5 @@
 'use client';
 
-import { Plus } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
@@ -19,7 +17,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -57,16 +54,22 @@ interface NewItemDialogProps {
    * cannot leave the selector on nothing.
    */
   defaultTypeSlug?: string;
-  /** The trigger's text, for a caller that creates one specific type. */
-  triggerLabel?: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** Called once the item has been created. */
+  onCreated: () => void;
 }
 
 
 /**
- * "New Item" in the top bar, and the dialog behind it.
+ * The new-item form, in a dialog.
  *
- * Also used by the items page, which passes the type it is showing so the form
- * opens on it — one dialog rather than a second, near-identical one.
+ * Controlled from outside rather than carrying its own trigger, the way
+ * `EditCollectionDialog` is: the top bar opens it from a `DropdownMenuItem`,
+ * which unmounts when the menu closes — so a dialog nested in one would be
+ * torn down on the very click that opened it. Each call site renders its own
+ * trigger and flips this open, which is also what lets the top bar's `+` menu
+ * and the items page's labelled button share one dialog.
  *
  * The form lives in a child so it unmounts with the dialog: a half-typed item
  * and its errors belong to the attempt that was abandoned, not to the next one.
@@ -77,31 +80,16 @@ export function NewItemDialog({
   itemTypes,
   collectionOptions,
   defaultTypeSlug,
-  triggerLabel = 'New Item',
+  open,
+  onOpenChange,
+  onCreated,
 }: NewItemDialogProps) {
-  const [open, setOpen] = useState(false);
-  const router = useRouter();
-
   // Every type is offered. File and Image were held back only because uploads
   // did not exist; `isProType` still marks them in the sidebar, and enforcing
   // that marking is a job for billing, which does not exist either.
 
-  function handleCreated() {
-    setOpen(false);
-    // Catches up the server-rendered lists behind the dialog — the stat tiles,
-    // Pinned and Recent, and the items grid.
-    router.refresh();
-  }
-
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button className="h-10" disabled={itemTypes.length === 0}>
-          <Plus className="size-4" />
-          {triggerLabel}
-        </Button>
-      </DialogTrigger>
-
+    <Dialog open={open} onOpenChange={onOpenChange}>
       {/* Capped and column-laid-out rather than left to `DialogContent`'s own
           `grid`: the snippet form is taller than a short laptop viewport, and
           the dialog is `fixed` inside an `overflow-hidden` shell, so without
@@ -117,8 +105,8 @@ export function NewItemDialog({
           types={itemTypes}
           collectionOptions={collectionOptions}
           defaultTypeSlug={defaultTypeSlug}
-          onCreated={handleCreated}
-          onCancel={() => setOpen(false)}
+          onCreated={onCreated}
+          onCancel={() => onOpenChange(false)}
         />
       </DialogContent>
     </Dialog>

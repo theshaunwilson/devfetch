@@ -1,12 +1,106 @@
-# Current Feature
+# Current Feature: Top Bar Actions & Favicon
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
+- The top bar's "New Item" button loses its text and becomes a `+` icon button in
+  the same filled (primary) box it has now.
+- Clicking that `+` opens a menu offering **both** "New Item" and "New Collection",
+  so a collection can be created at every width — today `NewCollectionDialog`'s
+  trigger is `hidden md:inline-flex`, which makes collection creation unreachable
+  on a phone.
+- The search field stops being the wide `flex-1` text box: it becomes an icon-only
+  button and moves into the right-hand action cluster, immediately to the **left**
+  of the Favorites star.
+- The app's favicon stops being the `create-next-app` default (`src/app/favicon.ico`)
+  and becomes the homepage's own mark.
+- Every part verified in a real browser with Playwright, at small and large widths.
+
 ## Notes
+
+### What is there today
+
+`src/components/dashboard/Topbar.tsx` is `TopbarToggle · TopbarBrand · SearchPalette`
+then, pushed right by `ml-auto`, the Favorites star link, `NewCollectionDialog` and
+`NewItemDialog`. So three of the four things this feature touches are in one file.
+
+### The mechanic the menu turns on
+
+A `DropdownMenuItem` unmounts when its menu closes, so a dialog nested inside one is
+torn down by the very click that opened it — the lesson Auth Phase 3 learned with the
+sign-out form, the profile page repeated with its dialogs, and `CollectionCardMenu`
+already solves. Both dialogs must therefore be **controlled from outside the menu**:
+the menu item only flips state, and the two dialogs render as siblings of the menu.
+
+`NewCollectionDialog` currently owns its own `DialogTrigger` and its own `open` state,
+so it needs the split `EditCollectionDialog` already has (controlled `open`/`onOpenChange`,
+no trigger). `NewItemDialog` needs the same, and it has a **second caller**:
+`src/app/items/[type]/page.tsx:78` renders it with a `triggerLabel` ("New Snippet",
+"New Link", …), so the labelled trigger has to survive — the icon-only form is the top
+bar's, not the component's only shape.
+
+`radix-ui` is already installed and `dropdown-menu` is already in `src/components/ui/`,
+so there should be **no `shadcn add`** — which has pulled a third-party `cn` package on
+four previous occasions (`select`, `progress`, `command`, and again for `tabs`).
+
+### What the search change costs
+
+The palette trigger is not a plain button: it is a `relative flex-1` wrapper holding the
+button and an absolutely-positioned `⌘ K` `kbd` hint (`SearchPalette.tsx:136-163`). Going
+icon-only removes the row the hint sits in, so the hint has nowhere to live.
+**Settled at `start`: dropped**, along with the `useSyncExternalStore` platform check
+that fed it. The long comment there, about the label truncating and about the header's
+width being the viewport less the open sidebar's 256px, described a problem this change
+deletes rather than solves, so it went with the label. The ⌘K shortcut itself is a
+document-level key handler and is unaffected — verified still opening the palette, with
+focus returning to the icon on Escape.
+
+Removing the `flex-1` field also removes the only element that was absorbing the top bar's
+spare width, so `TopbarBrand` and the toggle will sit against a gap unless the cluster keeps
+being pushed right by `ml-auto`.
+
+### The favicon
+
+`src/app/layout.tsx` declares only `title`, so the icon is coming from the
+conventional `src/app/favicon.ico` — still the `create-next-app` default.
+
+"The same favicon as my homepage" is ambiguous, because the two homepages disagree:
+
+- `prototypes/homepage/index.html:11` declares an inline SVG data-URI favicon — the
+  three-layer stack stroked in **`#8b5cf6`** (the Prompt violet).
+- The shipped homepage at `/` renders `BrandMark` (`src/components/brand/BrandMark.tsx`) —
+  the *same three paths*, but stroked with a **`blue-500` → `emerald-500`** gradient, and
+  the homepage feature deliberately retired violet from the app's chrome.
+
+So the shape is settled and only the colour is in question. **Settled at `start`: the
+live `BrandMark` gradient**, since that is the homepage the user actually sees.
+
+The mark's stops use `currentColor` driven by Tailwind classes, which a standalone favicon
+file cannot inherit, so the hexes are written out — and they were **verified rather than
+guessed**: painting the live stops' computed `lab()` values onto a canvas and reading the
+sRGB pixel back gives `#2b7fff` / `#00bc7d`, byte-identical to the literals in `icon.svg`.
+
+Next's convention, read in the docs rather than assumed: `favicon.ico` is **prepended as
+the first icon**, ahead of any SVG, so shadowing it with an `icon.svg` is not enough.
+Rather than delete it — which `ai-interaction.md` forbids without clarification — it is
+**replaced**: `sharp` rasterizes the same SVG at 16/32/48 and the ICO container is written
+around those PNGs. Both icons ship, the SVG for crisp modern rendering and the ICO as the
+fallback Next puts first.
+
+### Testing
+
+Playwright against the running dev server, per part: the `+` menu opening both dialogs
+(and the dialogs still working — they are being restructured, not rewritten), collection
+creation reachable at 390px, the search icon's position relative to the star, ⌘K still
+opening the palette, and the favicon actually served. Measure page overflow at 390 and
+1440 as every previous top-bar change has, since the cluster gains an item while the
+field that absorbed the slack goes away.
+
+Watch for regressions in the two places the top bar is shared: `/items/[type]`'s own
+labelled create button, and the mobile drawer, which renders its own `TopbarBrand`.
 
 ## History
 
