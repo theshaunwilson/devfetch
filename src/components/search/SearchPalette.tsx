@@ -3,9 +3,10 @@
 import { defaultFilter } from 'cmdk';
 import { Folder, Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useItemDrawer } from '@/components/items/ItemDrawerProvider';
+import { Button } from '@/components/ui/button';
 import {
   Command,
   CommandDialog,
@@ -45,16 +46,11 @@ function filterByKeywords(value: string, search: string, keywords?: string[]): n
   return scoreKeywords(keywords ?? [value], search, defaultFilter);
 }
 
-/** Nothing to subscribe to: the platform does not change under a mounted page. */
-function subscribeToNothing(): () => void {
-  return () => {};
-}
-
 /**
- * The top bar's search field and the command palette behind it.
+ * The top bar's search button and the command palette behind it.
  *
  * One component rather than a trigger and a dialog wired through a provider:
- * the field is the only thing that opens the palette by click, so the open
+ * the button is the only thing that opens the palette by click, so the open
  * state has nowhere else to be. Cmd+K works from anywhere through a document
  * listener.
  *
@@ -77,15 +73,6 @@ export function SearchPalette({
   const router = useRouter();
   const { openItem } = useItemDrawer();
 
-  // The server cannot know the platform, so the hint renders as ⌘ and is
-  // corrected on the client. `useSyncExternalStore` rather than state set from
-  // an effect, which is what it exists for — and what keeps hydration honest.
-  const isMac = useSyncExternalStore(
-    subscribeToNothing,
-    () => /mac/i.test(navigator.userAgent),
-    () => true,
-  );
-
   const show = useCallback(() => setOpen(true), []);
 
   useEffect(() => {
@@ -107,7 +94,7 @@ export function SearchPalette({
 
   const handleSelectItem = useCallback(
     (item: SearchItem) => {
-      // Focus returns to the search field when the drawer closes, the way it
+      // Focus returns to the search button when the drawer closes, the way it
       // returns to the card that opened it from a list. The main region is the
       // same fallback the drawer itself uses.
       const trigger = triggerRef.current ?? document.getElementById(MAIN_CONTENT_ID);
@@ -134,34 +121,16 @@ export function SearchPalette({
 
   return (
     <>
-      <div className="relative min-w-0 flex-1 sm:max-w-lg">
-        <button
-          ref={triggerRef}
-          type="button"
-          onClick={show}
-          className="flex h-10 w-full min-w-0 items-center gap-2 rounded-lg border border-input bg-transparent py-1 pr-3 pl-2.5 text-left text-sm text-muted-foreground transition-colors outline-none hover:border-ring/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 sm:pr-16 dark:bg-input/30"
-        >
-          <Search className="size-4 shrink-0" />
-          {/* Shortened twice over, both times because the row is not as wide
-              as the wording wants. The fuller phrase truncated mid-word in the
-              152px row this had at 390px; the top bar's favorites star then
-              took 48px more, and the label needs 92px against the 64px the
-              `sm:pr-16` hint already reserves. What actually binds is the
-              header's width, which is the viewport less the open sidebar's
-              256px — a container measurement no viewport breakpoint can see,
-              so `lg` is where the field is wide enough with the sidebar open,
-              and below it the label drops to the verb alone. With the sidebar
-              collapsed there is room sooner and the short label simply shows
-              anyway, which is harmless where a clipped one is not. The
-              palette's own input says it in full, where there is always room. */}
-          <span className="truncate">
-            Search<span className="hidden lg:inline"> items...</span>
-          </span>
-        </button>
-        <kbd className="pointer-events-none absolute top-1/2 right-3 hidden -translate-y-1/2 rounded border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground sm:block">
-          {isMac ? '⌘ K' : 'Ctrl K'}
-        </kbd>
-      </div>
+      {/* An icon rather than a labelled field. The wide field carried a visible
+          label and a ⌘K hint, and neither survived the shrink — the label had
+          already been shortened twice because the row was never as wide as the
+          wording wanted, and the hint was positioned inside the row that is now
+          gone. The shortcut itself is a document listener and is unaffected,
+          and the palette's own input still says what it searches in full. */}
+      <Button ref={triggerRef} variant="ghost" size="icon" className="size-10" onClick={show}>
+        <Search className="size-4" />
+        <span className="sr-only">Search</span>
+      </Button>
 
       <CommandDialog
         open={open}

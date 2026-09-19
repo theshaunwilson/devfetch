@@ -1,7 +1,5 @@
 'use client';
 
-import { FolderPlus } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
@@ -15,47 +13,45 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 
+interface NewCollectionDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** Called once the collection has been created. */
+  onCreated: () => void;
+}
+
 /**
- * "New Collection" in the top bar, and the dialog behind it.
+ * The new-collection form, in a dialog.
+ *
+ * Controlled from outside rather than carrying its own trigger, the way
+ * `EditCollectionDialog` is and for the same reason: the top bar opens it from
+ * a `DropdownMenuItem`, which unmounts when the menu closes, and a dialog
+ * nested in one would be torn down on the very click that opened it.
+ *
+ * Moving the trigger out is also what made creating a collection reachable on
+ * a phone: it used to be a `hidden md:inline-flex` button, because the top bar
+ * had no room for a second labelled button beside search and New Item.
  *
  * The form lives in a child so it unmounts with the dialog: a half-typed
  * collection and its errors belong to the attempt that was abandoned, not to
  * the next one — the same reason `NewItemDialog` is built this way.
  */
-export function NewCollectionDialog() {
-  const [open, setOpen] = useState(false);
-  const router = useRouter();
-
-  function handleCreated() {
-    setOpen(false);
-    // Catches up everything the new collection lands in. `AppShell` and
-    // `/dashboard` are both `force-dynamic`, so one refresh re-renders the
-    // layout as well as the page: the sidebar's Favorites and Recent lists,
-    // the Collections grid and both collection stat tiles.
-    router.refresh();
-  }
-
+export function NewCollectionDialog({
+  open,
+  onOpenChange,
+  onCreated,
+}: NewCollectionDialogProps) {
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {/* Hidden below `md` as this button has always been — the top bar has
-            no room for it beside search and New Item on a phone. */}
-        <Button variant="outline" className="hidden h-10 md:inline-flex">
-          <FolderPlus className="size-4" />
-          New Collection
-        </Button>
-      </DialogTrigger>
-
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[calc(100svh-2rem)] flex-col sm:max-w-lg">
         <DialogHeader className="shrink-0">
           <DialogTitle>New collection</DialogTitle>
           <DialogDescription>Group related items under one name.</DialogDescription>
         </DialogHeader>
 
-        <NewCollectionForm onCreated={handleCreated} onCancel={() => setOpen(false)} />
+        <NewCollectionForm onCreated={onCreated} onCancel={() => onOpenChange(false)} />
       </DialogContent>
     </Dialog>
   );

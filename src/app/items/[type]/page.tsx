@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { FileRow } from '@/components/items/FileRow';
 import { ImageCard } from '@/components/items/ImageCard';
 import { ItemCard } from '@/components/items/ItemCard';
-import { NewItemDialog } from '@/components/items/NewItemDialog';
+import { NewItemButton } from '@/components/items/NewItemButton';
 import { PaginationControls } from '@/components/pagination/PaginationControls';
 import { getCollectionOptions } from '@/lib/db/collections';
 import { getItemTypes } from '@/lib/db/item-types';
@@ -75,11 +75,11 @@ export default async function ItemsByTypePage({
         {/* `type` is the resolved type's own slug, not just what was
             requested: the lookup filters on it, so a row that came back
             matched it exactly. */}
-        <NewItemDialog
+        <NewItemButton
           itemTypes={itemTypes}
           collectionOptions={collectionOptions}
           defaultTypeSlug={type}
-          triggerLabel={`New ${typeName}`}
+          label={`New ${typeName}`}
         />
       </div>
 
