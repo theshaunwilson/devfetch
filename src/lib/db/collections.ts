@@ -9,6 +9,7 @@ import { COLLECTIONS_PER_PAGE } from '@/lib/constants';
 import { getCurrentUserId } from '@/lib/db/user';
 import { buildPagination, pageSkip } from '@/lib/pagination';
 import { prisma } from '@/lib/prisma';
+import { isWithinLimit } from '@/lib/usage-limits';
 import type {
   CreateCollectionData,
   UpdateCollectionData,
@@ -382,26 +383,44 @@ export async function getCollectionStats(): Promise<CollectionStats> {
  * `react` are two collections today.
  */
 export async function createCollection(
-  data: CreateCollectionData
+  data: CreateCollectionData,
+  isPro: boolean
 ): Promise<CreateCollectionOutcome> {
   const userId = await getCurrentUserId();
 
   if (!userId) return { ok: false, reason: 'no-session' };
 
   try {
-    const collection = await prisma.collection.create({
-      data: {
-        name: data.name,
-        description: data.description ?? null,
-        user: { connect: { id: userId } },
-      },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        isFavorite: true,
-      },
+    const collection = await prisma.$transaction(async (tx) => {
+      // Counted inside the write's own transaction, so the count cannot be
+      // taken against a state the insert then departs from. It **narrows the
+      // race rather than closing it**: two requests arriving at 2 collections
+      // can both read 2 and both insert, leaving the account at 4. Closing it
+      // needs `SELECT … FOR UPDATE` on the user row, which would serialise
+      // every create for the sake of one collection too many. The residual is
+      // deliberate — this check is not exact. `createItem` says the same.
+      if (!isPro) {
+        const count = await tx.collection.count({ where: { userId } });
+
+        if (!isWithinLimit('collections', count, isPro)) return null;
+      }
+
+      return tx.collection.create({
+        data: {
+          name: data.name,
+          description: data.description ?? null,
+          user: { connect: { id: userId } },
+        },
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          isFavorite: true,
+        },
+      });
     });
+
+    if (!collection) return { ok: false, reason: 'limit-reached' };
 
     return {
       ok: true,

@@ -1,3 +1,4 @@
+import { canCreateType } from '@/lib/pro';
 import { isImageUploadType, usesFileList, usesFileUpload } from '@/lib/uploads';
 import type { CreateItemInput } from '@/lib/validation/items';
 
@@ -97,18 +98,29 @@ export function usesCodeEditor(slug: string): boolean {
  * Which type a new-item form opens on.
  *
  * `slug` is a preference, not a guarantee: the items page passes the type it
- * is showing, but the offered list excludes the Pro types and could not
- * include a type that has since been deleted. Anything unmatched falls back to
- * the first offered type, so the selector can never open on nothing.
+ * is showing, which may have since been deleted — and, for a free account, may
+ * be one of the two the viewer cannot create. `/items/file` renders a "New
+ * File" button that passes `file`, so without the plan check here a free user
+ * would open the dialog sitting on a disabled option with the submit blocked.
+ *
+ * So the preference is honoured only when the viewer can actually create it,
+ * then the first type they can, then the first type at all — the last a
+ * belt-and-braces arm that keeps the return a string even for an account
+ * somehow offered nothing but Pro types.
  *
  * `types` must not be empty — the caller disables its trigger when there is
  * nothing to pick.
  */
 export function initialTypeId<T extends { id: string; slug: string }>(
   types: readonly T[],
-  slug?: string,
+  slug: string | undefined,
+  isPro: boolean,
 ): string {
-  return types.find((type) => type.slug === slug)?.id ?? types[0].id;
+  const preferred = types.find((type) => type.slug === slug);
+
+  if (preferred && canCreateType(preferred.slug, isPro)) return preferred.id;
+
+  return types.find((type) => canCreateType(type.slug, isPro))?.id ?? types[0].id;
 }
 
 /**

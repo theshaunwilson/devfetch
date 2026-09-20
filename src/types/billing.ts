@@ -24,3 +24,20 @@ export interface BillingStatus {
   /** Null for an account that has never had a subscription, or lost the one it had. */
   stripeSubscriptionId: string | null;
 }
+
+/**
+ * What `startCheckout` returns — which is only ever a failure.
+ *
+ * There is no success arm on purpose: success is a `redirect()` to Stripe's
+ * hosted Checkout, which works by throwing, so a returning call has by
+ * definition not succeeded. A `{ success: true }` member would be a state the
+ * caller can never observe.
+ */
+export interface StartCheckoutResult {
+  error: string;
+}
+
+/** What `openBillingPortal` returns, for the same reason and in the same shape. */
+export interface OpenBillingPortalResult {
+  error: string;
+}

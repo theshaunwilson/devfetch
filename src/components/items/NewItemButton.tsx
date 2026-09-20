@@ -11,6 +11,8 @@ import type { SidebarItemType } from '@/types/item';
 
 interface NewItemButtonProps {
   itemTypes: SidebarItemType[];
+  /** Passed straight through to the dialog, which gates the upload types. */
+  isPro: boolean;
   collectionOptions: CollectionOption[];
   /** Which type the form opens on. */
   defaultTypeSlug?: string;
@@ -28,6 +30,7 @@ interface NewItemButtonProps {
  */
 export function NewItemButton({
   itemTypes,
+  isPro,
   collectionOptions,
   defaultTypeSlug,
   label = 'New Item',
@@ -44,6 +47,7 @@ export function NewItemButton({
 
       <NewItemDialog
         itemTypes={itemTypes}
+        isPro={isPro}
         collectionOptions={collectionOptions}
         defaultTypeSlug={defaultTypeSlug}
         open={open}

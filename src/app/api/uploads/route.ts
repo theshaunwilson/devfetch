@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { NextResponse } from 'next/server';
 
+import { isProUser } from '@/lib/db/billing';
 import { getCurrentUserId } from '@/lib/db/user';
 import { putObject } from '@/lib/r2';
 import { MAX_UPLOAD_SIZE, buildObjectKey, extensionOf, validateUpload } from '@/lib/uploads';
@@ -31,6 +32,23 @@ export async function POST(request: Request): Promise<NextResponse<UploadRespons
 
   if (!userId) {
     return fail('Not signed in', 401);
+  }
+
+  // The first of the upload gate's two doors, and the one that matters for
+  // cost: this is where the R2 spend happens, so it refuses before a byte is
+  // read. `createItem` holds the other, for the row that would reference the
+  // object.
+  //
+  // **403, not 402.** The request is understood and the caller is
+  // authenticated — they are simply not permitted. 402 is still reserved and
+  // inconsistently handled by intermediaries.
+  //
+  // This gates *creating* an upload and nothing else. `GET /api/files/[id]`
+  // is deliberately untouched: File and Image have been offered to every
+  // account since uploads shipped, so free users already own objects, and
+  // refusing to serve them back would look like data loss.
+  if (!(await isProUser())) {
+    return fail('File and image uploads are a Pro feature. Upgrade to add them.', 403);
   }
 
   // Checked before the body is read: `formData()` buffers the whole request,

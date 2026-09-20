@@ -12,8 +12,10 @@ import { prisma } from '@/lib/prisma';
 import { SEARCH_PREVIEW_LENGTH } from '@/lib/search';
 import type { CreateItemData, UpdateItemData } from '@/lib/validation/items';
 import { Prisma } from '@/generated/prisma/client';
+import { isWithinLimit } from '@/lib/usage-limits';
 import type {
   AllItems,
+  CreateItemOutcome,
   DashboardItem,
   DeletedItem,
   ItemContentType,
@@ -435,53 +437,77 @@ export async function getItemFile(id: string): Promise<ItemFile | null> {
  * `contentType` is a parameter rather than part of `data` because it is not the
  * caller's to choose: it follows from the resolved type, and taking it from the
  * payload would let a text item claim to hold a file.
+ *
+ * **The free tier's ceiling is counted inside the write's own transaction**, so
+ * the count cannot be taken against a state the insert then departs from. This
+ * **narrows the race rather than closing it**: two requests arriving at 49
+ * items can still both read 49 and both insert, leaving the account at 51.
+ * Closing it needs `SELECT … FOR UPDATE` on the user row, which would serialise
+ * every create this account ever makes to prevent a user briefly holding one
+ * item too many. The residual is deliberate — do not read this check as exact.
+ *
+ * `isPro` is passed in rather than read here so this stays one query path: the
+ * caller has already resolved it through `isProUser()`, which is request-cached.
  */
 export async function createItem(
   data: CreateItemData,
   contentType: ItemContentType,
-): Promise<ItemDetail | null> {
+  isPro: boolean,
+): Promise<CreateItemOutcome> {
   const userId = await getCurrentUserId();
 
-  if (!userId) return null;
+  if (!userId) return { ok: false, reason: 'no-session' };
 
   const { typeId, title, description, content, language, url, tags } = data;
   const { fileUrl, fileName, fileSize, collectionIds } = data;
 
-  const item = await prisma.item.create({
-    data: {
-      title,
-      // Decided by the caller from the resolved type, never sent by the client.
-      contentType,
-      description: description ?? null,
-      content: content ?? null,
-      language: language ?? null,
-      url: url ?? null,
-      fileUrl: fileUrl ?? null,
-      fileName: fileName ?? null,
-      fileSize: fileSize ?? null,
-      user: { connect: { id: userId } },
-      type: { connect: { id: typeId } },
-      tags: {
-        create: (tags ?? []).map((name) => ({
-          tag: {
-            connectOrCreate: {
-              where: { userId_name: { userId, name } },
-              create: { userId, name },
+  const outcome = await prisma.$transaction(async (tx) => {
+    // Skipped entirely for Pro, so an unlimited account pays nothing for a
+    // ceiling that does not apply to it.
+    if (!isPro) {
+      const count = await tx.item.count({ where: { userId } });
+
+      if (!isWithinLimit('items', count, isPro)) return null;
+    }
+
+    return tx.item.create({
+      data: {
+        title,
+        // Decided by the caller from the resolved type, never sent by the client.
+        contentType,
+        description: description ?? null,
+        content: content ?? null,
+        language: language ?? null,
+        url: url ?? null,
+        fileUrl: fileUrl ?? null,
+        fileName: fileName ?? null,
+        fileSize: fileSize ?? null,
+        user: { connect: { id: userId } },
+        type: { connect: { id: typeId } },
+        tags: {
+          create: (tags ?? []).map((name) => ({
+            tag: {
+              connectOrCreate: {
+                where: { userId_name: { userId, name } },
+                create: { userId, name },
+              },
             },
-          },
-        })),
+          })),
+        },
+        // Connected by id, not created: a collection has to exist to be filed
+        // into, and the caller has already resolved these against the ones this
+        // user owns — see `getOwnedCollectionIds`.
+        collections: {
+          create: (collectionIds ?? []).map((id) => ({ collection: { connect: { id } } })),
+        },
       },
-      // Connected by id, not created: a collection has to exist to be filed
-      // into, and the caller has already resolved these against the ones this
-      // user owns — see `getOwnedCollectionIds`.
-      collections: {
-        create: (collectionIds ?? []).map((id) => ({ collection: { connect: { id } } })),
-      },
-    },
-    select: ITEM_DETAIL_SELECT,
+      select: ITEM_DETAIL_SELECT,
+    });
   });
 
-  return toItemDetail(item);
+  if (!outcome) return { ok: false, reason: 'limit-reached' };
+
+  return { ok: true, item: toItemDetail(outcome) };
 }
 
 /**

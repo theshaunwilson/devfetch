@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
@@ -37,6 +38,7 @@ import {
   initialTypeId,
   requiredFieldsFor,
 } from '@/lib/items';
+import { canCreateType } from '@/lib/pro';
 import { isImageUploadType } from '@/lib/uploads';
 import { cn } from '@/lib/utils';
 import type { CollectionOption } from '@/types/collection';
@@ -44,8 +46,10 @@ import type { SidebarItemType } from '@/types/item';
 import type { UploadedFile } from '@/types/upload';
 
 interface NewItemDialogProps {
-  /** Every type the user can see, Pro ones included — filtered here. */
+  /** Every type the user can see. Pro ones are shown disabled, never removed. */
   itemTypes: SidebarItemType[];
+  /** Decides whether the two upload types can be picked. */
+  isPro: boolean;
   /** Every collection the user owns, for the collections picker. */
   collectionOptions: CollectionOption[];
   /**
@@ -78,16 +82,13 @@ interface NewItemDialogProps {
  */
 export function NewItemDialog({
   itemTypes,
+  isPro,
   collectionOptions,
   defaultTypeSlug,
   open,
   onOpenChange,
   onCreated,
 }: NewItemDialogProps) {
-  // Every type is offered. File and Image were held back only because uploads
-  // did not exist; `isProType` still marks them in the sidebar, and enforcing
-  // that marking is a job for billing, which does not exist either.
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* Capped and column-laid-out rather than left to `DialogContent`'s own
@@ -103,6 +104,7 @@ export function NewItemDialog({
 
         <NewItemForm
           types={itemTypes}
+          isPro={isPro}
           collectionOptions={collectionOptions}
           defaultTypeSlug={defaultTypeSlug}
           onCreated={onCreated}
@@ -116,6 +118,7 @@ export function NewItemDialog({
 interface NewItemFormProps {
   /** Never empty: the trigger is disabled when there is nothing to pick. */
   types: SidebarItemType[];
+  isPro: boolean;
   collectionOptions: CollectionOption[];
   defaultTypeSlug?: string;
   onCreated: () => void;
@@ -124,12 +127,13 @@ interface NewItemFormProps {
 
 function NewItemForm({
   types,
+  isPro,
   collectionOptions,
   defaultTypeSlug,
   onCreated,
   onCancel,
 }: NewItemFormProps) {
-  const [typeId, setTypeId] = useState(() => initialTypeId(types, defaultTypeSlug));
+  const [typeId, setTypeId] = useState(() => initialTypeId(types, defaultTypeSlug, isPro));
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [content, setContent] = useState('');
@@ -208,17 +212,35 @@ function NewItemForm({
             <SelectContent>
               {types.map((type) => {
                 const Icon = getIcon(type.icon);
+                // Disabled rather than removed: a feature nobody can see is a
+                // feature nobody can be sold. The hint says why the row will
+                // not take a click.
+                const locked = !canCreateType(type.slug, isPro);
 
                 return (
-                  <SelectItem key={type.id} value={type.id}>
+                  <SelectItem key={type.id} value={type.id} disabled={locked}>
                     <Icon className={cn('size-4', textColorClass(type.color))} />
                     {capitalize(type.name)}
+                    {locked && (
+                      <span className="ml-auto pl-3 text-[10px] tracking-wider text-muted-foreground">
+                        PRO
+                      </span>
+                    )}
                   </SelectItem>
                 );
               })}
             </SelectContent>
           </Select>
           <ItemFieldError messages={fieldErrors.typeId} />
+          {!isPro && (
+            <p className="text-xs text-muted-foreground">
+              File and image uploads are a Pro feature.{' '}
+              <Link href="/settings" className="underline underline-offset-2 hover:text-foreground">
+                Upgrade
+              </Link>{' '}
+              to add them.
+            </p>
+          )}
         </div>
 
         <div className="flex flex-col gap-2">

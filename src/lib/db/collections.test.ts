@@ -10,15 +10,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
 
-vi.mock('@/lib/prisma', () => ({
-  prisma: {
+vi.mock('@/lib/prisma', () => {
+  const client = {
     collection: { create: vi.fn(), update: vi.fn(), delete: vi.fn(), findMany: vi.fn(), count: vi.fn() },
     item: { groupBy: vi.fn() },
     itemCollection: { findMany: vi.fn() },
     itemType: { findMany: vi.fn() },
     $executeRaw: vi.fn(),
-  },
-}));
+  };
+
+  return {
+    prisma: {
+      ...client,
+      // Runs the callback against the same mock — see `db/items.test.ts`.
+      $transaction: vi.fn((run: (tx: typeof client) => unknown) => run(client)),
+    },
+  };
+});
 
 vi.mock('@/lib/db/user', () => ({ getCurrentUserId: vi.fn() }));
 
@@ -115,10 +123,18 @@ beforeEach(() => {
 });
 
 describe('createCollection', () => {
+  const count = prisma.collection.count as unknown as Mock<(args: unknown) => Promise<number>>;
+
+  // Under the ceiling by default, so these stay about what the write does.
+  // The ceiling itself has its own describe.
+  beforeEach(() => {
+    count.mockResolvedValue(0);
+  });
+
   it('connects the row to the signed-in user', async () => {
     create.mockResolvedValue(row);
 
-    await createCollection({ name: 'React Patterns', description: null });
+    await createCollection({ name: 'React Patterns', description: null }, false);
 
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -130,7 +146,7 @@ describe('createCollection', () => {
   it('returns nothing and never writes when there is no session', async () => {
     currentUser.mockResolvedValue(null);
 
-    const outcome = await createCollection({ name: 'React Patterns', description: null });
+    const outcome = await createCollection({ name: 'React Patterns', description: null }, false);
 
     expect(outcome).toEqual({ ok: false, reason: 'no-session' });
     expect(create).not.toHaveBeenCalled();
@@ -139,7 +155,7 @@ describe('createCollection', () => {
   it('stores an omitted description as null', async () => {
     create.mockResolvedValue(row);
 
-    await createCollection({ name: 'React Patterns' });
+    await createCollection({ name: 'React Patterns' }, false);
 
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ description: null }) }),
@@ -152,7 +168,7 @@ describe('createCollection', () => {
     // rather than given a picker nothing would honour.
     create.mockResolvedValue(row);
 
-    await createCollection({ name: 'React Patterns', description: null });
+    await createCollection({ name: 'React Patterns', description: null }, false);
 
     const [args] = create.mock.calls[0] as [{ data: Record<string, unknown> }];
 
@@ -162,7 +178,7 @@ describe('createCollection', () => {
   it('reports a brand-new collection as empty without an aggregation query', async () => {
     create.mockResolvedValue(row);
 
-    const outcome = await createCollection({ name: 'React Patterns', description: null });
+    const outcome = await createCollection({ name: 'React Patterns', description: null }, false);
 
     expect(outcome).toEqual({
       ok: true,
@@ -175,7 +191,7 @@ describe('createCollection', () => {
   it('turns a unique-index violation into a duplicate-name outcome', async () => {
     create.mockRejectedValue(uniqueViolation());
 
-    const outcome = await createCollection({ name: 'React Patterns', description: null });
+    const outcome = await createCollection({ name: 'React Patterns', description: null }, false);
 
     expect(outcome).toEqual({ ok: false, reason: 'duplicate-name' });
   });
@@ -185,7 +201,7 @@ describe('createCollection', () => {
     // off renaming a collection that would have saved fine.
     create.mockRejectedValue(new Error('connection lost'));
 
-    await expect(createCollection({ name: 'React Patterns' })).rejects.toThrow('connection lost');
+    await expect(createCollection({ name: 'React Patterns' }, false)).rejects.toThrow('connection lost');
   });
 });
 
@@ -436,6 +452,88 @@ describe('getAllCollections', () => {
     expect(pagination).toMatchObject({ page: 1, totalPages: 1, total: 0 });
     expect(countCollections).not.toHaveBeenCalled();
     expect(findCollections).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The free tier's collection ceiling — the same shape as the item one, and
+ * pinned at the same boundary: 2 through, 3 refused.
+ */
+describe('createCollection, at the free tier ceiling', () => {
+  const count = prisma.collection.count as unknown as Mock<(args: unknown) => Promise<number>>;
+  const transaction = prisma.$transaction as unknown as Mock<(run: unknown) => Promise<unknown>>;
+
+  it('lets a free account create its 3rd collection', async () => {
+    count.mockResolvedValue(2);
+    create.mockResolvedValue(row);
+
+    await expect(createCollection({ name: 'Third', description: null }, false)).resolves.toMatchObject(
+      { ok: true },
+    );
+  });
+
+  it('refuses the 4th, without writing anything', async () => {
+    count.mockResolvedValue(3);
+
+    await expect(createCollection({ name: 'Fourth', description: null }, false)).resolves.toEqual({
+      ok: false,
+      reason: 'limit-reached',
+    });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('lets a Pro account past the ceiling', async () => {
+    count.mockResolvedValue(30);
+    create.mockResolvedValue(row);
+
+    await expect(createCollection({ name: 'Thirty-first', description: null }, true)).resolves.toMatchObject(
+      { ok: true },
+    );
+  });
+
+  it('never counts at all for Pro', async () => {
+    create.mockResolvedValue(row);
+
+    await createCollection({ name: 'Anything', description: null }, true);
+
+    expect(count).not.toHaveBeenCalled();
+  });
+
+  it("counts only this user's collections", async () => {
+    count.mockResolvedValue(0);
+    create.mockResolvedValue(row);
+
+    await createCollection({ name: 'First', description: null }, false);
+
+    expect(count).toHaveBeenCalledWith({ where: { userId: USER_ID } });
+  });
+
+  /** Records whether the count ran while the callback was on the stack — see
+   *  the same test in `db/items.test.ts` for why call order cannot say. */
+  it('takes the count inside the same transaction as the write', async () => {
+    let insideTransaction = false;
+    let countedInside: boolean | null = null;
+
+    transaction.mockImplementation(async (run) => {
+      insideTransaction = true;
+
+      try {
+        return await (run as (tx: unknown) => Promise<unknown>)(prisma);
+      } finally {
+        insideTransaction = false;
+      }
+    });
+    count.mockImplementation(async () => {
+      countedInside = insideTransaction;
+
+      return 0;
+    });
+    create.mockResolvedValue(row);
+
+    await createCollection({ name: 'First', description: null }, false);
+
+    expect(countedInside).toBe(true);
+    expect(transaction).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -5,6 +5,7 @@ import { ImageCard } from '@/components/items/ImageCard';
 import { ItemCard } from '@/components/items/ItemCard';
 import { NewItemButton } from '@/components/items/NewItemButton';
 import { PaginationControls } from '@/components/pagination/PaginationControls';
+import { isProUser } from '@/lib/db/billing';
 import { getCollectionOptions } from '@/lib/db/collections';
 import { getItemTypes } from '@/lib/db/item-types';
 import { getItemsByTypeSlug } from '@/lib/db/items';
@@ -50,9 +51,11 @@ export default async function ItemsByTypePage({
   //
   // Every type gets a button now that File and Image can be uploaded; they were
   // the only two the dialog would not have opened on.
-  const [itemTypes, collectionOptions] = await Promise.all([
+  const [itemTypes, collectionOptions, isPro] = await Promise.all([
     getItemTypes(),
     getCollectionOptions(),
+    // Also request-cached, and `AppShell` above has already asked.
+    isProUser(),
   ]);
 
   // Uploads get their own layouts: images a gallery of thumbnails, files a
@@ -77,6 +80,7 @@ export default async function ItemsByTypePage({
             matched it exactly. */}
         <NewItemButton
           itemTypes={itemTypes}
+          isPro={isPro}
           collectionOptions={collectionOptions}
           defaultTypeSlug={type}
           label={`New ${typeName}`}

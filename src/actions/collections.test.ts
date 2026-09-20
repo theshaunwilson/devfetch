@@ -9,6 +9,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('@/lib/db/billing', () => ({ isProUser: vi.fn() }));
 vi.mock('@/auth', () => ({ auth: vi.fn() }));
 vi.mock('@/lib/db/collections', () => ({
   createCollection: vi.fn(),
@@ -24,10 +25,12 @@ const {
   deleteCollection: deleteCollectionRow,
   setCollectionFavorite: setCollectionFavoriteRow,
 } = await import('@/lib/db/collections');
+const { isProUser } = await import('@/lib/db/billing');
 const { createCollection, updateCollection, deleteCollection, setCollectionFavorite } =
   await import('./collections');
 
 const session = vi.mocked(auth);
+const isPro = vi.mocked(isProUser);
 const createRow = vi.mocked(createCollectionRow);
 const updateRow = vi.mocked(updateCollectionRow);
 const deleteRow = vi.mocked(deleteCollectionRow);
@@ -53,6 +56,7 @@ function signedIn() {
 beforeEach(() => {
   vi.clearAllMocks();
   signedIn();
+  isPro.mockResolvedValue(false);
   createRow.mockResolvedValue({ ok: true, collection: saved });
   updateRow.mockResolvedValue({ ok: true });
   deleteRow.mockResolvedValue(true);
@@ -95,6 +99,7 @@ describe('createCollection', () => {
 
     expect(createRow).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'React Patterns' }),
+      expect.any(Boolean),
     );
   });
 
@@ -105,6 +110,7 @@ describe('createCollection', () => {
 
     expect(createRow).toHaveBeenCalledWith(
       expect.objectContaining({ description: 'Hooks and patterns' }),
+      expect.any(Boolean),
     );
   });
 
@@ -161,6 +167,7 @@ describe('createCollection', () => {
 
     expect(createRow).toHaveBeenCalledWith(
       expect.not.objectContaining({ userId: expect.anything() }),
+      expect.any(Boolean),
     );
   });
 });
@@ -387,5 +394,43 @@ describe('setCollectionFavorite', () => {
     expect(logged).toHaveBeenCalled();
 
     logged.mockRestore();
+  });
+});
+
+describe('createCollection, at the ceiling', () => {
+  it('names the limit rather than reporting a generic failure', async () => {
+    createRow.mockResolvedValue({ ok: false, reason: 'limit-reached' });
+
+    await expect(createCollection({ name: 'Fourth' })).resolves.toEqual({
+      success: false,
+      error:
+        'Free accounts are limited to 3 collections. Upgrade to Pro for unlimited collections.',
+    });
+  });
+
+  it('reports it on the form, not on the name field', async () => {
+    // Nothing the user typed is wrong, so highlighting the input would point
+    // at the wrong thing — and the dialog keeps what they typed either way.
+    createRow.mockResolvedValue({ ok: false, reason: 'limit-reached' });
+
+    const result = await createCollection({ name: 'Fourth' });
+
+    expect(result).not.toHaveProperty('fieldErrors');
+  });
+
+  it('still reports a duplicate name on the field it belongs to', async () => {
+    createRow.mockResolvedValue({ ok: false, reason: 'duplicate-name' });
+
+    await expect(createCollection({ name: 'React Patterns' })).resolves.toMatchObject({
+      fieldErrors: { name: ['You already have a collection with that name'] },
+    });
+  });
+
+  it('hands the write the plan it resolved, rather than letting it assume one', async () => {
+    isPro.mockResolvedValue(true);
+
+    await createCollection({ name: 'Anything' });
+
+    expect(createRow.mock.calls[0][1]).toBe(true);
   });
 });

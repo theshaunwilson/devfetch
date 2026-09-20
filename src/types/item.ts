@@ -176,6 +176,22 @@ export interface ItemTypeRef {
 }
 
 /**
+ * What `createItem` in `@/lib/db/items` reports back.
+ *
+ * Widened from `ItemDetail | null` when the free tier's item ceiling landed:
+ * "nobody is signed in" and "this account is full" are different answers and
+ * the caller has to say different things about them. That converges the shape
+ * on `CreateCollectionOutcome`, which has reported its own reasons since
+ * collections could be created — the two now differ only in their reasons.
+ *
+ * `limit-reached` can only be known at the write, since the count that decides
+ * it is taken inside the same transaction.
+ */
+export type CreateItemOutcome =
+  | { ok: true; item: ItemDetail }
+  | { ok: false; reason: 'no-session' | 'limit-reached' };
+
+/**
  * What `createItem` returns. The new item comes back in full, on the same
  * contract as `updateItem`, so a caller has the saved row rather than only the
  * fact that something was written.

@@ -1,13 +1,181 @@
-# Current Feature
+# Current Feature: Stripe Phase 2 — Integration & UI
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
+- **Webhook first** — `src/app/api/stripe/webhook/route.ts`, built and working
+  before anything can sell, so the first real payment has something listening.
+  Raw body via `request.text()`, signature-verified, state derived from
+  `subscription.status` and never from which event arrived.
+- **Selling** — `src/actions/billing.ts` (`startCheckout(interval)`,
+  `openBillingPortal()`) with lazy customer creation, and a `BillingSettings`
+  card on `/settings` above Editor preferences.
+- **Enforcing** — the 50-item and 3-collection ceilings applied inside the
+  create's own transaction, and the upload gate on both doors
+  (`POST /api/uploads` and `createItem`'s `required.file` branch), refusing with
+  403.
+- **Gate creation, never reading** — free accounts that already own uploads keep
+  viewing and downloading them; `GET /api/files/[id]` is untouched.
+- **Downgrade is read-only overage** — a cancelled Pro user keeps all their rows,
+  visible and editable; only new creates are refused until they are under the
+  ceiling. This falls out of gating creates alone.
+- **The funnel** — `PlanCard`'s CTA by plan and sign-in state, and `NewItemDialog`
+  showing File and Image **disabled with an upgrade hint, not hidden**.
+- Unit tests for the checkout action and both limit checks, mutation runs on the
+  five listed behaviours, and a full CLI + browser verification pass.
+
 ## Notes
 
+Spec: `context/features/stripe-phase-2-spec.md`.
+Reference: `docs/stripe-integration-plan.md` (§2, §4.5–4.7, §5.4–5.7, §6, §7, §8).
+
+### Read at load — things the spec does not mention
+
+- **`createItem` has no transaction today.** It is a single
+  `prisma.item.create` (`src/lib/db/items.ts:450`), and `createCollection` is a
+  single `prisma.collection.create`. "Count inside the same `$transaction`"
+  means introducing the **interactive** form, `$transaction(async (tx) => …)`,
+  which this codebase has never used — every existing call (`profile.ts:141`,
+  `tokens`, `prune-users`) is the array form. The Neon WebSocket adapter
+  supports it, but it is a new pattern and it changes the Prisma mock shape
+  every `db/items.test.ts` and `db/collections.test.ts` test relies on.
+- **The spec's `src/lib/limits.ts` is really `src/lib/usage-limits.ts`.** Phase 1
+  shipped `FREE_ITEM_LIMIT`, `FREE_COLLECTION_LIMIT`, `isWithinLimit` and
+  `limitMessage` there, already unit-tested and already pinned against the
+  homepage copy.
+- **`/` needs a new query after all.** The spec says the signed-in branch needs
+  none because `/` already calls `getCurrentUser()` — true for `isSignedIn`,
+  but `CurrentUser` carries no `isPro` (deliberately, since the sidebar row does
+  not render it), so the Pro branch needs `isProUser()`. It is `cache`d, so the
+  cost is one extra indexed lookup on a route that is already `force-dynamic`.
+- **`NewItemDialog` cannot ask whether the viewer is Pro.** It is a client
+  component with two server-component call sites, so the flag has to thread
+  `AppShell` → `Topbar` → `CreateMenu` → dialog, and
+  `/items/[type]/page.tsx` → `NewItemButton` → dialog.
+- **`/items/file` and `/items/image` each render a "New File"/"New Image"
+  button** with `defaultTypeSlug` set to that slug. For a free account that
+  opens the dialog preselected on a type that is about to be disabled —
+  `initialTypeId` falls back only when the slug names nothing, not when it names
+  something unusable. Needs a decision at `start`.
+- **`PlanCard` renders `<Button asChild><Link>`.** The signed-in-free branch
+  needs an `onClick`, so it becomes a conditional button/link — it is already
+  inside the client bundle via `BillingToggle`, so there is no boundary problem.
+  The spec's table covers only the **Pro** CTA; the Free card's CTA still points
+  at `/register` for a signed-in viewer, who would be bounced to `/dashboard`.
+  Worth settling too.
+- **The `?checkout=success` banner needs a reader.** `/settings` mounts a
+  `<Toaster />` but takes no `searchParams` today, and a toast has to be fired
+  from the client — so this is a small client component, not just a page prop.
+- **`src/proxy.ts` confirmed not to match `/api`** (matcher is collections,
+  dashboard, favorites, items, profile, settings), so the webhook route really
+  is unauthenticated by session and the signature is the only thing standing in
+  front of it.
+
+### Prerequisites — blockers for the verification plan
+
+- **The Stripe CLI is not installed.** `stripe listen` and `stripe trigger` are
+  half the spec's verification checklist, and neither `stripe` on `PATH` nor a
+  Homebrew install is present.
+- **`STRIPE_WEBHOOK_SECRET` is empty in `.env`.** It is printed by
+  `stripe listen`, so it follows the CLI.
+- `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID_MONTHLY` and `STRIPE_PRICE_ID_YEARLY`
+  **are** populated, and `APP_URL` is set — so the Dashboard prerequisites 1–3
+  look done. The billing portal configuration (prerequisite 4) is unverified.
+- `.env` also still holds `STRIPE_PUBLISHABLE_KEY`, which `.env.example`
+  deliberately dropped in `914c659`. Nothing reads it.
+
+### Decisions settled at `start`
+
+1. **Downgrade** — read-only overage, as the spec states. Confirmed.
+2. **Trial** — none. Adding one later is
+   `subscription_data.trial_period_days`, and `trialing` already grants Pro.
+3. **`past_due`** — Pro drops the moment a payment fails. Stripe still retries,
+   so a recovered card restores Pro on the next `.updated`.
+4. **The `/items/file` preselect** — `initialTypeId` falls back to the first
+   type the viewer can actually create, so the dialog never opens on a disabled
+   option. File and Image stay visible-but-disabled in the list, so the upgrade
+   hint is still discoverable.
+5. **The Free card's CTA for a signed-in viewer** — "Go to dashboard" →
+   `/dashboard`, rather than `/register`, which would bounce them straight back.
+6. **The Stripe CLI** — the user installs it; the webhook is built now and
+   verified against `stripe listen` once `STRIPE_WEBHOOK_SECRET` is populated.
+
+### Verified
+
+Against the seeded Neon **development** branch through the running dev server.
+
+- **Free tier**: billing card above Editor with Account last, both checkout
+  buttons, limits read from `usage-limits`. `POST /api/uploads` → **403** with
+  no R2 spend. New Item dialog shows all seven types with File and Image
+  **disabled and badged PRO**; `/items/file` preselects `file` and the dialog
+  still opens on **Snippet**. Creating a 7th collection at 6 owned → refused
+  with the named limit, dialog stays open, **typed values kept**,
+  `aria-invalid="false"` (not a field error). Nothing written — 0 probe rows.
+- **Gate creation, never reading**: both uploads this free account already owns
+  still serve — 200, correct media types, real bytes, `?download` still flips to
+  attachment.
+- **Pro** (granted by SQL on the demo user, with permission, then restored):
+  a **plain page reload shows Pro, no sign-out** — the consequence of reading
+  `isPro` from the row rather than the JWT. Pro with no `stripeCustomerId` gets
+  **no** Manage billing button; with one, the button appears, its pending state
+  was caught mid-flight at "Opening…" **disabled**, and a real round-trip to
+  Stripe's API failed cleanly to a toast with the user still on `/settings` —
+  which also proves `redirect()` outside the `try`. Dialog opens on **File**
+  with every type enabled and no hint; upload probe went **403 → 400**, so the
+  gate opened and reached the validator with nothing stored. Created a 7th
+  collection where free was refused at the same count.
+- **Downgrade, read-only overage**: flipped back to free holding 7 collections —
+  all 7 still visible **and editable**, only the 8th refused.
+- **CTAs**, all three viewer states: signed out → both `/register`; signed-in
+  free → Free `/dashboard`, Pro a real `<button>`; signed-in Pro → Pro
+  `/settings`. A Pro viewer can never reach checkout from the marketing page.
+- Zero page overflow at 390 and 1440 on `/` and `/settings`; zero console errors
+  or warnings.
+- **11 mutations run, all 11 caught.** One — the limit moved outside the
+  transaction — came back **green on the first run**: the mocked `tx` is the
+  same client, so call order proved nothing. The test was rewritten to record
+  whether the count ran while the callback was on the stack, and the mutation
+  then bit. Every source restored from **file backups, never `git checkout`**,
+  sha256-verified.
+- 827 tests across 39 files (from 747/36), green under
+  `env -u STRIPE_SECRET_KEY -u STRIPE_WEBHOOK_SECRET`. `next build` also passes
+  with every `STRIPE_` variable commented out, proving the lazy client survives;
+  `.env` restored byte-identical (sha `c6c7ceda…`).
+- **Database left exactly as found**: 22 items, 6 collections, 21 filings, 35
+  tags, 41 `ItemTag`, 7 types, 2 users, 0 tokens, zero billing columns set, and
+  the demo user's `updatedAt` unchanged — raw SQL does not fire Prisma's
+  `@updatedAt`.
+
+### Not verified
+
+- **The whole webhook CLI checklist.** The Stripe CLI is not installed and
+  `STRIPE_WEBHOOK_SECRET` is empty, so none of `stripe trigger`, the real test
+  checkout, replay/idempotency, tampered body → 400, missing signature → 400,
+  unset secret → 500, unknown customer → 200, portal cancel → `isPro` false, or
+  payment failure → `past_due` has been run. Agreed to merge now and verify
+  after. The route's one piece of judgement is unit-tested through
+  `subscriptionIntentFrom`; the signature check, the status codes and the
+  ordering guard's live behaviour are not.
+- **The spec's "signature verification removed → red" mutation cannot bite.**
+  The route has no unit test by design (`coding-standards.md` scopes the suite
+  to actions and utilities), so that one is covered only by the CLI run above.
+- A real checkout was never completed, so `checkout.session.completed` has never
+  actually reached `applySubscriptionState` in this app.
+- The 50-item ceiling was not driven in a browser — it is unit-tested at the
+  boundary (49 through, 50 refused) and the account holds 22. The **collection**
+  ceiling was exercised live instead, which shares the code path.
+
+### Deliberately out of scope
+
+- AI, export and custom-type gates — none of those features exist, so gating
+  them would write dead code.
+- `stripeSubscriptionStatus` / `stripeCurrentPeriodEnd` (a second migration).
+- A `jwt` callback carrying `isPro` — Phase 1 argued against it, and the
+  reload-picks-up-Pro behaviour depends on reading the row.
+- Live mode.
 
 ## History
 

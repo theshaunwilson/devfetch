@@ -90,7 +90,7 @@ export interface SidebarCollections {
  */
 export type CreateCollectionOutcome =
   | { ok: true; collection: DashboardCollection }
-  | { ok: false; reason: 'no-session' | 'duplicate-name' };
+  | { ok: false; reason: 'no-session' | 'duplicate-name' | 'limit-reached' };
 
 /**
  * What the `createCollection` server action returns. The new collection comes

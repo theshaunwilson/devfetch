@@ -3,6 +3,7 @@
 import { z } from 'zod';
 
 import { auth } from '@/auth';
+import { isProUser } from '@/lib/db/billing';
 import { getOwnedCollectionIds } from '@/lib/db/collections';
 import { getItemTypeById } from '@/lib/db/item-types';
 import {
@@ -15,6 +16,7 @@ import {
 import { requiredFieldsFor } from '@/lib/items';
 import { deleteObject } from '@/lib/r2';
 import { keyBelongsTo } from '@/lib/uploads';
+import { limitMessage } from '@/lib/usage-limits';
 import { createItemSchema, updateItemSchema } from '@/lib/validation/items';
 import type { CreateItemInput, UpdateItemInput } from '@/lib/validation/items';
 import type {
@@ -98,6 +100,9 @@ export async function createItem(data: CreateItemInput): Promise<CreateItemResul
     }
 
     const required = requiredFieldsFor(type.slug);
+    // One request-cached lookup, read once and used by both the upload gate
+    // below and the item ceiling inside the write.
+    const isPro = await isProUser();
 
     if (required.url && !parsed.data.url) {
       return {
@@ -108,6 +113,18 @@ export async function createItem(data: CreateItemInput): Promise<CreateItemResul
     }
 
     if (required.file) {
+      // The second of the upload gate's two doors. `POST /api/uploads` is
+      // where the R2 spend happens and refuses first, but this is what writes
+      // the row that references an object — so a caller holding a key from
+      // before the gate existed, or from a lapsed Pro subscription, still
+      // cannot file a new item against it.
+      if (!isPro) {
+        return {
+          success: false,
+          error: 'File and image uploads are a Pro feature. Upgrade to add them.',
+        };
+      }
+
       const { fileUrl, fileName, fileSize } = parsed.data;
 
       if (!fileUrl || !fileName || !fileSize) {
@@ -149,16 +166,19 @@ export async function createItem(data: CreateItemInput): Promise<CreateItemResul
     // what was checked — for the type and the collections alike. `contentType`
     // is decided here from the resolved slug rather than taken from the payload,
     // so a text item cannot claim to be a file — or the other way round.
-    const item = await createItemRow(
+    const outcome = await createItemRow(
       { ...parsed.data, typeId: type.id, collectionIds: collections.ids },
       required.file ? 'file' : 'text',
+      isPro,
     );
 
-    if (!item) {
-      return { success: false, error: 'Your session has expired. Sign in again.' };
+    if (!outcome.ok) {
+      return outcome.reason === 'limit-reached'
+        ? { success: false, error: limitMessage('items') }
+        : { success: false, error: 'Your session has expired. Sign in again.' };
     }
 
-    return { success: true, data: item };
+    return { success: true, data: outcome.item };
   } catch (error) {
     console.error('Could not create the item:', error);
 

@@ -3,12 +3,14 @@
 import { z } from 'zod';
 
 import { auth } from '@/auth';
+import { isProUser } from '@/lib/db/billing';
 import {
   createCollection as createCollectionRow,
   deleteCollection as deleteCollectionRow,
   setCollectionFavorite as setCollectionFavoriteRow,
   updateCollection as updateCollectionRow,
 } from '@/lib/db/collections';
+import { limitMessage } from '@/lib/usage-limits';
 import { createCollectionSchema, updateCollectionSchema } from '@/lib/validation/collections';
 import type {
   CreateCollectionInput,
@@ -53,7 +55,7 @@ export async function createCollection(
   }
 
   try {
-    const outcome = await createCollectionRow(parsed.data);
+    const outcome = await createCollectionRow(parsed.data, await isProUser());
 
     if (outcome.ok) {
       return { success: true, data: outcome.collection };
@@ -65,6 +67,12 @@ export async function createCollection(
         error: CHECK_FIELDS,
         fieldErrors: { name: ['You already have a collection with that name'] },
       };
+    }
+
+    // Not a field error: nothing the user typed is wrong, and the dialog keeps
+    // what they typed either way — the fix is to upgrade or free one up.
+    if (outcome.reason === 'limit-reached') {
+      return { success: false, error: limitMessage('collections') };
     }
 
     return { success: false, error: 'Your session has expired. Sign in again.' };
