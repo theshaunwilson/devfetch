@@ -13,6 +13,7 @@ import { SEARCH_PREVIEW_LENGTH } from '@/lib/search';
 import type { CreateItemData, UpdateItemData } from '@/lib/validation/items';
 import { Prisma } from '@/generated/prisma/client';
 import type {
+  AllItems,
   DashboardItem,
   DeletedItem,
   ItemContentType,
@@ -134,6 +135,47 @@ export async function getRecentItems(limit: number): Promise<DashboardItem[]> {
 
   return items.map(toDashboardItem);
 }
+
+/**
+ * One page of every item the current user owns, pinned first and then most
+ * recently updated — the ordering each per-type page and collection page uses.
+ *
+ * Unlike `getItemsByTypeSlug` and `getItemsByCollectionId` there is no parent
+ * to resolve, so there is no lookup that can miss and no null: an account with
+ * no items gets an empty page rather than a 404, which is the difference
+ * between "you have nothing yet" and "no such thing".
+ *
+ * Cached for the same reason and on the same condition as those two: the page
+ * and its `generateMetadata` both ask, and both must pass the same
+ * `requestedPage` or the request pays for the query twice.
+ */
+export const getAllItems = cache(async (requestedPage: number): Promise<AllItems> => {
+  const userId = await getCurrentUserId();
+
+  if (!userId) {
+    const pagination = buildPagination({ total: 0, perPage: ITEMS_PER_PAGE, requestedPage });
+    return { items: [], pagination };
+  }
+
+  const where = { userId };
+
+  // Counted before the slice is fetched rather than beside it, for the reason
+  // `getItemsByTypeSlug` records: clamping the requested page needs the total.
+  const total = await prisma.item.count({ where });
+  const pagination = buildPagination({ total, perPage: ITEMS_PER_PAGE, requestedPage });
+
+  const items = await prisma.item.findMany({
+    where,
+    // Applied in SQL rather than to the page that comes back, so a pinned item
+    // that would have landed on page three is on page one instead.
+    orderBy: [{ isPinned: 'desc' }, { updatedAt: 'desc' }],
+    skip: pageSkip(pagination.page, ITEMS_PER_PAGE),
+    take: ITEMS_PER_PAGE,
+    select: ITEM_SELECT,
+  });
+
+  return { items: items.map(toDashboardItem), pagination };
+});
 
 /**
  * One item type resolved from its slug, with one page of the current user's

@@ -3,10 +3,9 @@
 import { defaultFilter } from 'cmdk';
 import { Folder, Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 import { useItemDrawer } from '@/components/items/ItemDrawerProvider';
-import { Button } from '@/components/ui/button';
 import {
   Command,
   CommandDialog,
@@ -31,6 +30,11 @@ import {
 import { cn } from '@/lib/utils';
 import type { CollectionOption } from '@/types/collection';
 import type { SearchItem } from '@/types/search';
+
+/** Nothing to subscribe to: the platform does not change under a mounted page. */
+function subscribeToNothing(): () => void {
+  return () => {};
+}
 
 /**
  * Scores a row against its keywords rather than its `value`.
@@ -72,6 +76,15 @@ export function SearchPalette({
   const handedOffRef = useRef(false);
   const router = useRouter();
   const { openItem } = useItemDrawer();
+
+  // The server cannot know the platform, so the hint renders as ⌘ and is
+  // corrected on the client. `useSyncExternalStore` rather than state set from
+  // an effect, which is what it exists for — and what keeps hydration honest.
+  const isMac = useSyncExternalStore(
+    subscribeToNothing,
+    () => /mac/i.test(navigator.userAgent),
+    () => true,
+  );
 
   const show = useCallback(() => setOpen(true), []);
 
@@ -121,16 +134,45 @@ export function SearchPalette({
 
   return (
     <>
-      {/* An icon rather than a labelled field. The wide field carried a visible
-          label and a ⌘K hint, and neither survived the shrink — the label had
-          already been shortened twice because the row was never as wide as the
-          wording wanted, and the hint was positioned inside the row that is now
-          gone. The shortcut itself is a document listener and is unaffected,
-          and the palette's own input still says what it searches in full. */}
-      <Button ref={triggerRef} variant="ghost" size="icon" className="size-10" onClick={show}>
-        <Search className="size-4" />
-        <span className="sr-only">Search</span>
-      </Button>
+      {/*
+        One trigger in two shapes: an icon button on a narrow screen, the
+        labelled field from `lg` up.
+
+        One element rather than two, because `triggerRef` has to name whichever
+        is on screen — focus returns here when the palette or the drawer closes,
+        and a ref split across a hidden twin would return it to a `display:
+        none` element.
+
+        `lg` is where the field is wide enough, and that threshold is inherited
+        rather than guessed: what binds is the header's width, which is the
+        viewport less the open sidebar's 256px, so the label had already been
+        cut twice at `md` before the field was dropped for an icon.
+      */}
+      <div className="relative shrink-0 lg:min-w-0 lg:flex-1 lg:shrink lg:basis-0 lg:max-w-lg">
+        <button
+          ref={triggerRef}
+          type="button"
+          onClick={show}
+          className={cn(
+            'flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground transition-colors outline-none',
+            'hover:bg-accent hover:text-accent-foreground focus-visible:ring-3 focus-visible:ring-ring/50',
+            // From `lg` it stops being a button-shaped icon and becomes the
+            // field: full width, bordered, left-aligned, with room at the
+            // right for the shortcut hint sitting over it.
+            'lg:w-full lg:justify-start lg:gap-2 lg:border lg:border-input lg:bg-transparent lg:py-1 lg:pr-16 lg:pl-2.5 lg:text-left lg:text-sm',
+            'lg:hover:border-ring/50 lg:hover:bg-transparent lg:hover:text-muted-foreground lg:focus-visible:border-ring',
+            'lg:dark:bg-input/30'
+          )}
+        >
+          <Search className="size-4 shrink-0" />
+          <span className="sr-only lg:not-sr-only lg:truncate">Search items...</span>
+        </button>
+
+        {/* Only where the field it sits inside exists. */}
+        <kbd className="pointer-events-none absolute top-1/2 right-3 hidden -translate-y-1/2 rounded border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground lg:block">
+          {isMac ? '⌘ K' : 'Ctrl K'}
+        </kbd>
+      </div>
 
       <CommandDialog
         open={open}

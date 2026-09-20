@@ -22,7 +22,10 @@ export function Sidebar({ itemTypes, collections, user }: SidebarProps) {
 
   return (
     <>
+      {/* Named for the same reason the nav inside it is: an unlabelled
+          complementary landmark is announced only as "complementary". */}
       <aside
+        aria-label="Sidebar"
         inert={!isOpen}
         className={cn(
           'hidden shrink-0 overflow-hidden border-r transition-[width] duration-200 ease-in-out md:block',

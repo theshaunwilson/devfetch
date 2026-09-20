@@ -18,9 +18,14 @@ export function TopbarToggle() {
 
   return (
     <div className={cn('flex items-center gap-3', isOpen && 'md:hidden')}>
+      {/* `size-10` to match Search, Favorites and Create in the same bar: the
+          default `size="icon"` is 32px, which left this visibly shorter than
+          the three beside it and made the only route to navigation on a phone
+          the smallest target on the row. */}
       <Button
         variant="ghost"
         size="icon"
+        className="size-10"
         onClick={toggle}
         aria-expanded={expanded}
         aria-label={expanded ? 'Close navigation' : 'Open navigation'}

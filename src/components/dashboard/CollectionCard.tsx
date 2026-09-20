@@ -10,6 +10,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { borderColorClass, textColorClass } from '@/lib/colors';
+import { capitalize } from '@/lib/format';
 import { getIcon } from '@/lib/icons';
 import type { DashboardCollection } from '@/types/collection';
 import { cn } from '@/lib/utils';
@@ -71,15 +72,23 @@ export function CollectionCard({ collection }: CollectionCardProps) {
           <p className="line-clamp-2 text-sm text-muted-foreground">{collection.description}</p>
         )}
 
+        {/*
+          The type mix is conveyed by icon and colour alone, so it needs a text
+          equivalent. One `sr-only` sentence rather than a name per icon: lucide
+          drops `aria-hidden` when an a11y prop is present but adds no
+          `role="img"`, so a bare `aria-label` on an `<svg>` is announced
+          unreliably — and eight separate names read worse than one list.
+        */}
         <div className="mt-auto flex items-center gap-2.5">
+          {collection.types.length > 0 && (
+            <span className="sr-only">
+              Contains: {collection.types.map((type) => capitalize(type.name)).join(', ')}
+            </span>
+          )}
           {collection.types.map((type) => {
             const Icon = getIcon(type.icon);
             return (
-              <Icon
-                key={type.id}
-                aria-label={type.name}
-                className={cn('size-4', textColorClass(type.color))}
-              />
+              <Icon key={type.id} aria-hidden="true" className={cn('size-4', textColorClass(type.color))} />
             );
           })}
         </div>

@@ -36,6 +36,7 @@ const { getCurrentUserId } = await import('@/lib/db/user');
 const {
   createItem,
   deleteItem,
+  getAllItems,
   getItemDetail,
   getItemFile,
   getItemsByCollectionId,
@@ -825,6 +826,88 @@ describe('getItemsByTypeSlug', () => {
  * asserted on both sides of the join — the collection is the user's, and every
  * item that comes back through it is too.
  */
+describe('getAllItems', () => {
+  const findMany = prisma.item.findMany as unknown as Mock<
+    (args: unknown) => Promise<DetailRow[]>
+  >;
+  const count = prisma.item.count as unknown as Mock<(args: unknown) => Promise<number>>;
+
+  beforeEach(() => {
+    findMany.mockResolvedValue([]);
+    count.mockResolvedValue(0);
+  });
+
+  it('scopes every row to the signed-in user', async () => {
+    await getAllItems(1);
+
+    // The page has no parent entity to resolve, so this filter is the only
+    // thing standing between it and every item in the table.
+    expect(findMany.mock.calls[0][0]).toMatchObject({ where: { userId: USER_ID } });
+    expect(count.mock.calls[0][0]).toMatchObject({ where: { userId: USER_ID } });
+  });
+
+  it('orders pinned items first, then by most recently updated', async () => {
+    await getAllItems(1);
+
+    // Applied in SQL, so a pinned item that would have fallen on page three
+    // is on page one instead of at the top of page three.
+    expect(findMany.mock.calls[0][0]).toMatchObject({
+      orderBy: [{ isPinned: 'desc' }, { updatedAt: 'desc' }],
+    });
+  });
+
+  it('pages the query rather than the result', async () => {
+    count.mockResolvedValue(40);
+
+    await getAllItems(2);
+
+    // 21 per page, as the literal the tests around this one use.
+    expect(findMany.mock.calls[0][0]).toMatchObject({ skip: 21, take: 21 });
+  });
+
+  it('clamps a page past the end rather than returning nothing', async () => {
+    count.mockResolvedValue(3);
+
+    const result = await getAllItems(99);
+
+    // You can be standing on the last page, delete what was on it and refresh.
+    expect(result.pagination.page).toBe(1);
+    expect(result.pagination.totalPages).toBe(1);
+  });
+
+  it('reports the total rather than the length of the page', async () => {
+    count.mockResolvedValue(42);
+    findMany.mockResolvedValue([row({})]);
+
+    const result = await getAllItems(1);
+
+    expect(result.pagination.total).toBe(42);
+    expect(result.items).toHaveLength(1);
+  });
+
+  it('returns an empty page rather than null with no session', async () => {
+    (getCurrentUserId as Mock).mockResolvedValue(null);
+
+    const result = await getAllItems(1);
+
+    // Unlike the type and collection pages there is nothing to resolve, so an
+    // account with no items reads as empty rather than as a 404.
+    expect(result.items).toEqual([]);
+    expect(result.pagination.total).toBe(0);
+    expect(findMany).not.toHaveBeenCalled();
+    expect(count).not.toHaveBeenCalled();
+  });
+
+  it('serializes updatedAt to an ISO string, as every card expects', async () => {
+    count.mockResolvedValue(1);
+    findMany.mockResolvedValue([row({})]);
+
+    const result = await getAllItems(1);
+
+    expect(typeof result.items[0].updatedAt).toBe('string');
+  });
+});
+
 describe('getItemsByCollectionId', () => {
   const lookupCollection = prisma.collection.findFirst as unknown as Mock<
     (args: unknown) => Promise<{

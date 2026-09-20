@@ -36,7 +36,7 @@ export default async function DashboardPage() {
 
       <section className="mt-10">
         <SectionHeader title="Collections" viewAllHref="/collections" />
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 @2xl/main:grid-cols-2 @5xl/main:grid-cols-3">
           {recentCollections.map((collection) => (
             <CollectionCard key={collection.id} collection={collection} />
           ))}

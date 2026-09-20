@@ -28,7 +28,7 @@ export default async function CollectionsPage({ searchParams }: PageProps<'/coll
       {collections.length > 0 ? (
         // The same grid the dashboard's Collections section uses, so the six
         // cards there and a page of them here line up column for column.
-        <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-8 grid gap-4 @2xl/main:grid-cols-2 @5xl/main:grid-cols-3">
           {collections.map((collection) => (
             <CollectionCard key={collection.id} collection={collection} />
           ))}
