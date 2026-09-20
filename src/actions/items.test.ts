@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/auth', () => ({ auth: vi.fn() }));
 vi.mock('@/lib/r2', () => ({ deleteObject: vi.fn() }));
+vi.mock('@/lib/db/billing', () => ({ isProUser: vi.fn() }));
 vi.mock('@/lib/db/item-types', () => ({ getItemTypeById: vi.fn() }));
 vi.mock('@/lib/db/collections', () => ({ getOwnedCollectionIds: vi.fn() }));
 vi.mock('@/lib/db/items', () => ({
@@ -24,6 +25,7 @@ vi.mock('@/lib/db/items', () => ({
 
 const { auth } = await import('@/auth');
 const { deleteObject } = await import('@/lib/r2');
+const { isProUser } = await import('@/lib/db/billing');
 const { getItemTypeById } = await import('@/lib/db/item-types');
 const { getOwnedCollectionIds } = await import('@/lib/db/collections');
 const {
@@ -38,6 +40,7 @@ const { createItem, deleteItem, setItemFavorite, setItemPinned, updateItem } = a
 );
 
 const session = vi.mocked(auth);
+const isPro = vi.mocked(isProUser);
 const writeRow = vi.mocked(updateItemRow);
 const deleteRow = vi.mocked(deleteItemRow);
 const createRow = vi.mocked(createItemRow);
@@ -76,7 +79,9 @@ beforeEach(() => {
   session.mockResolvedValue({ user: { id: USER_ID } } as unknown as never);
   writeRow.mockResolvedValue(saved);
   deleteRow.mockResolvedValue({ deleted: true, fileKey: null });
-  createRow.mockResolvedValue(saved);
+  createRow.mockResolvedValue({ ok: true, item: saved });
+  // Free by default; the tests that are about uploads or the ceiling say so.
+  isPro.mockResolvedValue(false);
   favoriteRow.mockResolvedValue(true);
   pinRow.mockResolvedValue(true);
   findType.mockResolvedValue({ id: 'type_1', slug: 'snippet' });
@@ -426,6 +431,9 @@ describe('createItem, with a file', () => {
 
   beforeEach(() => {
     findType.mockResolvedValue({ id: 'type_2', slug: 'file' });
+    // Uploads are Pro-only, so everything below is about what a *permitted*
+    // file create does. The refusal has its own test.
+    isPro.mockResolvedValue(true);
   });
 
   it('marks the row as holding a file, decided from the resolved type', async () => {
@@ -648,5 +656,87 @@ describe('setItemPinned', () => {
     expect(logged).toHaveBeenCalled();
 
     logged.mockRestore();
+  });
+});
+
+/**
+ * The upload gate's second door. `POST /api/uploads` refuses first and is what
+ * saves the R2 spend, but this is the write that would create the row naming
+ * an object — so a key held from before the gate existed, or from a lapsed
+ * subscription, still cannot be filed against.
+ */
+describe('createItem, the upload gate', () => {
+  const file = {
+    typeId: 'type_2',
+    title: 'Deployment runbook',
+    fileUrl: `users/${USER_ID}/abc-123.pdf`,
+    fileName: 'runbook.pdf',
+    fileSize: 2048,
+  };
+
+  beforeEach(() => {
+    findType.mockResolvedValue({ id: 'type_2', slug: 'file' });
+  });
+
+  it('refuses a free account a file item, and never writes the row', async () => {
+    isPro.mockResolvedValue(false);
+
+    await expect(createItem(file)).resolves.toEqual({
+      success: false,
+      error: 'File and image uploads are a Pro feature. Upgrade to add them.',
+    });
+    expect(createRow).not.toHaveBeenCalled();
+  });
+
+  it('refuses an image item the same way', async () => {
+    findType.mockResolvedValue({ id: 'type_3', slug: 'image' });
+    isPro.mockResolvedValue(false);
+
+    await expect(createItem({ ...file, typeId: 'type_3' })).resolves.toMatchObject({
+      success: false,
+    });
+    expect(createRow).not.toHaveBeenCalled();
+  });
+
+  it('lets Pro through', async () => {
+    isPro.mockResolvedValue(true);
+
+    await expect(createItem(file)).resolves.toMatchObject({ success: true });
+  });
+
+  it('never gates a text item, whatever the plan', async () => {
+    findType.mockResolvedValue({ id: 'type_1', slug: 'snippet' });
+    isPro.mockResolvedValue(false);
+
+    await expect(createItem({ typeId: 'type_1', title: 'A snippet' })).resolves.toMatchObject({
+      success: true,
+    });
+  });
+});
+
+describe('createItem, at the ceiling', () => {
+  it('names the limit, so the refusal is actionable rather than only a refusal', async () => {
+    createRow.mockResolvedValue({ ok: false, reason: 'limit-reached' });
+
+    await expect(createItem({ typeId: 'type_1', title: 'One more' })).resolves.toEqual({
+      success: false,
+      error: 'Free accounts are limited to 50 items. Upgrade to Pro for unlimited items.',
+    });
+  });
+
+  it('keeps reporting a lost session differently from a full account', async () => {
+    createRow.mockResolvedValue({ ok: false, reason: 'no-session' });
+
+    await expect(createItem({ typeId: 'type_1', title: 'One more' })).resolves.toMatchObject({
+      error: expect.stringContaining('session has expired'),
+    });
+  });
+
+  it('hands the write the plan it resolved, rather than letting it assume one', async () => {
+    isPro.mockResolvedValue(true);
+
+    await createItem({ typeId: 'type_1', title: 'A snippet' });
+
+    expect(createRow.mock.calls[0][2]).toBe(true);
   });
 });

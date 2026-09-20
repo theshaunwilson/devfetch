@@ -1,9 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
+import { toast } from 'sonner';
+import { startCheckout } from '@/actions/billing';
 import { PlanCard } from '@/components/home/PlanCard';
 import { FREE_PLAN, PRO_BILLING, PRO_PLAN } from '@/components/home/content';
 import { Switch } from '@/components/ui/switch';
+import { planCta, type PlanViewer } from '@/lib/plan-cta';
 import { cn } from '@/lib/utils';
 
 interface PeriodLabelProps {
@@ -46,10 +49,26 @@ function PeriodLabel({ children, active, onSelect }: PeriodLabelProps) {
  * context provider wrapping the section, so the two could sit apart, would be
  * three client components where this is one. `PlanCard` stays a plain
  * presentational component, so the copy still lives in a data module.
+ *
+ * It also already holds the monthly/yearly state, which is exactly the
+ * `interval` a checkout needs — so the signed-in Pro CTA starts checkout from
+ * here rather than needing a second piece of state anywhere else.
  */
-export function BillingToggle() {
+export function BillingToggle({ isSignedIn, isPro }: PlanViewer) {
   const [yearly, setYearly] = useState(false);
+  const [isPending, startTransition] = useTransition();
   const billing = yearly ? PRO_BILLING.yearly : PRO_BILLING.monthly;
+  const viewer = { isSignedIn, isPro };
+
+  function upgrade() {
+    startTransition(async () => {
+      // Returns only on failure — success redirects to Stripe's hosted
+      // Checkout, which throws `NEXT_REDIRECT` and never comes back.
+      const result = await startCheckout(yearly ? 'yearly' : 'monthly');
+
+      toast.error(result.error);
+    });
+  }
 
   return (
     <>
@@ -79,8 +98,19 @@ export function BillingToggle() {
       </div>
 
       <div className="mx-auto grid max-w-[880px] grid-cols-1 gap-5 sm:grid-cols-2">
-        <PlanCard {...FREE_PLAN} />
-        <PlanCard {...PRO_PLAN} {...billing} />
+        <PlanCard
+          {...FREE_PLAN}
+          action={planCta('free', viewer, FREE_PLAN.cta)}
+          onCheckout={upgrade}
+          pending={false}
+        />
+        <PlanCard
+          {...PRO_PLAN}
+          {...billing}
+          action={planCta('pro', viewer, PRO_PLAN.cta)}
+          onCheckout={upgrade}
+          pending={isPending}
+        />
       </div>
     </>
   );

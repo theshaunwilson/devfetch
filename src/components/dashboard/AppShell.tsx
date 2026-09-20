@@ -7,6 +7,7 @@ import { EditorPreferencesProvider } from '@/components/editor/EditorPreferences
 import { ItemDrawerProvider } from '@/components/items/ItemDrawerProvider';
 import { Toaster } from '@/components/ui/sonner';
 import { MAIN_CONTENT_ID } from '@/lib/constants';
+import { isProUser } from '@/lib/db/billing';
 import { getCollectionOptions, getSidebarCollections } from '@/lib/db/collections';
 import { getItemTypes } from '@/lib/db/item-types';
 import { getSearchItems } from '@/lib/db/items';
@@ -29,6 +30,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
     searchItems,
     user,
     editorPreferences,
+    isPro,
     cookieStore,
   ] = await Promise.all([
       getItemTypes(),
@@ -44,6 +46,9 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
       // Every Monaco editor in the app is under this shell, and each reads its
       // font size, theme and the rest from context rather than fetching them.
       getEditorPreferences(),
+      // Request-cached, so the create dialog's gate and any gate an action
+      // runs during the same request share one lookup.
+      isProUser(),
       cookies(),
     ]);
 
@@ -74,6 +79,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
             <div className="flex min-w-0 flex-1 flex-col">
               <Topbar
                 itemTypes={itemTypes}
+                isPro={isPro}
                 collectionOptions={collectionOptions}
                 searchItems={searchItems}
               />

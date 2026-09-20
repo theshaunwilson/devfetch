@@ -153,33 +153,61 @@ describe('initialTypeId', () => {
     { id: 'type_link', slug: 'link' },
   ];
 
+  /** The full list, as the dialog now receives it — Pro types included. */
+  const ALL_TYPES = [...TYPES, { id: 'type_file', slug: 'file' }];
+
   it('opens on the requested type', () => {
-    expect(initialTypeId(TYPES, 'link')).toBe('type_link');
-    expect(initialTypeId(TYPES, 'prompt')).toBe('type_prompt');
+    expect(initialTypeId(TYPES, 'link', false)).toBe('type_link');
+    expect(initialTypeId(TYPES, 'prompt', false)).toBe('type_prompt');
   });
 
-  // The case that makes this worth a function: the items page passes its own
-  // slug, and /items/file names a Pro type the dialog does not offer.
   it('falls back to the first type when the slug is not on offer', () => {
-    expect(initialTypeId(TYPES, 'file')).toBe('type_snippet');
-    expect(initialTypeId(TYPES, 'image')).toBe('type_snippet');
+    expect(initialTypeId(TYPES, 'file', false)).toBe('type_snippet');
+    expect(initialTypeId(TYPES, 'image', false)).toBe('type_snippet');
+  });
+
+  // The case the plan argument exists for. `/items/file` renders a "New File"
+  // button that passes `file`, and the type IS on the list now — it is simply
+  // disabled for this viewer. Without the check the dialog would open on it,
+  // with the submit blocked and nothing saying why.
+  it('skips a Pro type a free viewer cannot create, even when it is on the list', () => {
+    expect(initialTypeId(ALL_TYPES, 'file', false)).toBe('type_snippet');
+  });
+
+  it('honours that same Pro type for a viewer who can create it', () => {
+    expect(initialTypeId(ALL_TYPES, 'file', true)).toBe('type_file');
+  });
+
+  it('falls back to the first type the viewer can create, not merely the first', () => {
+    const proFirst = [{ id: 'type_image', slug: 'image' }, ...TYPES];
+
+    expect(initialTypeId(proFirst, undefined, false)).toBe('type_snippet');
+    expect(initialTypeId(proFirst, undefined, true)).toBe('type_image');
+  });
+
+  it('still returns a string when every offered type is out of reach', () => {
+    // Not reachable from the UI, but the return type promises a string.
+    const proOnly = [{ id: 'type_file', slug: 'file' }];
+
+    expect(initialTypeId(proOnly, undefined, false)).toBe('type_file');
   });
 
   it('falls back when no slug is given at all, as the top bar does', () => {
-    expect(initialTypeId(TYPES)).toBe('type_snippet');
-    expect(initialTypeId(TYPES, undefined)).toBe('type_snippet');
+    expect(initialTypeId(TYPES, undefined, false)).toBe('type_snippet');
   });
 
   it('falls back rather than matching loosely on case or padding', () => {
     // The slug arrives from the URL and is compared to stored slugs; neither
     // is normalized here, so a near-miss must not resolve.
-    expect(initialTypeId(TYPES, 'Link')).toBe('type_snippet');
-    expect(initialTypeId(TYPES, ' link ')).toBe('type_snippet');
+    expect(initialTypeId(TYPES, 'Link', false)).toBe('type_snippet');
+    expect(initialTypeId(TYPES, ' link ', false)).toBe('type_snippet');
   });
 
   it('always returns an id that is actually on offer', () => {
     for (const slug of ['snippet', 'link', 'file', '', undefined, 'nonsense']) {
-      expect(TYPES.map((type) => type.id)).toContain(initialTypeId(TYPES, slug));
+      for (const isPro of [true, false]) {
+        expect(TYPES.map((type) => type.id)).toContain(initialTypeId(TYPES, slug, isPro));
+      }
     }
   });
 
@@ -188,7 +216,7 @@ describe('initialTypeId', () => {
   it('takes the first match when two types share a slug', () => {
     const shadowed = [{ id: 'custom_snippet', slug: 'snippet' }, ...TYPES];
 
-    expect(initialTypeId(shadowed, 'snippet')).toBe('custom_snippet');
+    expect(initialTypeId(shadowed, 'snippet', false)).toBe('custom_snippet');
   });
 });
 

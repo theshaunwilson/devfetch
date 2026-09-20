@@ -108,3 +108,30 @@ export async function applySubscriptionState(
 
   return result.count > 0;
 }
+
+/**
+ * Revokes Pro and clears the subscription id, for one specific subscription.
+ *
+ * The ordering guard rides in the `where` clause rather than a read followed by
+ * a write — the rule every mutating query in this codebase follows, and here it
+ * closes a real window: Stripe does not guarantee delivery order, so a
+ * `deleted` for a subscription the account has already replaced can arrive
+ * after the `created` for its replacement. Matching on `stripeSubscriptionId`
+ * means that stale event updates no row at all, instead of revoking a live
+ * subscription.
+ *
+ * Returns whether a row matched. False is the ordinary outcome for a stale or
+ * already-applied event, not an error — which is what keeps this safe to
+ * retry, exactly as `applySubscriptionState` is.
+ */
+export async function clearSubscriptionState(
+  stripeCustomerId: string,
+  subscriptionId: string,
+): Promise<boolean> {
+  const result = await prisma.user.updateMany({
+    where: { stripeCustomerId, stripeSubscriptionId: subscriptionId },
+    data: { isPro: false, stripeSubscriptionId: null },
+  });
+
+  return result.count > 0;
+}

@@ -19,10 +19,13 @@ import type { SearchItem } from '@/types/search';
  */
 export function Topbar({
   itemTypes,
+  isPro,
   collectionOptions,
   searchItems,
 }: {
   itemTypes: SidebarItemType[];
+  /** Threaded to the create dialog, which gates the two upload types. */
+  isPro: boolean;
   collectionOptions: CollectionOption[];
   searchItems: SearchItem[];
 }) {
@@ -54,7 +57,7 @@ export function Topbar({
             </Link>
           </Button>
 
-          <CreateMenu itemTypes={itemTypes} collectionOptions={collectionOptions} />
+          <CreateMenu itemTypes={itemTypes} isPro={isPro} collectionOptions={collectionOptions} />
         </div>
       </div>
     </header>

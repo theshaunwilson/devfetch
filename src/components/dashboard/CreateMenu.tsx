@@ -18,6 +18,8 @@ import type { SidebarItemType } from '@/types/item';
 
 interface CreateMenuProps {
   itemTypes: SidebarItemType[];
+  /** Passed straight through to the item dialog, which gates the upload types. */
+  isPro: boolean;
   collectionOptions: CollectionOption[];
 }
 
@@ -39,7 +41,7 @@ interface CreateMenuProps {
  * dialog down on the click that opened it. `CollectionCardMenu` is built the
  * same way for the same reason.
  */
-export function CreateMenu({ itemTypes, collectionOptions }: CreateMenuProps) {
+export function CreateMenu({ itemTypes, isPro, collectionOptions }: CreateMenuProps) {
   const [itemOpen, setItemOpen] = useState(false);
   const [collectionOpen, setCollectionOpen] = useState(false);
   const router = useRouter();
@@ -96,6 +98,7 @@ export function CreateMenu({ itemTypes, collectionOptions }: CreateMenuProps) {
 
       <NewItemDialog
         itemTypes={itemTypes}
+        isPro={isPro}
         collectionOptions={collectionOptions}
         open={itemOpen}
         onOpenChange={setItemOpen}

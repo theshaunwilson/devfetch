@@ -6,6 +6,7 @@ import { ImageCard } from '@/components/items/ImageCard';
 import { ItemCard } from '@/components/items/ItemCard';
 import { SectionHeading } from '@/components/layout/SectionHeading';
 import { PaginationControls } from '@/components/pagination/PaginationControls';
+import { isProUser } from '@/lib/db/billing';
 import { getCollectionOptions } from '@/lib/db/collections';
 import { getItemTypes } from '@/lib/db/item-types';
 import { getAllItems } from '@/lib/db/items';
@@ -23,9 +24,10 @@ export default async function AllItemsPage({ searchParams }: PageProps<'/items'>
 
   // Both free: `getItemTypes` and `getCollectionOptions` are request-cached and
   // `AppShell` has already called each of them.
-  const [itemTypes, collectionOptions] = await Promise.all([
+  const [itemTypes, collectionOptions, isPro] = await Promise.all([
     getItemTypes(),
     getCollectionOptions(),
+    isProUser(),
   ]);
 
   // Uploads are a different kind of thing from a snippet or a prompt and show a
@@ -48,7 +50,7 @@ export default async function AllItemsPage({ searchParams }: PageProps<'/items'>
 
         {/* No `defaultTypeSlug`: this page is every type, so the dialog opens
             on its own fallback rather than one picked arbitrarily here. */}
-        <NewItemButton itemTypes={itemTypes} collectionOptions={collectionOptions} />
+        <NewItemButton itemTypes={itemTypes} isPro={isPro} collectionOptions={collectionOptions} />
       </div>
 
       {items.length > 0 ? (

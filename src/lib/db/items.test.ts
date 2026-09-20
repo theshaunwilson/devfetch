@@ -10,8 +10,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
 
-vi.mock('@/lib/prisma', () => ({
-  prisma: {
+vi.mock('@/lib/prisma', () => {
+  const client = {
     item: {
       findFirst: vi.fn(),
       findMany: vi.fn(),
@@ -26,8 +26,19 @@ vi.mock('@/lib/prisma', () => ({
     itemCollection: { findMany: vi.fn(), count: vi.fn() },
     $queryRaw: vi.fn(),
     $executeRaw: vi.fn(),
-  },
-}));
+  };
+
+  return {
+    prisma: {
+      ...client,
+      // The interactive transaction runs against the very same mock, so a test
+      // that stubs `prisma.item.create` sees it whether the call goes through
+      // `tx` or not — and `$transaction.mock.calls` still proves the count and
+      // the insert were handed to one callback rather than issued separately.
+      $transaction: vi.fn((run: (tx: typeof client) => unknown) => run(client)),
+    },
+  };
+});
 
 vi.mock('@/lib/db/user', () => ({ getCurrentUserId: vi.fn() }));
 
@@ -381,6 +392,14 @@ interface CreateArgs {
 const createArgs = (): CreateArgs => create.mock.calls[0][0] as CreateArgs;
 
 describe('createItem', () => {
+  const count = prisma.item.count as unknown as Mock<(args: unknown) => Promise<number>>;
+
+  // Under the ceiling by default, so the tests below are about what the write
+  // does rather than about the gate. The gate has its own describe.
+  beforeEach(() => {
+    count.mockResolvedValue(0);
+  });
+
   const data = {
     typeId: 'type_1',
     title: 'useDebounce Hook',
@@ -396,7 +415,7 @@ describe('createItem', () => {
 
     // A `userId` in the payload would be the whole attack: it must not reach
     // the write.
-    await createItem({ ...data, userId: 'someone_else' } as never, 'text');
+    await createItem({ ...data, userId: 'someone_else' } as never, 'text', false);
 
     expect(createArgs().data.user).toEqual({ connect: { id: USER_ID } });
     expect(createArgs().data).not.toHaveProperty('userId');
@@ -405,15 +424,18 @@ describe('createItem', () => {
   it('files the item under the type it was given', async () => {
     create.mockResolvedValue(row());
 
-    await createItem(data, 'text');
+    await createItem(data, 'text', false);
 
     expect(createArgs().data.type).toEqual({ connect: { id: 'type_1' } });
   });
 
-  it('returns null without writing when nobody is signed in', async () => {
+  it('reports no session without writing when nobody is signed in', async () => {
     currentUserId.mockResolvedValue(null);
 
-    await expect(createItem(data, 'text')).resolves.toBeNull();
+    await expect(createItem(data, 'text', false)).resolves.toEqual({
+      ok: false,
+      reason: 'no-session',
+    });
     expect(create).not.toHaveBeenCalled();
   });
 
@@ -422,7 +444,7 @@ describe('createItem', () => {
 
     // A link item sends no content or language at all. On a create there is
     // nothing behind those columns to preserve, so both mean empty.
-    await createItem({ typeId: 'type_1', title: 'A link', url: 'https://example.com' }, 'text');
+    await createItem({ typeId: 'type_1', title: 'A link', url: 'https://example.com' }, 'text', false);
 
     expect(createArgs().data).toMatchObject({
       description: null,
@@ -435,7 +457,7 @@ describe('createItem', () => {
   it('connects an existing tag rather than creating a second one for the same user', async () => {
     create.mockResolvedValue(row());
 
-    await createItem(data, 'text');
+    await createItem(data, 'text', false);
 
     const tags = createArgs().data.tags.create;
 
@@ -449,7 +471,7 @@ describe('createItem', () => {
   it('writes no tag rows when none were sent', async () => {
     create.mockResolvedValue(row());
 
-    await createItem({ typeId: 'type_1', title: 'Untagged' }, 'text');
+    await createItem({ typeId: 'type_1', title: 'Untagged' }, 'text', false);
 
     expect(createArgs().data.tags.create).toEqual([]);
   });
@@ -457,7 +479,7 @@ describe('createItem', () => {
   it('files the item in every collection it was given, by id', async () => {
     create.mockResolvedValue(row());
 
-    await createItem({ ...data, collectionIds: ['coll_1', 'coll_2'] }, 'text');
+    await createItem({ ...data, collectionIds: ['coll_1', 'coll_2'] }, 'text', false);
 
     // Connected, never created: a collection has to exist to be filed into.
     expect(createArgs().data.collections.create).toEqual([
@@ -469,7 +491,7 @@ describe('createItem', () => {
   it('writes no filings when no collections were sent', async () => {
     create.mockResolvedValue(row());
 
-    await createItem({ typeId: 'type_1', title: 'Uncollected' }, 'text');
+    await createItem({ typeId: 'type_1', title: 'Uncollected' }, 'text', false);
 
     expect(createArgs().data.collections.create).toEqual([]);
   });
@@ -477,10 +499,109 @@ describe('createItem', () => {
   it('serializes both dates, so the dialog gets the same shape a card holds', async () => {
     create.mockResolvedValue(row());
 
-    await expect(createItem(data, 'text')).resolves.toMatchObject({
-      updatedAt: '2026-08-18T21:56:33.193Z',
-      createdAt: '2026-08-17T10:00:00.000Z',
+    await expect(createItem(data, 'text', false)).resolves.toMatchObject({
+      ok: true,
+      item: {
+        updatedAt: '2026-08-18T21:56:33.193Z',
+        createdAt: '2026-08-17T10:00:00.000Z',
+      },
     });
+  });
+});
+
+/**
+ * The free tier's item ceiling. What is pinned is the boundary — 49 through, 50
+ * refused — and that the count is taken **inside the transaction that writes**,
+ * which is what narrows the race between two concurrent creates.
+ */
+describe('createItem, at the free tier ceiling', () => {
+  const count = prisma.item.count as unknown as Mock<(args: unknown) => Promise<number>>;
+  const transaction = prisma.$transaction as unknown as Mock<(run: unknown) => Promise<unknown>>;
+
+  const data = {
+    typeId: 'type_1',
+    title: 'One more',
+    description: null,
+    content: null,
+    language: null,
+    url: null,
+    tags: [],
+  };
+
+  it('lets a free account create its 50th item', async () => {
+    count.mockResolvedValue(49);
+    create.mockResolvedValue(row());
+
+    await expect(createItem(data, 'text', false)).resolves.toMatchObject({ ok: true });
+    expect(create).toHaveBeenCalled();
+  });
+
+  it('refuses the 51st, without writing anything', async () => {
+    count.mockResolvedValue(50);
+
+    await expect(createItem(data, 'text', false)).resolves.toEqual({
+      ok: false,
+      reason: 'limit-reached',
+    });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('lets a Pro account create its 501st', async () => {
+    count.mockResolvedValue(500);
+    create.mockResolvedValue(row());
+
+    await expect(createItem(data, 'text', true)).resolves.toMatchObject({ ok: true });
+  });
+
+  it('never counts at all for Pro, so an unlimited plan pays nothing for the gate', () => {
+    create.mockResolvedValue(row());
+
+    return createItem(data, 'text', true).then(() => {
+      expect(count).not.toHaveBeenCalled();
+    });
+  });
+
+  it("counts only this user's items", async () => {
+    count.mockResolvedValue(0);
+    create.mockResolvedValue(row());
+
+    await createItem(data, 'text', false);
+
+    expect(count).toHaveBeenCalledWith({ where: { userId: USER_ID } });
+  });
+
+  /**
+   * Call order alone proves nothing here: the mocked `tx` IS the same client,
+   * so a count issued *before* the transaction still runs before the insert
+   * and still looks ordered. What separates the two is whether the count
+   * happened while the callback was on the stack — so that is what is
+   * recorded. A count taken outside it leaves two requests at 49 both passing
+   * and landing on 51, with none of the narrowing this is here for.
+   */
+  it('takes the count inside the same transaction as the write', async () => {
+    let insideTransaction = false;
+    let countedInside: boolean | null = null;
+
+    transaction.mockImplementation(async (run) => {
+      insideTransaction = true;
+
+      try {
+        return await (run as (tx: unknown) => Promise<unknown>)(prisma);
+      } finally {
+        insideTransaction = false;
+      }
+    });
+    count.mockImplementation(async () => {
+      countedInside = insideTransaction;
+
+      return 0;
+    });
+    create.mockResolvedValue(row());
+
+    await createItem(data, 'text', false);
+
+    expect(countedInside).toBe(true);
+    expect(transaction).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -571,7 +692,7 @@ describe('createItem, with a file', () => {
   it('writes the content type the caller decided, not one from the payload', async () => {
     create.mockResolvedValue(row());
 
-    await createItem(data, 'file');
+    await createItem(data, 'file', false);
 
     expect(createArgs().data.contentType).toBe('file');
   });
@@ -579,7 +700,7 @@ describe('createItem, with a file', () => {
   it('writes the three file columns together', async () => {
     create.mockResolvedValue(row());
 
-    await createItem(data, 'file');
+    await createItem(data, 'file', false);
 
     expect(createArgs().data).toMatchObject({
       fileUrl: `users/${USER_ID}/abc-123.pdf`,
@@ -591,7 +712,7 @@ describe('createItem, with a file', () => {
   it('leaves the file columns null on a text item', async () => {
     create.mockResolvedValue(row());
 
-    await createItem({ typeId: 'type_1', title: 'A note' }, 'text');
+    await createItem({ typeId: 'type_1', title: 'A note' }, 'text', false);
 
     expect(createArgs().data).toMatchObject({
       contentType: 'text',

@@ -1,11 +1,22 @@
 import Link from 'next/link';
-import { REGISTER_PATH, type PlanCopy } from '@/components/home/content';
+import { type PlanCopy } from '@/components/home/content';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import type { PlanCta } from '@/lib/plan-cta';
 import { cn } from '@/lib/utils';
 
-type PlanCardProps = PlanCopy;
+interface PlanCardProps extends PlanCopy {
+  /**
+   * What the button does, already resolved for this viewer by `planCta`. The
+   * card stays presentational: it renders the decision, it does not make it.
+   */
+  action: PlanCta;
+  /** Runs when `action` is a checkout. Ignored for a link. */
+  onCheckout: () => void;
+  /** Disables the button while a checkout is in flight. */
+  pending: boolean;
+}
 
 /**
  * One pricing plan. Both plans render through this — the Pro card differs only
@@ -27,8 +38,10 @@ export function PlanCard({
   period,
   note,
   features,
-  cta,
   featured,
+  action,
+  onCheckout,
+  pending,
 }: PlanCardProps) {
   return (
     <Card
@@ -72,9 +85,24 @@ export function PlanCard({
         ))}
       </ul>
 
-      <Button asChild variant={featured ? 'default' : 'outline'} className="mt-auto h-11 w-full">
-        <Link href={REGISTER_PATH}>{cta}</Link>
-      </Button>
+      {/* A link and a button are different elements, not one element with a
+          conditional handler: `asChild` makes this render *as* its child, so
+          the two cannot be merged without producing an anchor that also fires
+          an action. */}
+      {action.kind === 'link' ? (
+        <Button asChild variant={featured ? 'default' : 'outline'} className="mt-auto h-11 w-full">
+          <Link href={action.href}>{action.label}</Link>
+        </Button>
+      ) : (
+        <Button
+          variant={featured ? 'default' : 'outline'}
+          className="mt-auto h-11 w-full"
+          disabled={pending}
+          onClick={onCheckout}
+        >
+          {pending ? 'Starting…' : action.label}
+        </Button>
+      )}
     </Card>
   );
 }
