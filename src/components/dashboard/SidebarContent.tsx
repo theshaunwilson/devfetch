@@ -60,7 +60,11 @@ export function SidebarContent({ itemTypes, collections, user }: SidebarContentP
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
-        <nav className="flex flex-col px-3 pt-2 pb-4">
+        {/* Named because it is not the only navigation landmark on the page:
+          the top bar is a banner with its own links, and a screen reader
+          listing landmarks would otherwise offer two unlabelled "navigation"
+          entries. The homepage footer already does this. */}
+      <nav aria-label="Item types and collections" className="flex flex-col px-3 pt-2 pb-4">
           <SidebarSection title="Types">
             {itemTypes.map((type) => (
               <SidebarItem

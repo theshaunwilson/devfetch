@@ -66,6 +66,18 @@ export interface SidebarItemType {
 }
 
 /** One item type together with one page of the user's items of that type. */
+/**
+ * Every item the current user owns, one page at a time.
+ *
+ * No parent entity, unlike `ItemsByType` and `ItemsByCollection` — `/items`
+ * resolves nothing before it reads, so there is no lookup that can miss and
+ * the query returns a page rather than `null`.
+ */
+export interface AllItems {
+  items: DashboardItem[];
+  pagination: Pagination;
+}
+
 export interface ItemsByType {
   type: DashboardItemType;
   items: DashboardItem[];

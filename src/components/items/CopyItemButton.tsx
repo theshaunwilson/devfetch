@@ -127,7 +127,11 @@ export function CopyItemButton({ itemId, field, title, className }: CopyItemButt
         // z-20 rather than a click handler that stops propagation: the card's
         // trigger is an `absolute inset-0` overlay at z-10, not a wrapper, so
         // there is no click to stop — the button simply has to sit above it.
-        'relative z-20 size-7 shrink-0 text-muted-foreground hover:text-foreground',
+        // 36px below `sm`, 28 above. The painted icon does not change; the
+        // target does. Measured at 375px these sat 2px apart over a full-row
+        // open button, which is a mis-tap waiting to happen — a pointer target
+        // has to clear 24x24, and two of them this close want more.
+        'relative z-20 size-9 shrink-0 text-muted-foreground hover:text-foreground sm:size-7',
         className
       )}
     >

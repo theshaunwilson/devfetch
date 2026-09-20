@@ -42,15 +42,34 @@ export function ItemRow({ item }: ItemRowProps) {
           <div className="flex items-center gap-2">
             <h3 className="truncate font-medium">{item.title}</h3>
             <ItemMarkers isPinned={item.isPinned} />
-            <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+            {/*
+              Hidden below `sm`, where the line has a type tile, a title, a pin
+              marker, two buttons and this to fit: measured at 375px the title
+              was left 114px and clipped even at 16 characters. The drawer shows
+              the date, so dropping it here costs the least.
+
+              `<time>` with the ISO value, as `FavoriteRow` has it — the visible
+              text carries no year, and nothing but the markup says this is the
+              updated date rather than the created one.
+            */}
+            <time
+              dateTime={item.updatedAt}
+              className="ml-auto hidden shrink-0 text-xs text-muted-foreground sm:block"
+            >
+              <span className="sr-only">Updated </span>
               {formatShortDate(item.updatedAt)}
-            </span>
+            </time>
 
             {/* On the title line rather than beside the block, so they line up
                 with the date instead of floating over the description. One
                 cluster, so the star keeps its own spacing on the rows that get
-                no copy button — file and image items. */}
-            <div className="-my-1 -mr-1 flex shrink-0 items-center gap-0.5">
+                no copy button — file and image items.
+
+                `ml-auto` here as well: below `sm` the date is gone, so without
+                it the buttons would sit against the title instead of the edge.
+                `gap-1.5` below `sm` keeps two touch targets apart; above it
+                they tighten back to the original spacing. */}
+            <div className="-my-1 -mr-1 ml-auto flex shrink-0 items-center gap-1.5 sm:ml-0 sm:gap-0.5">
               <FavoriteItemButton
                 itemId={item.id}
                 title={item.title}

@@ -1,13 +1,89 @@
-# Current Feature
+# Current Feature: Dashboard UI Review Fixes
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
+- **The broken "View all" on Recent.** It points at `/items`, which has only
+  `[type]/` and `layout.tsx` — no `page.tsx` — so it returns a real **404** to a
+  signed-in user, confirmed in the browser rather than inferred. It is the one
+  outright broken control on either reviewed page, and it has been broken since
+  Dashboard UI Phase 3 added the link. See the Notes: this goal has two very
+  different possible fixes and needs a decision before implementation.
+- **The 768px squeeze on collection cards.** The 256px sidebar appears at `md`,
+  the exact breakpoint at which the Collections grid goes to two columns, so
+  cards drop to **224px** and "Terminal Commands" renders as "Terminal Comm…".
+  The grid is sized off the viewport while the space it actually occupies is the
+  viewport *less* the sidebar. Key the layout off the content area (a container
+  query) or move the two-column step to `lg`.
+- **Item row titles clipped at 375px.** Titles get **114–115px**, and 4 of 6 are
+  cut — including "useDebounce Hook", which is 16 characters. The row packs a
+  type icon, the title, a pin marker, the date, a star and a copy button onto one
+  line, and on a phone they do not fit. Give the title room (the date is the
+  obvious candidate to drop below `sm`, since the drawer shows it anyway).
+- **Sub-minimum action buttons crowded together.** 30 buttons measured at
+  **28x28 with 2px gaps**, each sitting over a 323x108 full-row target. Two small
+  targets that close to each other and to a much larger one is a mis-tap
+  generator on touch. Enlarge them below `sm` and widen the spacing.
+- **The 32px hamburger beside three 40px icons.** `TopbarToggle` uses the default
+  `size="icon"` while Search, Favorites and Create are all `size-10`, so it is
+  visibly misaligned in height and is the smallest target in the bar — while
+  being the only route to navigation on a phone.
+- **Five unnamed landmarks.** Two `<nav>`s, the `<aside>`, the `<header>` and
+  `<main>` all carry no `aria-label`, so landmark navigation cannot tell them
+  apart. The homepage footer already does this correctly and is the pattern.
+- **Type icons labelled but not exposed.** `CollectionCard` sets `aria-label` on
+  a bare lucide `<svg>` with no `role="img"`; lucide drops `aria-hidden` when an
+  a11y prop is present but does not add a role, so the name is unreliably
+  announced. It is also the one place a collection's type composition is conveyed
+  by colour and icon with no text equivalent.
+- **Dates with no semantics.** `ItemRow` renders "Sep 13" in a bare `<span>` —
+  no `<time datetime>`, no year, and nothing saying it is the *updated* date.
+  `/favorites` already uses `<time>`, so this is an inconsistency as well as a
+  gap.
+
 ## Notes
 
+These are the dashboard findings from the same browser UI review that produced
+the homepage fixes in the previous feature. Each was measured in the DOM at 375,
+768 and 1280px against the running dev server; the figures quoted above are those
+measurements, not estimates.
+
+**The `/items` goal needs a decision before any code is written**, and it should
+be settled at `start` rather than assumed. Two fixes are available and they are
+not the same size of change: build a real `/items` index page listing every item
+across all types (a new route, a new query, pagination, and a decision about what
+it shows that the per-type pages do not), or repoint the link at something that
+exists and drop the idea of an index. The second is minimal and honest; the first
+is a feature the spec has never described. Note also that `/items` is already
+covered by the proxy matcher, so the route is authenticated either way.
+
+**What the review found healthy on the dashboard, so these are the regression
+checks worth repeating at the end:** zero horizontal overflow at 375, 768 and
+1280; zero console errors and warnings (all 33 messages were dev Prisma query
+logs); the mobile drawer opening, scrolling clear and closing correctly; and the
+stat tile labels *not* truncating at 768px even at 224px wide — a source-only
+reading had wrongly predicted that they would, which is why these fixes should be
+measured rather than reasoned about.
+
+**Two readings from the review were measurement artifacts** and should not be
+re-investigated: the mobile drawer's "View all collections" looked clipped behind
+the sticky user area but scrolls clear (727px against a 760px user row), and the
+dashboard's duplicate `ItemCollection` query is a pre-existing double call of
+`getTypeUsage` already recorded as open in History, not something this feature
+introduced or needs to fix.
+
+**Scope boundary.** The homepage findings are done and merged; nothing here
+touches `/` or `src/components/home/`. Social proof remains the one review
+finding that no code change can close, since it needs real content.
+
+**Care worth repeating from the last feature:** `.claude/agents/ui-reviewer.md`
+is untracked and was created outside this session — it must stay out of any
+commit, as `git add -A` once swept it in. And `npx prettier` must not be run:
+prettier is neither a dependency nor configured here, and running it with its own
+defaults once caused 263 lines of unrelated churn.
 
 ## History
 

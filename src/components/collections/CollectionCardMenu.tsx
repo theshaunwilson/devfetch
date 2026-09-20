@@ -54,7 +54,14 @@ export function CollectionCardMenu({ collection, isFavorite }: CollectionCardMen
     <div className="relative z-20">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon-sm" className="text-muted-foreground">
+          {/* `size-9` below `sm` for the same reason the item buttons carry it:
+              28px is under the comfortable touch target, and this one sits over
+              a full-card link. */}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="size-9 text-muted-foreground sm:size-7"
+          >
             <MoreHorizontal className="size-4" />
             <span className="sr-only">Actions for {collection.name}</span>
           </Button>

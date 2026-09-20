@@ -79,11 +79,18 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
               />
               {/* `tabIndex={-1}` so focus has somewhere to land when the element
                   it would have returned to is gone — see the drawer's
-                  `onCloseAutoFocus`. */}
+                  `onCloseAutoFocus`.
+
+                  `@container/main` so the grids inside can size off the space
+                  they actually occupy. A viewport breakpoint cannot see the
+                  sidebar: `md:grid-cols-2` doubled the collection grid at the
+                  very width the 256px sidebar appeared, cutting cards to 224px
+                  and truncating their titles. It also means collapsing the
+                  sidebar now widens the columns, which it never did. */}
               <main
                 id={MAIN_CONTENT_ID}
                 tabIndex={-1}
-                className="flex-1 overflow-y-auto outline-none"
+                className="@container/main flex-1 overflow-y-auto outline-none"
               >
                 {children}
               </main>
