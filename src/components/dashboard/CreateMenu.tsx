@@ -22,12 +22,17 @@ interface CreateMenuProps {
 }
 
 /**
- * The top bar's `+` button: one control offering both New Item and New
- * Collection.
+ * The top bar's create controls, in two shapes.
  *
- * Replaces two labelled buttons, which is what makes creating a collection
- * reachable on a phone — the old "New Collection" button was
- * `hidden md:inline-flex`, because the bar had no room for a second label.
+ * Below `lg` it is one `+` button opening a menu, which is what makes creating
+ * a collection reachable on a phone: the labelled "New Collection" button was
+ * `hidden md:inline-flex`, because the bar has no room for a second label at
+ * that width. From `lg` up the two labelled buttons are back, since there the
+ * bar has the room and a named button beats a menu you have to open first.
+ *
+ * The two shapes share one pair of dialogs and one pair of state variables, so
+ * there is no second copy of the create wiring to drift — only the triggers
+ * differ.
  *
  * Both dialogs are siblings of the menu rather than children of its items: a
  * `DropdownMenuItem` unmounts when the menu closes, which would tear a nested
@@ -45,7 +50,7 @@ export function CreateMenu({ itemTypes, collectionOptions }: CreateMenuProps) {
         <DropdownMenuTrigger asChild>
           {/* The default (filled) variant, so it keeps the white box the
               labelled button had — only the label is gone. */}
-          <Button size="icon" className="size-10">
+          <Button size="icon" className="size-10 lg:hidden">
             <Plus className="size-4" />
             <span className="sr-only">Create</span>
           </Button>
@@ -68,6 +73,26 @@ export function CreateMenu({ itemTypes, collectionOptions }: CreateMenuProps) {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {/* The same two actions the menu holds, as their own buttons. They open
+          the very same dialogs, so nothing here duplicates the create flow. */}
+      <Button
+        variant="outline"
+        className="hidden h-10 lg:inline-flex"
+        onClick={() => setCollectionOpen(true)}
+      >
+        <FolderPlus className="size-4" />
+        New Collection
+      </Button>
+
+      <Button
+        className="hidden h-10 lg:inline-flex"
+        disabled={itemTypes.length === 0}
+        onClick={() => setItemOpen(true)}
+      >
+        <Plus className="size-4" />
+        New Item
+      </Button>
 
       <NewItemDialog
         itemTypes={itemTypes}

@@ -32,20 +32,30 @@ export function Topbar({
 
       <TopbarBrand />
 
-      {/* Three icons, all the same size, so the bar fits a phone without any
-          of them being hidden — which is what the old wide search field and
-          two labelled create buttons could not do. */}
-      <div className="ml-auto flex shrink-0 items-center gap-1">
+      {/*
+        Two layouts from one tree.
+
+        Below `lg` this row is pushed right by `ml-auto` and holds three
+        equal icons, so the bar fits a phone without hiding any of them —
+        which the wide field and two labelled buttons could not do.
+
+        From `lg` it takes the remaining width instead: the search becomes the
+        field again on the left, and `ml-auto` moves onto the inner group so
+        the star and the two labelled create buttons stay right-aligned.
+      */}
+      <div className="ml-auto flex min-w-0 items-center gap-1 lg:ml-0 lg:flex-1 lg:gap-3">
         <SearchPalette items={searchItems} collections={collectionOptions} />
 
-        <Button asChild variant="ghost" size="icon" className="size-10">
-          <Link href="/favorites">
-            <Star className="size-4" />
-            <span className="sr-only">Favorites</span>
-          </Link>
-        </Button>
+        <div className="flex shrink-0 items-center gap-1 lg:ml-auto lg:gap-2">
+          <Button asChild variant="ghost" size="icon" className="size-10">
+            <Link href="/favorites">
+              <Star className="size-4" />
+              <span className="sr-only">Favorites</span>
+            </Link>
+          </Button>
 
-        <CreateMenu itemTypes={itemTypes} collectionOptions={collectionOptions} />
+          <CreateMenu itemTypes={itemTypes} collectionOptions={collectionOptions} />
+        </div>
       </div>
     </header>
   );
