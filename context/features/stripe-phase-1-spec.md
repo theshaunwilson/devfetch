@@ -24,7 +24,9 @@ Reference: `docs/stripe-integration-plan.md` (§1, §3.3, §4.1–4.4, §5.1–5
 - Create `src/lib/db/billing.ts` — `isProUser`, `getBillingStatus`,
   `linkStripeCustomer`, `applySubscriptionState`
 - Create `src/types/billing.ts` — `BillingInterval`, `BillingStatus`
-- Rewrite the staged `.env.example` Stripe block and **drop `STRIPE_PUBLISHABLE_KEY`**
+- ~~Rewrite the staged `.env.example` Stripe block and drop `STRIPE_PUBLISHABLE_KEY`~~ —
+  **already done**, ahead of this phase, so the committed template is not one the
+  spec immediately contradicts
 - Unit tests for all three new `src/lib` modules, co-located
 
 ## Files to Create
@@ -126,9 +128,9 @@ STRIPE_PRICE_ID_MONTHLY=""
 STRIPE_PRICE_ID_YEARLY=""
 ```
 
-`STRIPE_PUBLISHABLE_KEY` is currently staged in `.env.example` and must be
-removed: it is only used by Stripe.js in the browser, which the hosted-Checkout
-redirect never loads, and it could not reach the client without a `NEXT_PUBLIC_`
+`STRIPE_PUBLISHABLE_KEY` was staged in `.env.example` and has been removed: it
+is only used by Stripe.js in the browser, which the hosted-Checkout redirect
+never loads, and it could not reach the client without a `NEXT_PUBLIC_`
 prefix anyway. A template variable nothing reads sends the next reader hunting
 for code that does not exist.
 
