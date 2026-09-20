@@ -1,13 +1,146 @@
-# Current Feature
+# Current Feature: Stripe Phase 1 — Core Infrastructure
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
+- `npm install stripe` and nothing else — hosted Checkout is a redirect, so
+  `@stripe/stripe-js` is never loaded and the publishable key has no consumer
+- `src/lib/stripe.ts` — `getStripe()` building the client lazily into a
+  module-level cache, and `getPriceId(interval)`, both reading `process.env` at
+  call time so `next build` never needs the secret
+- `src/lib/usage-limits.ts` — `FREE_ITEM_LIMIT` (50), `FREE_COLLECTION_LIMIT`
+  (3), `isWithinLimit` and `limitMessage`, pure and database-free
+- `src/lib/db/billing.ts` — `isProUser` (`cache()`d, reads the row), plus
+  `getBillingStatus`, `linkStripeCustomer` and `applySubscriptionState`
+- `src/types/billing.ts` — `BillingInterval`, `BillingStatus`
+- Co-located unit tests for all three new `src/lib` modules, with the mutations
+  below proving they discriminate
+- Every gate green, including `npm run build` with **every** Stripe variable
+  unset — that build is what proves the lazy client
+
 ## Notes
 
+### Scope boundary
+
+Nothing in this phase is user-visible and **nothing calls Stripe's API**. No
+webhook, no checkout session, no UI, no gate. `linkStripeCustomer`,
+`getBillingStatus`, `getPriceId` and `src/types/billing.ts` end the phase with
+no caller — that is the phase boundary, not an oversight; `src/actions/billing.ts`
+consumes them in Phase 2.
+
+### No migration
+
+`isPro`, `stripeCustomerId` and `stripeSubscriptionId` have been on `User`
+since `20260818212450_init` — confirmed in `prisma/schema.prisma`, with both
+ids `@unique`, which is what lets `applySubscriptionState` key on the customer
+id and match at most one row.
+
+### `.env.example` is already done
+
+The Stripe block was rewritten and `STRIPE_PUBLISHABLE_KEY` dropped in commit
+`914c659`, ahead of this phase, so the committed template is not one the spec
+immediately contradicts. Confirmed present at `.env.example:62-78`. Nothing to
+do here beyond leaving it alone.
+
+### `isPro` is read from the row, never from the session
+
+`isProUser()` is its own `cache()`d query, following `getEditorPreferences`'s
+precedent at `src/lib/db/user.ts:101` — a separate keyed query rather than a
+column added to `getCurrentUser()`, which the app shell runs on every request
+and whose type `ProfileUser` extends.
+
+**Do not add a `jwt` callback.** `auth()` is called independently by
+`getCurrentUser`, `getProfileUser` and `getEditorPreferences`, each `cache()`d
+separately, so a `jwt` callback would run up to three times per request; nothing
+on the client needs `isPro`, since every Phase 2 gate is server-side; and it
+contradicts `src/lib/db/user.ts`'s own stated rule that the lookup, not the
+token, decides — a cancelled subscription in a JWT keeps granting Pro until the
+token refreshes. The consequence is a feature: a plain page reload after
+checkout picks up the new status, with no sign-out.
+
+### Lazy client, call-time env
+
+`new Stripe(process.env.STRIPE_SECRET_KEY!)` at module scope would make
+`next build` depend on the build machine holding the secret. Build lazily into a
+module-level cache as `src/lib/rate-limit.ts` does, and read both the key and
+the price ids at call time as `src/lib/features.ts` requires.
+`src/lib/email/client.ts` already learned the adjacent lesson — `new Resend(undefined)`
+throws at construction. Omit `apiVersion`: it defaults to the version the
+installed SDK's types describe, and pinning a different literal makes the types
+lie.
+
+### Limits are module constants, not a column
+
+Which ceilings apply to which plan is a pricing decision, not a property of a
+row — the call `src/lib/pro.ts` and `src/lib/features.ts` both already make.
+Pro is expressed as **the check not applying**, never as `Infinity`.
+`limitMessage(kind)` names the number so a refusal is actionable.
+
+The two numbers are **already advertised on `/`** — `src/components/home/content.tsx:142-143`
+renders the literal strings `'50 items'` and `'3 collections'` — so they are a
+public promise, and a test pins the constants against that copy so the two
+cannot drift.
+
+### `applySubscriptionState` uses `updateMany` and sets absolute values
+
+`updateMany` rather than `update`, so an unknown customer is a count of `0`
+rather than a thrown P2025 — Phase 2's webhook must log and acknowledge that,
+never retry it forever. **Absolute, never relative:** setting `isPro` to the
+same value twice is a no-op, which is exactly what makes the webhook safe to
+retry with no dedupe table. Say so in the doc comment so nobody "fixes" it into
+a toggle later.
+
+### Naming
+
+The plan doc calls the limits module `src/lib/plan.ts` (§5.2). It ships as
+`usage-limits.ts` — `plan` reads as the marketing plan copy in
+`src/components/home/content.tsx`, which is a different thing.
+
+### Testing
+
+Vitest, `environment: 'node'`, co-located `.ts` (never `.tsx`), no globals.
+Mock the module boundary (`@/auth`, `@/lib/prisma`) and leave pure modules real.
+Baseline before this phase: **706 tests across 33 files**.
+
+- `usage-limits.test.ts` — items 49 allowed / 50 refused / 51 refused;
+  collections 2 / 3 / 4; Pro allowed at 0 and at 10,000; `limitMessage` names 50
+  and names 3; both constants matched against the advertised copy
+- `stripe.test.ts` — `getStripe()` throws with the key unset, a second env stub
+  flips the answer (proving the read is at call time, not captured on import),
+  and `getPriceId` returns the right variable per interval and throws when unset
+- `db/billing.test.ts` — `isProUser()` is `false` with no session **and issues
+  no query**; `false` when the row is gone (the JWT outlives the row);
+  `applySubscriptionState` filters on `stripeCustomerId`, not `id`, and returns
+  `false` on a count of 0
+
+**Mutations** (restore from file backups, never `git checkout`; abort rather
+than report a pass if a pattern does not match):
+
+- [ ] Drop the Pro bypass from `isWithinLimit` → red
+- [ ] `<` → `<=` in the limit check → red
+- [ ] `limitMessage` returns one message for both kinds → red
+- [ ] `getStripe` reads the key at module scope → red
+- [ ] `applySubscriptionState` keyed on `id` instead of `stripeCustomerId` → red
+- [ ] `isProUser` trusts the session id without the lookup → red
+
+**Gates:** `npm run test`; the suite green under
+`env -u STRIPE_SECRET_KEY -u STRIPE_WEBHOOK_SECRET`; `npm run lint`;
+`npx tsc --noEmit` (this project has repeatedly caught typed-Prisma-mock
+failures that lint and a green suite both missed); `npm run build` with every
+Stripe variable unset; `npm run db:test`.
+
+### References
+
+- `context/features/stripe-phase-1-spec.md` — the spec itself
+- `docs/stripe-integration-plan.md` — §1 current state, §4.1–4.4 decisions,
+  §5.1–5.3 code
+- Lazy-client precedent: `src/lib/rate-limit.ts`
+- Call-time env precedent: `src/lib/features.ts`
+- Separate-keyed-query precedent: `getEditorPreferences` in `src/lib/db/user.ts`
+- Stripe Node SDK: Context7 `/stripe/stripe-node`
 
 ## History
 
