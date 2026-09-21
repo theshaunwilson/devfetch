@@ -58,7 +58,7 @@ interface SeedCollection {
 const COLLECTIONS: SeedCollection[] = [
   {
     name: 'React Patterns',
-    description: 'Reusable React patterns and hooks',
+    description: 'React patterns, hooks and UI references',
     color: '#3b82f6',
     isFavorite: true,
     items: [
@@ -138,6 +138,29 @@ export function formatBytes(bytes: number, decimals = 1): string {
   return \`\${(bytes / 1024 ** exponent).toFixed(decimals)} \${UNITS[exponent]}\`;
 }`,
       },
+      {
+        title: 'Tailwind CSS Documentation',
+        description: 'Utility class reference and theme configuration',
+        type: 'link',
+        url: 'https://tailwindcss.com/docs',
+        isFavorite: true,
+        tags: ['css', 'tailwind', 'docs'],
+      },
+      {
+        title: 'shadcn/ui',
+        description: 'Accessible components you copy into your own codebase',
+        type: 'link',
+        url: 'https://ui.shadcn.com',
+        isFavorite: true,
+        tags: ['components', 'react'],
+      },
+      {
+        title: 'Lucide Icons',
+        description: 'Open source icon set used throughout DevFetch',
+        type: 'link',
+        url: 'https://lucide.dev/icons',
+        tags: ['icons'],
+      },
     ],
   },
   {
@@ -193,8 +216,9 @@ Keep the existing naming and idioms unless they are the thing being fixed.`,
   },
   {
     name: 'DevOps',
-    description: 'Infrastructure and deployment resources',
+    description: 'Infrastructure, deployment and everyday shell commands',
     color: '#f97316',
+    isFavorite: true,
     items: [
       {
         title: 'Multi-stage Next.js Dockerfile',
@@ -244,14 +268,6 @@ CMD ["node", "server.js"]`,
         url: 'https://docs.github.com/en/actions',
         tags: ['ci', 'docs'],
       },
-    ],
-  },
-  {
-    name: 'Terminal Commands',
-    description: 'Useful shell commands for everyday development',
-    color: '#10b981',
-    isFavorite: true,
-    items: [
       {
         title: 'Undo Last Commit, Keep Changes',
         description: 'Drops the commit but leaves the work staged',
@@ -285,43 +301,6 @@ CMD ["node", "server.js"]`,
         language: 'bash',
         tags: ['npm', 'dependencies'],
         content: 'npm outdated --long',
-      },
-    ],
-  },
-  {
-    name: 'Design Resources',
-    description: 'UI/UX resources and references',
-    color: '#ec4899',
-    items: [
-      {
-        title: 'Tailwind CSS Documentation',
-        description: 'Utility class reference and theme configuration',
-        type: 'link',
-        url: 'https://tailwindcss.com/docs',
-        isFavorite: true,
-        tags: ['css', 'tailwind', 'docs'],
-      },
-      {
-        title: 'shadcn/ui',
-        description: 'Accessible components you copy into your own codebase',
-        type: 'link',
-        url: 'https://ui.shadcn.com',
-        isFavorite: true,
-        tags: ['components', 'react'],
-      },
-      {
-        title: 'Material Design 3',
-        description: 'Google design system covering tokens, layout and motion',
-        type: 'link',
-        url: 'https://m3.material.io',
-        tags: ['design-system'],
-      },
-      {
-        title: 'Lucide Icons',
-        description: 'Open source icon set used throughout DevFetch',
-        type: 'link',
-        url: 'https://lucide.dev/icons',
-        tags: ['icons'],
       },
     ],
   },
