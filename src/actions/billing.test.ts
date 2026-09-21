@@ -42,12 +42,14 @@ const goTo = vi.mocked(redirect);
 const USER_ID = 'user_1';
 const CUSTOMER_ID = 'cus_existing';
 
+const listSubscriptions = vi.fn();
 const createCustomer = vi.fn();
 const createCheckout = vi.fn();
 const createPortal = vi.fn();
 
 /** Only the three calls the actions make; the real client has hundreds. */
 const stripeClient = {
+  subscriptions: { list: listSubscriptions },
   customers: { create: createCustomer },
   checkout: { sessions: { create: createCheckout } },
   billingPortal: { sessions: { create: createPortal } },
@@ -65,6 +67,7 @@ beforeEach(() => {
   });
   stripe.mockReturnValue(stripeClient as unknown as ReturnType<typeof getStripe>);
   priceId.mockReturnValue('price_monthly');
+  listSubscriptions.mockResolvedValue({ data: [] });
   createCustomer.mockResolvedValue({ id: 'cus_new' });
   createCheckout.mockResolvedValue({ url: 'https://checkout.stripe.com/c/pay/abc' });
   createPortal.mockResolvedValue({ url: 'https://billing.stripe.com/p/session/xyz' });
@@ -261,5 +264,80 @@ describe('openBillingPortal', () => {
     await openBillingPortal().catch(() => {});
 
     expect(createPortal.mock.calls[0][0].return_url).toMatch(/^https?:\/\/[^/]+\/settings$/);
+  });
+});
+
+/**
+ * The gap that charged a real account twice: `isPro` is a cache the webhook
+ * fills, so while the webhook is lagging or down it reads false even though a
+ * paid subscription exists — and nothing stopped the caller opening another.
+ * Stripe is the authority, so it is asked.
+ */
+describe('startCheckout, the already-subscribed guard', () => {
+  const withCustomer = {
+    isPro: false,
+    stripeCustomerId: CUSTOMER_ID,
+    stripeSubscriptionId: null,
+  };
+
+  it('refuses when Stripe reports a live subscription, even though isPro is false', async () => {
+    billing.mockResolvedValue(withCustomer);
+    listSubscriptions.mockResolvedValue({ data: [{ id: 'sub_1', status: 'active' }] });
+
+    await expect(startCheckout('monthly')).resolves.toMatchObject({
+      error: expect.stringContaining('already have an active subscription'),
+    });
+    expect(createCheckout).not.toHaveBeenCalled();
+  });
+
+  it('refuses on a trialing subscription too, matching what grants Pro', async () => {
+    billing.mockResolvedValue(withCustomer);
+    listSubscriptions.mockResolvedValue({ data: [{ id: 'sub_1', status: 'trialing' }] });
+
+    await expect(startCheckout('monthly')).resolves.toMatchObject({
+      error: expect.stringContaining('already have an active subscription'),
+    });
+  });
+
+  it('allows checkout when every past subscription is dead', async () => {
+    billing.mockResolvedValue(withCustomer);
+    listSubscriptions.mockResolvedValue({
+      data: [
+        { id: 'sub_old', status: 'canceled' },
+        { id: 'sub_older', status: 'incomplete_expired' },
+      ],
+    });
+
+    await expect(startCheckout('monthly')).rejects.toThrow('NEXT_REDIRECT');
+    expect(createCheckout).toHaveBeenCalled();
+  });
+
+  it('asks Stripe about this customer only', async () => {
+    billing.mockResolvedValue(withCustomer);
+
+    await startCheckout('monthly').catch(() => {});
+
+    expect(listSubscriptions).toHaveBeenCalledWith(
+      expect.objectContaining({ customer: CUSTOMER_ID, status: 'all' }),
+    );
+  });
+
+  it('never asks for a first-time customer, so a new checkout costs no extra call', async () => {
+    // Default billing has no stripeCustomerId — there is nothing to ask about.
+    await expect(startCheckout('monthly')).rejects.toThrow('NEXT_REDIRECT');
+
+    expect(listSubscriptions).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when Stripe cannot be reached, rather than charging again', async () => {
+    billing.mockResolvedValue(withCustomer);
+    listSubscriptions.mockRejectedValue(new Error('network down'));
+
+    // "We could not tell whether you are already paying" must never resolve to
+    // "charge them again".
+    await expect(startCheckout('monthly')).resolves.toMatchObject({
+      error: expect.stringContaining('Could not start checkout'),
+    });
+    expect(createCheckout).not.toHaveBeenCalled();
   });
 });

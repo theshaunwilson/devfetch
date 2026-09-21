@@ -7,6 +7,7 @@ import { auth } from '@/auth';
 import { absoluteUrl } from '@/lib/app-url';
 import { getBillingStatus, linkStripeCustomer } from '@/lib/db/billing';
 import { getPriceId, getStripe } from '@/lib/stripe';
+import { isActiveSubscriptionStatus } from '@/lib/stripe-events';
 import type { BillingInterval, OpenBillingPortalResult, StartCheckoutResult } from '@/types/billing';
 
 /**
@@ -22,6 +23,35 @@ const CHECKOUT_CANCELLED_URL = '/settings?checkout=cancelled';
 const PORTAL_RETURN_URL = '/settings';
 
 const GENERIC_ERROR = 'Could not start checkout. Please try again.';
+
+/**
+ * Whether Stripe itself says this customer already holds a live subscription.
+ *
+ * **`isPro` is not enough to decide this, and that gap has already cost real
+ * charges.** The column is a cache the webhook fills, so every window in which
+ * the webhook is lagging, misconfigured or down is a window where the flag
+ * reads false while a paid subscription exists — and the caller can check out
+ * again, and again, each time opening another subscription against the same
+ * account. Stripe is the authority; the row is a copy.
+ *
+ * `status: 'all'` and then our own predicate rather than asking Stripe to
+ * filter, so this and the webhook agree on what "live" means by construction:
+ * `isActiveSubscriptionStatus` is the single definition both read.
+ *
+ * Only ever called for an account that already has a customer, so a first
+ * checkout costs no extra API call.
+ */
+async function hasLiveSubscription(customerId: string): Promise<boolean> {
+  const subscriptions = await getStripe().subscriptions.list({
+    customer: customerId,
+    status: 'all',
+    limit: 100,
+  });
+
+  return subscriptions.data.some((subscription) =>
+    isActiveSubscriptionStatus(subscription.status),
+  );
+}
 
 /**
  * Finds or creates this user's Stripe customer, and records it on the row.
@@ -87,6 +117,23 @@ export async function startCheckout(interval: BillingInterval): Promise<StartChe
   let url: string | null;
 
   try {
+    // The authoritative half of the already-subscribed check. The `isPro` test
+    // above is the fast path and catches the ordinary case; this catches the
+    // one that actually charged someone twice, where the subscription exists
+    // at Stripe but no webhook has told us yet.
+    //
+    // **Fails closed**, by sitting inside this `try`: if Stripe cannot be
+    // reached we refuse rather than proceed, because "we could not tell
+    // whether you are already paying" must never resolve to "charge them
+    // again". A caller who genuinely has no subscription loses nothing but a
+    // retry.
+    if (billing.stripeCustomerId && (await hasLiveSubscription(billing.stripeCustomerId))) {
+      return {
+        error:
+          'You already have an active subscription. If your plan still shows Free, reload in a moment.',
+      };
+    }
+
     const customerId = await resolveCustomerId(
       session.user.id,
       session.user.email,
