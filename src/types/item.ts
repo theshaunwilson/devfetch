@@ -195,10 +195,21 @@ export type CreateItemOutcome =
  * What `createItem` returns. The new item comes back in full, on the same
  * contract as `updateItem`, so a caller has the saved row rather than only the
  * fact that something was written.
+ *
+ * `upgradeRequired` marks the two refusals that mean *you need Pro* — the item
+ * ceiling and the file/image type gate — as opposed to something having gone
+ * wrong. The client shows those as their own alert rather than as a failure,
+ * and it is set here so the decision travels with the result instead of being
+ * matched out of the message text.
  */
 export type CreateItemResult =
   | { success: true; data: ItemDetail }
-  | { success: false; error: string; fieldErrors?: Record<string, string[]> };
+  | {
+      success: false;
+      error: string;
+      fieldErrors?: Record<string, string[]>;
+      upgradeRequired?: true;
+    };
 
 /**
  * What the download proxy needs: the object to fetch, the name to serve it

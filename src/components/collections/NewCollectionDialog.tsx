@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { useUpgradeToast } from '@/hooks/use-upgrade-toast';
 
 interface NewCollectionDialogProps {
   open: boolean;
@@ -68,6 +69,7 @@ function NewCollectionForm({ onCreated, onCancel }: NewCollectionFormProps) {
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [isPending, startTransition] = useTransition();
+  const upgradeToast = useUpgradeToast();
 
   // A guard for the button only — the action re-checks, and trims before it
   // measures just as this does.
@@ -81,7 +83,13 @@ function NewCollectionForm({ onCreated, onCancel }: NewCollectionFormProps) {
 
       if (!result.success) {
         setFieldErrors(result.fieldErrors ?? {});
-        toast.error(result.error);
+        // The collection ceiling is a Pro wall rather than a failure, so it
+        // gets the red top-centre alert — the same split the item dialog makes.
+        if (result.upgradeRequired) {
+          upgradeToast(result.error);
+        } else {
+          toast.error(result.error);
+        }
 
         return;
       }

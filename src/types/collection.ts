@@ -96,10 +96,19 @@ export type CreateCollectionOutcome =
  * What the `createCollection` server action returns. The new collection comes
  * back in full, on the same contract as the item actions, so a caller has the
  * saved row rather than only the fact that something was written.
+ *
+ * `upgradeRequired` marks the collection ceiling, the one refusal here that
+ * means *you need Pro* rather than something having gone wrong — see
+ * `CreateItemResult`, which carries it for the same reason.
  */
 export type CreateCollectionResult =
   | { success: true; data: DashboardCollection }
-  | { success: false; error: string; fieldErrors?: Record<string, string[]> };
+  | {
+      success: false;
+      error: string;
+      fieldErrors?: Record<string, string[]>;
+      upgradeRequired?: true;
+    };
 
 /**
  * A collection reduced to the metadata its edit dialog and delete confirmation

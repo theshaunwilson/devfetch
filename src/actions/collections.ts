@@ -72,7 +72,7 @@ export async function createCollection(
     // Not a field error: nothing the user typed is wrong, and the dialog keeps
     // what they typed either way — the fix is to upgrade or free one up.
     if (outcome.reason === 'limit-reached') {
-      return { success: false, error: limitMessage('collections') };
+      return { success: false, error: limitMessage('collections'), upgradeRequired: true };
     }
 
     return { success: false, error: 'Your session has expired. Sign in again.' };

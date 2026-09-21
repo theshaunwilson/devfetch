@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { ProTypeUpgrade } from '@/components/billing/ProTypeUpgrade';
 import { FileRow } from '@/components/items/FileRow';
 import { ImageCard } from '@/components/items/ImageCard';
 import { ItemCard } from '@/components/items/ItemCard';
@@ -11,6 +12,7 @@ import { getItemTypes } from '@/lib/db/item-types';
 import { getItemsByTypeSlug } from '@/lib/db/items';
 import { capitalize } from '@/lib/format';
 import { parsePageParam } from '@/lib/pagination';
+import { canBrowseType } from '@/lib/pro';
 import { isImageUploadType, usesFileList } from '@/lib/uploads';
 import { cn } from '@/lib/utils';
 
@@ -22,6 +24,16 @@ export async function generateMetadata({
   searchParams,
 }: PageProps<'/items/[type]'>): Promise<Metadata> {
   const [{ type }, { page }] = await Promise.all([params, searchParams]);
+
+  // Gated first, exactly as the page does it, so a refused visitor pays for
+  // neither the count nor the slice. `isProUser` is request-cached, so asking
+  // here and again below is one query.
+  if (!canBrowseType(type, await isProUser())) {
+    // The slug is its own name for both Pro types, so the title needs no
+    // lookup — which is the point of not running one.
+    return { title: `${capitalize(type)} | Devfetch` };
+  }
+
   // The same page the component asks for, so the cached query is hit once
   // rather than keyed twice.
   const result = await getItemsByTypeSlug(type, parsePageParam(page));
@@ -35,6 +47,16 @@ export default async function ItemsByTypePage({
   searchParams,
 }: PageProps<'/items/[type]'>) {
   const [{ type }, { page }] = await Promise.all([params, searchParams]);
+  // Request-cached, and `AppShell` above has already asked.
+  const isPro = await isProUser();
+
+  // A free account gets the upgrade page rather than the list, and before
+  // either query runs: `file` and `image` hold uploads, which is what Pro buys.
+  // Reading an item it already owns is untouched — only this page is gated.
+  if (!canBrowseType(type, isPro)) {
+    return <ProTypeUpgrade typeSlug={type} />;
+  }
+
   const result = await getItemsByTypeSlug(type, parsePageParam(page));
 
   // A slug naming no visible type is a 404, so a typo reads differently from a
@@ -51,11 +73,9 @@ export default async function ItemsByTypePage({
   //
   // Every type gets a button now that File and Image can be uploaded; they were
   // the only two the dialog would not have opened on.
-  const [itemTypes, collectionOptions, isPro] = await Promise.all([
+  const [itemTypes, collectionOptions] = await Promise.all([
     getItemTypes(),
     getCollectionOptions(),
-    // Also request-cached, and `AppShell` above has already asked.
-    isProUser(),
   ]);
 
   // Uploads get their own layouts: images a gallery of thumbnails, files a

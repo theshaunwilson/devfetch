@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { canCreateType, isProType } from './pro';
+import { canBrowseType, canCreateType, isProType } from './pro';
 
 describe('isProType', () => {
   it('marks file and image as Pro', () => {
@@ -40,6 +40,42 @@ describe('canCreateType', () => {
     // A type is creatable by a free account exactly when it is not a Pro type.
     for (const slug of ['snippet', 'prompt', 'note', 'command', 'link', 'file', 'image']) {
       expect(canCreateType(slug, false)).toBe(!isProType(slug));
+    }
+  });
+});
+
+describe('canBrowseType', () => {
+  it('sends a free account to the upgrade page for the two upload types', () => {
+    expect(canBrowseType('file', false)).toBe(false);
+    expect(canBrowseType('image', false)).toBe(false);
+  });
+
+  it('leaves every free type browsable', () => {
+    for (const slug of ['snippet', 'prompt', 'note', 'command', 'link']) {
+      expect(canBrowseType(slug, false)).toBe(true);
+    }
+  });
+
+  it('lets Pro browse every type, uploads included', () => {
+    for (const slug of ['snippet', 'file', 'image', 'recipe']) {
+      expect(canBrowseType(slug, true)).toBe(true);
+    }
+  });
+
+  it('reads off the same set `isProType` does, so the gate cannot drift', () => {
+    for (const slug of ['snippet', 'prompt', 'note', 'command', 'link', 'file', 'image']) {
+      expect(canBrowseType(slug, false)).toBe(!isProType(slug));
+    }
+  });
+
+  it('gates browsing exactly where it gates creating, today', () => {
+    // The two are deliberately separate functions so they can diverge later;
+    // while they agree, a change to one that was meant for both is visible
+    // here rather than only in the browser.
+    for (const slug of ['snippet', 'link', 'file', 'image', 'recipe']) {
+      for (const isPro of [true, false]) {
+        expect(canBrowseType(slug, isPro)).toBe(canCreateType(slug, isPro));
+      }
     }
   });
 });

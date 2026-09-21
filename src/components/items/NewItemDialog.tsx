@@ -38,6 +38,7 @@ import {
   initialTypeId,
   requiredFieldsFor,
 } from '@/lib/items';
+import { useUpgradeToast } from '@/hooks/use-upgrade-toast';
 import { canCreateType } from '@/lib/pro';
 import { isImageUploadType } from '@/lib/uploads';
 import { cn } from '@/lib/utils';
@@ -145,6 +146,7 @@ function NewItemForm({
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [isPending, startTransition] = useTransition();
+  const upgradeToast = useUpgradeToast();
 
   // Falls back to the first type only to keep the slug a string; the selected
   // id always names one of these, since it can only come from the list.
@@ -180,7 +182,14 @@ function NewItemForm({
 
       if (!result.success) {
         setFieldErrors(result.fieldErrors ?? {});
-        toast.error(result.error);
+        // A Pro wall reads as its own alert, not as a failure: red, top
+        // centre, and offering the upgrade. The server decides which refusals
+        // those are — see `upgradeRequired` on `CreateItemResult`.
+        if (result.upgradeRequired) {
+          upgradeToast(result.error);
+        } else {
+          toast.error(result.error);
+        }
 
         return;
       }

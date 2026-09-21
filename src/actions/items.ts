@@ -122,6 +122,7 @@ export async function createItem(data: CreateItemInput): Promise<CreateItemResul
         return {
           success: false,
           error: 'File and image uploads are a Pro feature. Upgrade to add them.',
+          upgradeRequired: true,
         };
       }
 
@@ -174,7 +175,7 @@ export async function createItem(data: CreateItemInput): Promise<CreateItemResul
 
     if (!outcome.ok) {
       return outcome.reason === 'limit-reached'
-        ? { success: false, error: limitMessage('items') }
+        ? { success: false, error: limitMessage('items'), upgradeRequired: true }
         : { success: false, error: 'Your session has expired. Sign in again.' };
     }
 
