@@ -405,7 +405,19 @@ describe('createCollection, at the ceiling', () => {
       success: false,
       error:
         'Free accounts are limited to 3 collections. Upgrade to Pro for unlimited collections.',
+      // Marked as a Pro wall, which is what routes it to the red top-centre
+      // alert rather than the ordinary bottom-right error toast.
+      upgradeRequired: true,
     });
+  });
+
+  it('leaves the flag off a duplicate name, which upgrading would not fix', async () => {
+    createRow.mockResolvedValue({ ok: false, reason: 'duplicate-name' });
+
+    const result = await createCollection({ name: 'React Patterns' });
+
+    expect(result).toMatchObject({ success: false });
+    expect(result).not.toHaveProperty('upgradeRequired');
   });
 
   it('reports it on the form, not on the name field', async () => {

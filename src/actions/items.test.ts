@@ -684,6 +684,9 @@ describe('createItem, the upload gate', () => {
     await expect(createItem(file)).resolves.toEqual({
       success: false,
       error: 'File and image uploads are a Pro feature. Upgrade to add them.',
+      // Marked as a Pro wall rather than a failure, which is what earns it the
+      // red top-centre alert instead of the ordinary error toast.
+      upgradeRequired: true,
     });
     expect(createRow).not.toHaveBeenCalled();
   });
@@ -721,15 +724,20 @@ describe('createItem, at the ceiling', () => {
     await expect(createItem({ typeId: 'type_1', title: 'One more' })).resolves.toEqual({
       success: false,
       error: 'Free accounts are limited to 50 items. Upgrade to Pro for unlimited items.',
+      upgradeRequired: true,
     });
   });
 
   it('keeps reporting a lost session differently from a full account', async () => {
     createRow.mockResolvedValue({ ok: false, reason: 'no-session' });
 
-    await expect(createItem({ typeId: 'type_1', title: 'One more' })).resolves.toMatchObject({
-      error: expect.stringContaining('session has expired'),
-    });
+    const result = await createItem({ typeId: 'type_1', title: 'One more' });
+
+    expect(result).toMatchObject({ error: expect.stringContaining('session has expired') });
+    // Not an upgrade wall: signing in again fixes it, and paying does not. The
+    // flag has to stay off, or every failure would arrive as a red sales
+    // pitch.
+    expect(result).not.toHaveProperty('upgradeRequired');
   });
 
   it('hands the write the plan it resolved, rather than letting it assume one', async () => {

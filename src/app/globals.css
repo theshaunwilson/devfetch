@@ -454,3 +454,34 @@
     background: var(--scrollbar-thumb-active);
   }
 }
+
+/*
+ * The Pro refusal alert, for `useUpgradeToast`.
+ *
+ * A class rather than a per-toast `style` object, because the coding standard
+ * rules out inline styles and `.markdown-preview` above is the precedent for a
+ * custom class. `Toaster` sets these three variables on its own root, so they
+ * arrive here by inheritance and a local declaration overrides them — which is
+ * all it takes to turn one toast red while every other one stays the dark
+ * popover colour a plain failure should have.
+ *
+ * Sonner draws the action button by inverting the same two variables
+ * (`background: var(--normal-text); color: var(--normal-bg)`), so Upgrade comes
+ * out white-on-red with no second rule.
+ */
+@layer components {
+  .toast-upgrade {
+    /*
+     * A deepened `--destructive` rather than the token itself: the dark
+     * theme's destructive is a light red — rgb(255, 100, 103) — and white on
+     * it measures 2.89:1, under AA for the 13px sonner draws a toast at.
+     * Mixed 70% with black it measures 6.63:1 and still reads unmistakably
+     * red. Derived from the token rather than written as a literal, so a
+     * change to the theme's red carries through. The rim keeps the brighter
+     * token, which is decoration rather than text.
+     */
+    --normal-bg: color-mix(in oklab, var(--destructive) 70%, black);
+    --normal-text: var(--color-white);
+    --normal-border: var(--destructive);
+  }
+}
