@@ -2,44 +2,11 @@
 
 ## Status
 
-Completed
+Not Started
 
 ## Goals
 
-An `/upgrade` page, and a way into it from the app chrome.
-
-- A **ghost** `Upgrade` button in the top bar, shown **only to free accounts**.
-  Deliberately quieter than the star and the create control beside it — it is
-  an offer, not a tool.
-- `/upgrade` renders **inside `AppShell`**, so the button does not kill the
-  chrome it was clicked from. `/favorites` is the precedent: the other page
-  reached from a top bar control.
-- The page shows the pricing area the homepage shows — the Monthly/Yearly
-  switch with its `Save 25%` chip, and the Free and Pro cards side by side —
-  by rendering the existing `BillingToggle`, not a second copy of it.
-- Selecting Monthly or Yearly and pressing the Pro button starts checkout for
-  that interval, through the same `startCheckout` action.
-- A Pro account that reaches `/upgrade` is redirected to `/settings`, where
-  `Manage billing` is the only thing left to offer it.
-
 ## Notes
-
-- **No new pricing logic.** `BillingToggle` already holds the interval state,
-  already resolves each card's CTA through `planCta`, and already calls
-  `startCheckout` — handed `isSignedIn: true, isPro: false` it produces exactly
-  this page's two cards. `planCta` sends the Free card to `/dashboard` for a
-  signed-in viewer, which doubles as the page's way out.
-- It lives in `components/home/` and is now shared with an app route. Left in
-  place rather than moved: moving it would churn `PricingSection` for no
-  behaviour change, the call `ItemFieldError` already made.
-- `src/proxy.ts` does not match `/upgrade`, so the route would be anonymous
-  until `/upgrade/:path*` is added — the gap `/items` and `/collections` both
-  shipped with.
-- `Topbar` already receives `isPro` for the create dialog's gate, so the button
-  needs no new query and no new prop.
-- Components only: no server action and no utility changes, so
-  `coding-standards.md` scopes this to browser verification rather than new
-  tests.
 
 ## History
 
