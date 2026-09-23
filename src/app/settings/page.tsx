@@ -73,17 +73,21 @@ export default async function SettingsPage() {
         <p className="text-sm text-muted-foreground">Manage your account.</p>
       </div>
 
-      {/* Above editor preferences, with Account and its destructive delete
-          row last. `canManage` is derived here rather than stored, since a
-          copy of `stripeCustomerId !== null` can only ever disagree with it. */}
-      <BillingSettings
-        isPro={billing?.isPro ?? false}
-        canManage={billing?.stripeCustomerId != null}
-      />
-
       <EditorPreferencesProvider preferences={editorPreferences}>
         <EditorPreferencesSettings />
       </EditorPreferencesProvider>
+
+      {/* Between the editor and Account, whose destructive delete row stays
+          last. `canManage` is derived here rather than stored, since a copy of
+          `stripeCustomerId !== null` can only ever disagree with it. The two
+          counts are already fetched above for the delete confirmation, so the
+          usage lines cost no extra query. */}
+      <BillingSettings
+        isPro={billing?.isPro ?? false}
+        canManage={billing?.stripeCustomerId != null}
+        itemCount={itemStats.total}
+        collectionCount={collectionStats.total}
+      />
 
       <AccountSettings
         email={user.email}

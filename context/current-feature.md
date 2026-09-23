@@ -2,11 +2,35 @@
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
+Settings page, visual reshape of the cards.
+
+- Reorder the three cards: **Editor** first, then **Billing**, then **Account**.
+- Billing keeps its `Billing` title; the subheading becomes
+  "Manage your subscription and billing."
+- The card leads with a **Current plan** line carrying a badge — a muted
+  `Free` chip, or the existing `ProBadge`.
+- Under it, usage against the plan: `n / 50` items and `n / 3` collections on
+  free (the real ceilings, `FREE_ITEM_LIMIT` / `FREE_COLLECTION_LIMIT`), and
+  `n / Unlimited` on Pro, which is what `/` advertises ("Unlimited items and
+  collections").
+- The action stays as it is: the two checkout buttons on free, Manage billing
+  on Pro where there is a Stripe customer.
+
 ## Notes
+
+- No new query. `src/app/settings/page.tsx` already fetches `getItemStats()`
+  and `getCollectionStats()` for the delete confirmation, so the counts are
+  data the page is holding.
+- The limits keep coming from `src/lib/usage-limits.ts` rather than being
+  written into the card, so the numbers shown here, the gate that enforces
+  them and the copy on `/` cannot drift — `usage-limits.test.ts` pins that.
+- Components only: no server action and no utility changes, so
+  `coding-standards.md` scopes this to browser verification rather than new
+  tests.
 
 ## History
 
