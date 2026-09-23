@@ -12,12 +12,14 @@ interface SidebarProps {
   itemTypes: SidebarItemType[];
   collections: SidebarCollections;
   user: CurrentUser | null;
+  /** Shows the plan badge, and hides the type gate markers the viewer is past. */
+  isPro: boolean;
 }
 
 /**
  * Collapsible sidebar: a fixed column from `md` up, a drawer below it.
  */
-export function Sidebar({ itemTypes, collections, user }: SidebarProps) {
+export function Sidebar({ itemTypes, collections, user, isPro }: SidebarProps) {
   const { isOpen, isMobileOpen, setMobileOpen } = useSidebar();
 
   return (
@@ -33,7 +35,7 @@ export function Sidebar({ itemTypes, collections, user }: SidebarProps) {
         )}
       >
         <div className="h-full w-64">
-          <SidebarContent itemTypes={itemTypes} collections={collections} user={user} />
+          <SidebarContent itemTypes={itemTypes} collections={collections} user={user} isPro={isPro} />
         </div>
       </aside>
 
@@ -43,7 +45,7 @@ export function Sidebar({ itemTypes, collections, user }: SidebarProps) {
           <SheetDescription className="sr-only">
             Item types, collections and account
           </SheetDescription>
-          <SidebarContent itemTypes={itemTypes} collections={collections} user={user} />
+          <SidebarContent itemTypes={itemTypes} collections={collections} user={user} isPro={isPro} />
         </SheetContent>
       </Sheet>
     </>

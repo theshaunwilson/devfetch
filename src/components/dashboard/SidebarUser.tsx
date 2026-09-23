@@ -15,18 +15,20 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { ProBadge } from '@/components/billing/ProBadge';
 import { getDisplayName } from '@/lib/user';
 import type { CurrentUser } from '@/types/user';
 
 interface SidebarUserProps {
   user: CurrentUser;
+  isPro: boolean;
 }
 
 /**
  * User area pinned to the bottom of the sidebar. The row opens an account
  * menu holding the profile and settings links, and sign out.
  */
-export function SidebarUser({ user }: SidebarUserProps) {
+export function SidebarUser({ user, isPro }: SidebarUserProps) {
   const { closeMobile } = useSidebar();
   const displayName = getDisplayName(user);
   // The desktop sidebar and the mobile drawer both render this component, so
@@ -48,7 +50,12 @@ export function SidebarUser({ user }: SidebarUserProps) {
 
             {/* Spans, not paragraphs: a button may only contain phrasing content. */}
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium">{displayName}</span>
+              <span className="flex min-w-0 items-center gap-1.5">
+                <span className="truncate text-sm font-medium">{displayName}</span>
+                {/* Sibling of the name rather than inside it, so a long name
+                    truncates against the badge instead of pushing it off. */}
+                {isPro && <ProBadge className="h-4 shrink-0 px-1.5 text-[10px]" />}
+              </span>
               {/* Skipped when the name is missing, since the line above is the email. */}
               {user.name && (
                 <span className="block truncate text-xs text-muted-foreground">{user.email}</span>

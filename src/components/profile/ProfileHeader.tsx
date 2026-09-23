@@ -1,5 +1,6 @@
 import { CalendarDays } from 'lucide-react';
 
+import { ProBadge } from '@/components/billing/ProBadge';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { UserAvatar } from '@/components/user/UserAvatar';
@@ -9,13 +10,14 @@ import type { ProfileUser } from '@/types/user';
 
 interface ProfileHeaderProps {
   user: ProfileUser;
+  isPro: boolean;
 }
 
 /**
  * Identity card: avatar, name, email and when the account was created. The
  * account actions live on `/settings`.
  */
-export function ProfileHeader({ user }: ProfileHeaderProps) {
+export function ProfileHeader({ user, isPro }: ProfileHeaderProps) {
   return (
     <Card>
       <CardContent className="flex flex-col items-center gap-4 text-center sm:flex-row sm:items-center sm:text-left">
@@ -28,6 +30,8 @@ export function ProfileHeader({ user }: ProfileHeaderProps) {
             <Badge variant="outline" className="text-muted-foreground">
               {user.hasPassword ? 'Email' : 'GitHub'}
             </Badge>
+
+            {isPro && <ProBadge />}
           </div>
 
           {/* Skipped when the name is null, since `getDisplayName` already

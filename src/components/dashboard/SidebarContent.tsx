@@ -23,9 +23,15 @@ interface SidebarContentProps {
   collections: SidebarCollections;
   /** Null when the seeded demo user is missing; the user area is then hidden. */
   user: CurrentUser | null;
+  isPro: boolean;
 }
 
-/** Marks an item type as Pro-only. Sits left of the row's item count. */
+/**
+ * Marks an item type as Pro-only. Sits left of the row's item count.
+ *
+ * Only rendered for free accounts: on a paying one it would flag two types the
+ * viewer can already use, directly under a badge saying they are Pro.
+ */
 function ProBadge() {
   return (
     <Badge
@@ -46,7 +52,7 @@ function GroupLabel({ children }: { children: React.ReactNode }) {
 }
 
 /** Sidebar body shared by the desktop sidebar and the mobile drawer. */
-export function SidebarContent({ itemTypes, collections, user }: SidebarContentProps) {
+export function SidebarContent({ itemTypes, collections, user, isPro }: SidebarContentProps) {
   return (
     <div className="flex h-full min-h-0 w-full flex-col">
       <Brand href="/dashboard" className="hidden h-16 shrink-0 px-4 md:flex" />
@@ -74,7 +80,7 @@ export function SidebarContent({ itemTypes, collections, user }: SidebarContentP
                 icon={getIcon(type.icon)}
                 iconClassName={textColorClass(type.color)}
                 count={type.itemCount}
-                trailing={isProType(type.slug) ? <ProBadge /> : undefined}
+                trailing={!isPro && isProType(type.slug) ? <ProBadge /> : undefined}
               />
             ))}
           </SidebarSection>
@@ -119,7 +125,7 @@ export function SidebarContent({ itemTypes, collections, user }: SidebarContentP
         </nav>
       </ScrollArea>
 
-      {user && <SidebarUser user={user} />}
+      {user && <SidebarUser user={user} isPro={isPro} />}
     </div>
   );
 }
