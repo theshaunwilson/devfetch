@@ -1,11 +1,12 @@
 import Link from 'next/link';
-import { Star } from 'lucide-react';
+import { Star, Zap } from 'lucide-react';
 
 import { CreateMenu } from '@/components/dashboard/CreateMenu';
 import { TopbarBrand } from '@/components/dashboard/TopbarBrand';
 import { TopbarToggle } from '@/components/dashboard/TopbarToggle';
 import { SearchPalette } from '@/components/search/SearchPalette';
 import { Button } from '@/components/ui/button';
+import { UPGRADE_PATH } from '@/lib/pro';
 import type { CollectionOption } from '@/types/collection';
 import type { SidebarItemType } from '@/types/item';
 import type { SearchItem } from '@/types/search';
@@ -24,7 +25,10 @@ export function Topbar({
   searchItems,
 }: {
   itemTypes: SidebarItemType[];
-  /** Threaded to the create dialog, which gates the two upload types. */
+  /**
+   * Threaded to the create dialog, which gates the two upload types — and
+   * decides whether the Upgrade button is offered at all.
+   */
   isPro: boolean;
   collectionOptions: CollectionOption[];
   searchItems: SearchItem[];
@@ -50,6 +54,41 @@ export function Topbar({
         <SearchPalette items={searchItems} collections={collectionOptions} />
 
         <div className="flex shrink-0 items-center gap-1 lg:ml-auto lg:gap-2">
+          {/*
+            Only for a free account — there is nothing to sell a paying one,
+            and `/upgrade` sends it to /settings anyway.
+
+            `ghost` on purpose, and the quietest control in the cluster: the
+            create button beside it is filled and the two labelled ones from
+            `lg` are filled and outlined. This is an offer rather than a tool,
+            so it reads as a link with a hit area rather than as a fourth
+            action competing with them. `h-10` to match the 40px icons it sits
+            beside, since the default size is 32px and would sit short.
+
+            The bolt carries the emphasis instead of the button's fill, and it
+            is emerald because that is already what Pro looks like in this app
+            — `ProBadge` is the same tier, `emerald-400`, chosen when the
+            homepage review measured `-500` against these surfaces under AA.
+            `Zap` rather than `Sparkles`, which is the Prompt item type's own
+            icon and renders in the sidebar a few pixels from here.
+
+            The word drops below `sm`, leaving the bolt alone. Measured, the
+            labelled button needs 374px of bar and so fits a 375 or 390 phone
+            but overflows a 360 one — and at 320 it pushed the create button
+            22px past the viewport. `sr-only sm:not-sr-only` keeps the
+            accessible name "Upgrade" at every width while only the glyph is
+            painted on a phone, which is what `FileRow`'s Download button does
+            with the same problem.
+          */}
+          {!isPro && (
+            <Button asChild variant="ghost" className="h-10 px-2.5 sm:px-3">
+              <Link href={UPGRADE_PATH}>
+                <Zap className="size-4 text-emerald-400" />
+                <span className="sr-only sm:not-sr-only">Upgrade</span>
+              </Link>
+            </Button>
+          )}
+
           <Button asChild variant="ghost" size="icon" className="size-10">
             <Link href="/favorites">
               <Star className="size-4" />

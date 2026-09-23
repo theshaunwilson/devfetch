@@ -48,3 +48,14 @@ export function canCreateType(slug: string, isPro: boolean): boolean {
 export function canBrowseType(slug: string, isPro: boolean): boolean {
   return isPro || !isProType(slug);
 }
+
+/**
+ * Where a free account is sent when a Pro gate refuses it.
+ *
+ * Named here rather than written out at each call site because three of them
+ * now exist — the top bar's button, the gated type page's redirect and the
+ * checkout copy — and a path typed three times is a path that can be renamed
+ * twice. This file already owns what Pro means, so it owns where you go to
+ * get it.
+ */
+export const UPGRADE_PATH = '/upgrade';

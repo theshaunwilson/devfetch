@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
-import { ProTypeUpgrade } from '@/components/billing/ProTypeUpgrade';
+import { notFound, redirect } from 'next/navigation';
 import { FileRow } from '@/components/items/FileRow';
 import { ImageCard } from '@/components/items/ImageCard';
 import { ItemCard } from '@/components/items/ItemCard';
@@ -12,7 +11,7 @@ import { getItemTypes } from '@/lib/db/item-types';
 import { getItemsByTypeSlug } from '@/lib/db/items';
 import { capitalize } from '@/lib/format';
 import { parsePageParam } from '@/lib/pagination';
-import { canBrowseType } from '@/lib/pro';
+import { canBrowseType, UPGRADE_PATH } from '@/lib/pro';
 import { isImageUploadType, usesFileList } from '@/lib/uploads';
 import { cn } from '@/lib/utils';
 
@@ -50,11 +49,19 @@ export default async function ItemsByTypePage({
   // Request-cached, and `AppShell` above has already asked.
   const isPro = await isProUser();
 
-  // A free account gets the upgrade page rather than the list, and before
-  // either query runs: `file` and `image` hold uploads, which is what Pro buys.
+  // A free account goes straight to `/upgrade`, and before either query runs:
+  // `file` and `image` hold uploads, which is what Pro buys.
+  //
+  // A redirect rather than an upgrade card rendered in place. The card was a
+  // page explaining the wall with a button to the page that sells past it, so
+  // it cost a click to reach the thing it was pointing at — and the same two
+  // sentences are on `/upgrade`, beside both plans and the price switch. The
+  // gate stays on the page rather than on the sidebar link so a typed URL is
+  // refused too.
+  //
   // Reading an item it already owns is untouched — only this page is gated.
   if (!canBrowseType(type, isPro)) {
-    return <ProTypeUpgrade typeSlug={type} />;
+    redirect(UPGRADE_PATH);
   }
 
   const result = await getItemsByTypeSlug(type, parsePageParam(page));
