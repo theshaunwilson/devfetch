@@ -10,6 +10,7 @@ import { DEFAULT_SIGNED_IN_PATH, SIGN_IN_PATH } from '@/lib/auth-redirect';
 import { getCollectionStats } from '@/lib/db/collections';
 import { getItemTypes } from '@/lib/db/item-types';
 import { getItemStats } from '@/lib/db/items';
+import { isProUser } from '@/lib/db/billing';
 import { getProfileUser } from '@/lib/db/user';
 
 export const metadata: Metadata = {
@@ -20,13 +21,15 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic';
 
 export default async function ProfilePage() {
-  const [user, itemStats, collectionStats, itemTypes] = await Promise.all([
+  const [user, itemStats, collectionStats, itemTypes, isPro] = await Promise.all([
     getProfileUser(),
     getItemStats(),
     getCollectionStats(),
     // Already returns every available type with its own item count, so the
     // breakdown needs no query of its own.
     getItemTypes(),
+    // Request-cached, so this shares the lookup the app shell already made.
+    isProUser(),
   ]);
 
   // The proxy already turns anonymous requests away; this catches the case it
@@ -44,7 +47,7 @@ export default async function ProfilePage() {
         </Link>
       </Button>
 
-      <ProfileHeader user={user} />
+      <ProfileHeader user={user} isPro={isPro} />
 
       <ProfileStats items={itemStats} collections={collectionStats} itemTypes={itemTypes} />
     </div>

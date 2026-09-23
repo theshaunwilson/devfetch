@@ -1,3 +1,4 @@
+import { ProBadge } from '@/components/billing/ProBadge';
 import { CheckoutButtons, ManageBillingButton } from '@/components/settings/BillingButtons';
 import { SettingsRow } from '@/components/settings/SettingsRow';
 import {
@@ -34,7 +35,10 @@ export function BillingSettings({ isPro, canManage }: BillingSettingsProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Billing</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          Billing
+          {isPro && <ProBadge />}
+        </CardTitle>
         <CardDescription>Your plan, and what it includes.</CardDescription>
       </CardHeader>
 

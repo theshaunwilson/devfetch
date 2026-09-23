@@ -75,7 +75,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
       <EditorPreferencesProvider preferences={editorPreferences}>
         <ItemDrawerProvider collectionOptions={collectionOptions}>
           <div className="flex h-svh overflow-hidden">
-            <Sidebar itemTypes={itemTypes} collections={collections} user={user} />
+            <Sidebar itemTypes={itemTypes} collections={collections} user={user} isPro={isPro} />
             <div className="flex min-w-0 flex-1 flex-col">
               <Topbar
                 itemTypes={itemTypes}
