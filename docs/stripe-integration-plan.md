@@ -756,7 +756,7 @@ export async function openBillingPortal() {
 throwing `NEXT_REDIRECT`; inside the `try` it would be swallowed by the `catch`
 and reported as a generic failure while the user stayed put.
 
-### 5.5 `src/app/api/stripe/webhook/route.ts`
+### 5.5 `src/app/api/webhooks/stripe/route.ts`
 
 ```ts
 import type Stripe from 'stripe';
@@ -1041,8 +1041,8 @@ that file, and **drop `STRIPE_PUBLISHABLE_KEY`** (§1.3):
 # Stripe. Test-mode keys from dashboard.stripe.com/test/apikeys.
 STRIPE_SECRET_KEY=""
 
-# Signing secret for POST /api/stripe/webhook. In development this is printed
-# by `stripe listen --forward-to localhost:3000/api/stripe/webhook` and differs
+# Signing secret for POST /api/webhooks/stripe. In development this is printed
+# by `stripe listen --forward-to localhost:3000/api/webhooks/stripe` and differs
 # from the one the Dashboard shows for a deployed endpoint — they are not
 # interchangeable. Unset, the webhook refuses every request with a 500 rather
 # than trusting an unverified body.
@@ -1138,13 +1138,13 @@ All in **test mode** first (`dashboard.stripe.com/test/...`).
    work. Run:
    ```
    stripe login
-   stripe listen --forward-to localhost:3000/api/stripe/webhook
+   stripe listen --forward-to localhost:3000/api/webhooks/stripe
    ```
    It prints `whsec_...` → `STRIPE_WEBHOOK_SECRET` in `.env`. This secret is
    specific to the CLI session and is **not** the same as a Dashboard
    endpoint's.
 6. **Webhook, production** — Developers → Webhooks → Add endpoint →
-   `https://<your-domain>/api/stripe/webhook`. Select exactly four events:
+   `https://<your-domain>/api/webhooks/stripe`. Select exactly four events:
    - `checkout.session.completed`
    - `customer.subscription.created`
    - `customer.subscription.updated`
@@ -1242,7 +1242,7 @@ Each step leaves the app working, and each is independently verifiable.
 
 **Phase 2 — webhook first, before anything can sell**
 5. Stripe Dashboard steps 1–3 and 5 (product, prices, key, `stripe listen`).
-6. `src/app/api/stripe/webhook/route.ts`.
+6. `src/app/api/webhooks/stripe/route.ts`.
    Verify: §8.3's signature, tampering, unset-secret and unknown-customer cases
    — all reachable with `stripe trigger` before any checkout exists.
 
