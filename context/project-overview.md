@@ -343,15 +343,18 @@ git switch -c feature/item-drawer
 ## 📌 Status
 
 MVP in progress. Built so far: items (create, edit, delete, per-type views,
-detail drawer, code and markdown editors, file and image uploads to R2, quick
-copy), collections (create, edit, delete, `/collections` index and per-collection
-pages, filing an item in any number of them), global search (Cmd+K command
-palette over items and collections), authentication (credentials + GitHub, email
-verification, password reset, rate limiting), the dashboard and sidebar, and the
-profile page.
+`/items` index, detail drawer, code and markdown editors, file and image uploads
+to R2, quick copy, favoriting and pinning), collections (create, edit, delete,
+favorite, `/collections` index and per-collection pages, filing an item in any
+number of them), pagination, global search (Cmd+K command palette over items and
+collections), `/favorites` with sorting, authentication (credentials + GitHub,
+email verification, password reset, rate limiting), the dashboard and sidebar,
+the profile page, the settings page (editor preferences, billing, account),
+billing (Stripe checkout, billing portal, webhook sync, free-tier limits and the
+`/upgrade` page), and the marketing homepage.
 
-Not built yet: tags management, favouriting and pinning, export, billing and
-every AI feature. See `context/current-feature.md` for the full history.
+Not built yet: tags management, export, custom item types and every AI feature.
+See `context/current-feature.md` for the full history.
 
 ---
 
