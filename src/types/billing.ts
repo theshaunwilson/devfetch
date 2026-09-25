@@ -31,13 +31,16 @@ export interface BillingStatus {
  * There is no success arm on purpose: success is a `redirect()` to Stripe's
  * hosted Checkout, which works by throwing, so a returning call has by
  * definition not succeeded. A `{ success: true }` member would be a state the
- * caller can never observe.
+ * caller can never observe. `success: false` is still spelled out, so the
+ * result carries the same discriminant as every other action's.
  */
 export interface StartCheckoutResult {
+  success: false;
   error: string;
 }
 
 /** What `openBillingPortal` returns, for the same reason and in the same shape. */
 export interface OpenBillingPortalResult {
+  success: false;
   error: string;
 }

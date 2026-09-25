@@ -30,7 +30,7 @@ export async function generateMetadata({
   if (!canBrowseType(type, await isProUser())) {
     // The slug is its own name for both Pro types, so the title needs no
     // lookup — which is the point of not running one.
-    return { title: `${capitalize(type)} | Devfetch` };
+    return { title: capitalize(type) };
   }
 
   // The same page the component asks for, so the cached query is hit once
@@ -38,7 +38,7 @@ export async function generateMetadata({
   const result = await getItemsByTypeSlug(type, parsePageParam(page));
 
   // An unknown slug renders notFound() below; the generic title covers it.
-  return { title: result ? `${capitalize(result.type.name)} | Devfetch` : 'Items | Devfetch' };
+  return { title: result ? capitalize(result.type.name) : 'Items' };
 }
 
 export default async function ItemsByTypePage({

@@ -7,7 +7,7 @@ import { auth } from '@/auth';
 import { absoluteUrl } from '@/lib/app-url';
 import { getBillingStatus, linkStripeCustomer } from '@/lib/db/billing';
 import { getPriceId, getStripe } from '@/lib/stripe';
-import { listLiveSubscriptions } from '@/lib/stripe-subscriptions';
+import { expireOpenCheckouts, listLiveSubscriptions } from '@/lib/stripe-subscriptions';
 import type { BillingInterval, OpenBillingPortalResult, StartCheckoutResult } from '@/types/billing';
 
 /**
@@ -55,6 +55,14 @@ async function hasLiveSubscription(customerId: string): Promise<boolean> {
  * if the row write below ever failed after the customer was created. The
  * webhook does not read it — it resolves by `stripeCustomerId`, which is
  * `@unique` — but it is the only breadcrumb back if that link is ever missing.
+ *
+ * **Two first checkouts at once must end on one customer.** The idempotency
+ * key makes Stripe hand both requests the same customer in the first place,
+ * and `linkStripeCustomer` writes only while the row has none, returning
+ * whichever customer won — which is the one every checkout then uses. A
+ * customer that still lost (the key expires after 24 hours) holds nothing and
+ * is deleted, best-effort: failing to tidy it up is no reason to fail the
+ * checkout.
  */
 async function resolveCustomerId(
   userId: string,
@@ -63,14 +71,23 @@ async function resolveCustomerId(
 ): Promise<string> {
   if (existing) return existing;
 
-  const customer = await getStripe().customers.create({
-    email: email ?? undefined,
-    metadata: { userId },
-  });
+  const stripe = getStripe();
+  const customer = await stripe.customers.create(
+    { email: email ?? undefined, metadata: { userId } },
+    { idempotencyKey: `customer-${userId}` },
+  );
 
-  await linkStripeCustomer(userId, customer.id);
+  const linked = await linkStripeCustomer(userId, customer.id);
 
-  return customer.id;
+  if (linked !== customer.id) {
+    try {
+      await stripe.customers.del(customer.id);
+    } catch (error) {
+      console.error('Could not delete the unlinked Stripe customer %s:', customer.id, error);
+    }
+  }
+
+  return linked;
 }
 
 /**
@@ -83,26 +100,29 @@ export async function startCheckout(interval: BillingInterval): Promise<StartChe
   const session = await auth();
 
   if (!session?.user?.id) {
-    return { error: 'Your session has expired. Sign in again.' };
+    return { success: false, error: 'Your session has expired. Sign in again.' };
   }
 
   const parsed = intervalSchema.safeParse(interval);
 
   if (!parsed.success) {
-    return { error: GENERIC_ERROR };
+    return { success: false, error: GENERIC_ERROR };
   }
 
   const billing = await getBillingStatus();
 
   if (!billing) {
-    return { error: 'Your session has expired. Sign in again.' };
+    return { success: false, error: 'Your session has expired. Sign in again.' };
   }
 
   // Already paying. A second checkout would open a second subscription against
   // the same account and bill them twice — the portal is the door for changing
   // an existing plan, and the settings card offers exactly that instead.
   if (billing.isPro) {
-    return { error: 'You are already on Pro. Use Manage billing to change your plan.' };
+    return {
+      success: false,
+      error: 'You are already on Pro. Use Manage billing to change your plan.',
+    };
   }
 
   let url: string | null;
@@ -120,6 +140,7 @@ export async function startCheckout(interval: BillingInterval): Promise<StartChe
     // retry.
     if (billing.stripeCustomerId && (await hasLiveSubscription(billing.stripeCustomerId))) {
       return {
+        success: false,
         error:
           'You already have an active subscription. If your plan still shows Free, reload in a moment.',
       };
@@ -130,6 +151,11 @@ export async function startCheckout(interval: BillingInterval): Promise<StartChe
       session.user.email,
       billing.stripeCustomerId,
     );
+
+    // Only the newest checkout can be paid. An open session has no
+    // subscription for the guard above to see, so two tabs left open could
+    // otherwise both be completed. Inside the `try`, so this fails closed too.
+    await expireOpenCheckouts(customerId);
 
     const checkout = await getStripe().checkout.sessions.create({
       mode: 'subscription',
@@ -150,13 +176,13 @@ export async function startCheckout(interval: BillingInterval): Promise<StartChe
   } catch (error) {
     console.error('Could not start Stripe checkout:', error);
 
-    return { error: GENERIC_ERROR };
+    return { success: false, error: GENERIC_ERROR };
   }
 
   if (!url) {
     console.error('Stripe returned a checkout session with no URL.');
 
-    return { error: GENERIC_ERROR };
+    return { success: false, error: GENERIC_ERROR };
   }
 
   // **Outside the `try`.** `redirect()` works by throwing `NEXT_REDIRECT`, so
@@ -178,13 +204,13 @@ export async function openBillingPortal(): Promise<OpenBillingPortalResult> {
   const session = await auth();
 
   if (!session?.user?.id) {
-    return { error: 'Your session has expired. Sign in again.' };
+    return { success: false, error: 'Your session has expired. Sign in again.' };
   }
 
   const billing = await getBillingStatus();
 
   if (!billing?.stripeCustomerId) {
-    return { error: 'There is no billing account to manage yet.' };
+    return { success: false, error: 'There is no billing account to manage yet.' };
   }
 
   let url: string;
@@ -199,7 +225,7 @@ export async function openBillingPortal(): Promise<OpenBillingPortalResult> {
   } catch (error) {
     console.error('Could not open the Stripe billing portal:', error);
 
-    return { error: 'Could not open billing. Please try again.' };
+    return { success: false, error: 'Could not open billing. Please try again.' };
   }
 
   // Outside the `try`, for the reason `startCheckout` explains.

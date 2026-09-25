@@ -7,7 +7,7 @@ import { DEFAULT_SIGNED_IN_PATH } from '@/lib/auth-redirect';
 import { isEmailVerificationEnabled } from '@/lib/features';
 
 export const metadata: Metadata = {
-  title: 'Create an account · DevFetch',
+  title: 'Create an account',
 };
 
 export default async function RegisterPage() {

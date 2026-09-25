@@ -14,8 +14,10 @@ const geist = Geist({ subsets: ['latin'], variable: '--font-sans' });
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], variable: '--font-display' });
 const jetBrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-code' });
 
+// Every page names only itself; the template adds the brand, so the format and
+// the spelling live in one place.
 export const metadata: Metadata = {
-  title: 'Devfetch',
+  title: { default: 'DevFetch', template: '%s · DevFetch' },
 };
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {

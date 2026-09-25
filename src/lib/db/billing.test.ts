@@ -17,7 +17,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/auth', () => ({ auth: vi.fn() }));
 vi.mock('@/lib/prisma', () => ({
-  prisma: { user: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() } },
+  prisma: { user: { findUnique: vi.fn(), updateMany: vi.fn() } },
 }));
 
 const { auth } = await import('@/auth');
@@ -46,7 +46,6 @@ interface BillingRow {
 const findUnique = prisma.user.findUnique as unknown as ReturnType<
   typeof vi.fn<(args: unknown) => Promise<BillingRow | null>>
 >;
-const update = prisma.user.update as unknown as ReturnType<typeof vi.fn>;
 const updateMany = prisma.user.updateMany as unknown as ReturnType<
   typeof vi.fn<(args: unknown) => Promise<{ count: number }>>
 >;
@@ -71,7 +70,6 @@ beforeEach(() => {
     stripeCustomerId: CUSTOMER_ID,
     stripeSubscriptionId: SUBSCRIPTION_ID,
   });
-  update.mockResolvedValue({});
   updateMany.mockResolvedValue({ count: 1 });
 });
 
@@ -158,27 +156,49 @@ describe('getBillingStatus', () => {
 });
 
 describe('linkStripeCustomer', () => {
-  it('records the customer against the user it is given', async () => {
-    await linkStripeCustomer(USER_ID, CUSTOMER_ID);
+  it('writes the customer only while the row has none', async () => {
+    updateMany.mockResolvedValue({ count: 1 });
 
-    expect(update).toHaveBeenCalledWith({
-      where: { id: USER_ID },
+    await expect(linkStripeCustomer(USER_ID, CUSTOMER_ID)).resolves.toBe(CUSTOMER_ID);
+
+    // The `null` in the filter is the whole race fix: an unconditional write
+    // would let the second of two concurrent checkouts overwrite the first.
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: USER_ID, stripeCustomerId: null },
       data: { stripeCustomerId: CUSTOMER_ID },
     });
+  });
+
+  it('returns the customer already linked when another request got there first', async () => {
+    updateMany.mockResolvedValue({ count: 0 });
+    findUnique.mockResolvedValue({ isPro: false, stripeCustomerId: 'cus_winner' });
+
+    await expect(linkStripeCustomer(USER_ID, CUSTOMER_ID)).resolves.toBe('cus_winner');
+  });
+
+  it('throws when the row has gone, since there is no customer to use', async () => {
+    updateMany.mockResolvedValue({ count: 0 });
+    findUnique.mockResolvedValue(null);
+
+    await expect(linkStripeCustomer(USER_ID, CUSTOMER_ID)).rejects.toThrow();
   });
 
   // It runs inside the checkout request, which has already resolved the user —
   // so the owner is an argument, and nothing here reads the session.
   it('does not consult the session', async () => {
+    updateMany.mockResolvedValue({ count: 1 });
+
     await linkStripeCustomer(USER_ID, CUSTOMER_ID);
 
     expect(session).not.toHaveBeenCalled();
   });
 
   it('writes nothing but the customer id', async () => {
+    updateMany.mockResolvedValue({ count: 1 });
+
     await linkStripeCustomer(USER_ID, CUSTOMER_ID);
 
-    const [args] = update.mock.calls[0] as [{ data: Record<string, unknown> }];
+    const [args] = updateMany.mock.calls[0] as [{ data: Record<string, unknown> }];
 
     expect(Object.keys(args.data)).toEqual(['stripeCustomerId']);
   });

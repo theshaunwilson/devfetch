@@ -8,7 +8,7 @@ import { signInErrorMessage, verificationErrorMessage } from '@/lib/auth-errors'
 import { isEmailVerificationEnabled } from '@/lib/features';
 
 export const metadata: Metadata = {
-  title: 'Sign in · DevFetch',
+  title: 'Sign in',
 };
 
 interface SignInPageProps {

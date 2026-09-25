@@ -11,7 +11,7 @@ import { FORGOT_PASSWORD_PATH } from '@/lib/auth-redirect';
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Choose a new password · DevFetch',
+  title: 'Choose a new password',
 };
 
 interface ResetPasswordPageProps {

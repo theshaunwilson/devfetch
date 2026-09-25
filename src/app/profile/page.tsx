@@ -14,7 +14,7 @@ import { isProUser } from '@/lib/db/billing';
 import { getProfileUser } from '@/lib/db/user';
 
 export const metadata: Metadata = {
-  title: 'Profile · DevFetch',
+  title: 'Profile',
 };
 
 // Reads the session user per request, so it cannot be prerendered.

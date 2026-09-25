@@ -5,7 +5,7 @@ import { BillingToggle } from '@/components/home/BillingToggle';
 import { isProUser } from '@/lib/db/billing';
 
 export const metadata: Metadata = {
-  title: 'Upgrade | Devfetch',
+  title: 'Upgrade',
 };
 
 // Reads the signed-in user's plan per request, so it cannot be prerendered.

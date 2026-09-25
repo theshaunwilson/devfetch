@@ -4,6 +4,10 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 
+interface CheckoutBannerProps {
+  isPro: boolean;
+}
+
 /**
  * Reports the outcome Stripe sent the browser back with.
  *
@@ -16,8 +20,15 @@ import { toast } from 'sonner';
  * `sonner` is a client-side surface — and it is a toast rather than the inline
  * banner the auth pages use, since this is news about something that already
  * finished, not a state the form is in.
+ *
+ * **What the row says, not what the URL says.** `?checkout=success` only means
+ * Stripe sent the browser back — anyone can type it, and the webhook that
+ * grants Pro usually lands a moment after the redirect. So the welcome waits
+ * for `isPro`, read from the row by the page; until then the toast says the
+ * payment was received, which is true, instead of announcing Pro beside a
+ * billing card still showing the free plan.
  */
-export function CheckoutBanner() {
+export function CheckoutBanner({ isPro }: CheckoutBannerProps) {
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -34,7 +45,11 @@ export function CheckoutBanner() {
     announced.current = true;
 
     if (outcome === 'success') {
-      toast.success('Welcome to Pro. Your subscription is active.');
+      if (isPro) {
+        toast.success('Welcome to Pro. Your subscription is active.');
+      } else {
+        toast('Payment received. Your Pro plan is activating — reload in a moment.');
+      }
     } else if (outcome === 'cancelled') {
       toast('Checkout cancelled. You are still on the free plan.');
     }
@@ -42,7 +57,7 @@ export function CheckoutBanner() {
     // `replace`, so the cleaned URL does not become a history entry the back
     // button can walk into and re-announce.
     router.replace(pathname, { scroll: false });
-  }, [outcome, pathname, router]);
+  }, [isPro, outcome, pathname, router]);
 
   return null;
 }

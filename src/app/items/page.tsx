@@ -16,7 +16,7 @@ import { parsePageParam } from '@/lib/pagination';
 // Reads the signed-in user's items per request, so it cannot be prerendered.
 export const dynamic = 'force-dynamic';
 
-export const metadata: Metadata = { title: 'All items | Devfetch' };
+export const metadata: Metadata = { title: 'All items' };
 
 export default async function AllItemsPage({ searchParams }: PageProps<'/items'>) {
   const { page } = await searchParams;

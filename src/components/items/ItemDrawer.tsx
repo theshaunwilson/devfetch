@@ -9,9 +9,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Skeleton } from '@/components/ui/skeleton';
 import { capitalize } from '@/lib/format';
 import { getIcon } from '@/lib/icons';
-import type { ItemDetailStatus, ItemDrawerMode } from '@/components/items/ItemDrawerProvider';
 import type { CollectionOption } from '@/types/collection';
-import type { DashboardItem, ItemDetail } from '@/types/item';
+import type { DashboardItem, ItemDetail, ItemDetailStatus, ItemDrawerMode } from '@/types/item';
 
 interface ItemDrawerProps {
   open: boolean;

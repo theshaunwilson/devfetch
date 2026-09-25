@@ -5,7 +5,7 @@ import { getAllCollections } from '@/lib/db/collections';
 import { parsePageParam } from '@/lib/pagination';
 
 export const metadata: Metadata = {
-  title: 'Collections | Devfetch',
+  title: 'Collections',
 };
 
 // Reads the signed-in user's collections per request, so it cannot be

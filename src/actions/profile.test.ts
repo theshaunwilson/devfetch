@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/auth', () => ({ auth: vi.fn(), signOut: vi.fn() }));
 vi.mock('@/lib/stripe-subscriptions', () => ({ cancelLiveSubscriptions: vi.fn() }));
+vi.mock('@/lib/r2', () => ({ deleteObjectsWithPrefix: vi.fn() }));
 vi.mock('@/lib/prisma', () => {
   const deleteMany = () => vi.fn().mockResolvedValue({ count: 0 });
 
@@ -31,12 +32,14 @@ vi.mock('@/lib/prisma', () => {
 const { auth, signOut } = await import('@/auth');
 const { prisma } = await import('@/lib/prisma');
 const { cancelLiveSubscriptions } = await import('@/lib/stripe-subscriptions');
+const { deleteObjectsWithPrefix } = await import('@/lib/r2');
 const { deleteAccount } = await import('./profile');
 
 const session = vi.mocked(auth);
 const findUser = vi.mocked(prisma.user.findUnique);
 const transaction = vi.mocked(prisma.$transaction);
 const cancel = vi.mocked(cancelLiveSubscriptions);
+const removeFiles = vi.mocked(deleteObjectsWithPrefix);
 
 const USER_ID = 'user_1';
 const EMAIL = 'someone@example.com';
@@ -70,6 +73,7 @@ beforeEach(() => {
   findUser.mockResolvedValue(account() as unknown as never);
   transaction.mockResolvedValue([] as unknown as never);
   cancel.mockResolvedValue(1);
+  removeFiles.mockResolvedValue(0);
 });
 
 describe('deleteAccount', () => {
@@ -124,5 +128,53 @@ describe('deleteAccount', () => {
     });
     expect(cancel).not.toHaveBeenCalled();
     expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it('says billing has already stopped when the delete fails after the cancel', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    findUser.mockResolvedValue(account({ stripeCustomerId: 'cus_1' }) as unknown as never);
+    transaction.mockRejectedValue(new Error('connection refused'));
+
+    await expect(deleteAccount({}, confirm())).resolves.toEqual({
+      error: 'Your subscription was cancelled, but your account could not be deleted. Please try again.',
+    });
+  });
+
+  it('keeps the plain message when nothing was cancelled', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    transaction.mockRejectedValue(new Error('connection refused'));
+
+    await expect(deleteAccount({}, confirm())).resolves.toEqual({
+      error: 'Could not delete your account. Please try again.',
+    });
+  });
+});
+
+describe('deleteAccount, stored files', () => {
+  it('removes everything under the user’s own prefix once the rows are gone', async () => {
+    await deleteAccount({}, confirm());
+
+    expect(removeFiles).toHaveBeenCalledWith(`users/${USER_ID}/`);
+    expect(transaction.mock.invocationCallOrder[0]).toBeLessThan(
+      removeFiles.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('still signs out when the files could not be removed, since the account is gone', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    removeFiles.mockRejectedValue(new Error('bucket unreachable'));
+
+    await deleteAccount({}, confirm());
+
+    expect(signOut).toHaveBeenCalled();
+  });
+
+  it('touches no files when the delete itself failed', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    transaction.mockRejectedValue(new Error('connection refused'));
+
+    await deleteAccount({}, confirm());
+
+    expect(removeFiles).not.toHaveBeenCalled();
   });
 });

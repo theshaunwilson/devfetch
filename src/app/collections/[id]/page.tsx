@@ -24,7 +24,7 @@ export async function generateMetadata({
   const result = await getItemsByCollectionId(id, parsePageParam(page));
 
   // An unknown id renders notFound() below; the generic title covers it.
-  return { title: result ? `${result.collection.name} | Devfetch` : 'Collection | Devfetch' };
+  return { title: result ? result.collection.name : 'Collection' };
 }
 
 export default async function CollectionPage({

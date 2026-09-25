@@ -5,6 +5,7 @@ import 'server-only';
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -120,6 +121,50 @@ export async function deleteObject(key: string): Promise<void> {
   const { client, bucket } = storage();
 
   await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+}
+
+/**
+ * Removes every object under one user's prefix, returning how many it removed.
+ *
+ * For account deletion, which has no other way to find uploads that were
+ * abandoned before their item was saved. Refuses anything but a
+ * `users/<id>/` prefix, so a bug upstream can never hand it `''` — which would
+ * list, and delete, the whole bucket.
+ *
+ * One `DeleteObject` per key rather than a batched `DeleteObjects`: the SDK's
+ * default request checksums on the batch call are a known compatibility gap
+ * with R2, and an account holds few enough objects that the difference does
+ * not matter.
+ */
+export async function deleteObjectsWithPrefix(prefix: string): Promise<number> {
+  if (!/^users\/[^/]+\/$/.test(prefix)) {
+    throw new Error(`Refusing to delete by an unscoped prefix: "${prefix}"`);
+  }
+
+  const { client, bucket } = storage();
+  let removed = 0;
+  let continuationToken: string | undefined;
+
+  do {
+    const page = await client.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      }),
+    );
+
+    for (const object of page.Contents ?? []) {
+      if (!object.Key) continue;
+
+      await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: object.Key }));
+      removed += 1;
+    }
+
+    continuationToken = page.IsTruncated ? page.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  return removed;
 }
 
 function isNotFound(error: unknown): boolean {

@@ -9,7 +9,7 @@ import { getCollectionStats, getRecentCollections } from '@/lib/db/collections';
 import { getItemStats, getPinnedItems, getRecentItems } from '@/lib/db/items';
 
 export const metadata: Metadata = {
-  title: 'Dashboard | Devfetch',
+  title: 'Dashboard',
 };
 
 // Dashboard data is read per request, so the page cannot be prerendered.

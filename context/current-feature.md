@@ -1,12 +1,44 @@
-# Current Feature
+# Current Feature: Code scan medium and low fixes
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
+- **One Stripe customer per account, even under concurrent checkouts.** Two first checkouts started at once (from `/upgrade` in one tab and `/settings` in another) end with exactly one `stripeCustomerId` on the row, and both checkout sessions are on that customer — so paying either one grants Pro, and the duplicate-subscription guard checks the customer that is actually linked
+- **An unpaid open checkout cannot become a second subscription.** Starting a checkout handles any Checkout Session already `open` for the customer (expire or reuse, decided at `start`), so two open tabs cannot both be paid
+- **Deleting an account removes the user's R2 objects.** After the database delete commits, the user's stored objects are deleted best-effort — a storage failure is logged and never reported as a failed account delete, the way `deleteItem` already treats it
+- **The checkout success toast tells the truth.** It announces Pro only when the row says Pro; while the webhook has not landed it says the payment was received and the plan is activating, and the Free badge and upgrade buttons beneath it no longer contradict a "Welcome to Pro"
+- **One title format, set once.** The root layout declares a `title.template` (`%s · DevFetch`) and a default, every page exports only its own segment, the homepage keeps its full title via `absolute`, and the brand is spelled `DevFetch` everywhere — no `| Devfetch` left
+- **The three oversized components are split, with their pure logic moved where it can be tested:**
+  - `ChaosField.tsx` (343 lines, one ~180-line effect): the physics — scatter, clamp, wall bounce, pointer repel, one step — moves to `src/lib/chaos-physics.ts` with unit tests; the component keeps the rAF loop, visibility and pointer wiring
+  - `SearchPalette.tsx` (268 lines): the open/shortcut/focus-return state moves into a hook, leaving the component rendering the palette
+  - `ItemDrawerProvider.tsx` (214 lines): split so the provider holds state and wiring only, with any pure decision logic extracted to `src/lib`
+  - No behaviour changes in any of the three, verified in the browser
+- **Billing actions return the shared shape.** `StartCheckoutResult` and `OpenBillingPortalResult` become `{ success: false; error: string }` — still failure-only, since success is a redirect — so they carry the same `success` discriminant as every other action; `BillingButtons` and `BillingToggle` and the tests follow
+- Unit tests for every changed server action and utility, each proven able to fail by a mutation
+
 ## Notes
+
+- Source: the same `code-scanner` audit as the previous feature — Medium #4 and #5, Low #6, #7, #8 and #9. Low #10 (`ProTypeUpgrade`) was a false positive and is not carried over
+- **Checkout race — where it is.** `resolveCustomerId` (`src/actions/billing.ts:59-74`) creates a customer, then `linkStripeCustomer` (`src/lib/db/billing.ts`) writes it with an unconditional `update`, so the last writer wins and the first tab's session sits on a customer no row names — the webhook's `updateMany({ where: { stripeCustomerId } })` then matches nothing and a payment never grants Pro. Planned fix: link with a conditional write (`updateMany` where `stripeCustomerId: null`); on 0 rows, re-read and use the stored id. Pass an `idempotencyKey` (e.g. `customer-${userId}`) to `customers.create` so two racing requests get the same customer back from Stripe in the first place. The loser's customer, if one is ever created, is orphaned and harmless — or deleted, decided at `start`
+- **Open sessions.** `hasLiveSubscription` sees only subscriptions, and a session that is open but unpaid has none yet. Listing the customer's sessions with `status: 'open'` before creating one is the check; this adds one Stripe call to a repeat checkout, the same trade the duplicate guard already made
+- **R2 on account delete.** `deleteAccount` (`src/actions/profile.ts`) deletes the rows in one transaction and never touches storage, unlike `deleteItem`. Two ways to find the objects: the `fileUrl` column of the user's items (read before the transaction), or every object under the `users/<id>/` key prefix (`keyPrefix` in `src/lib/uploads.ts`), which would also catch uploads abandoned before their item was saved — a known source of orphans the File Upload feature recorded. The prefix route needs a list-and-delete in `src/lib/r2.ts`, which exports only put/get/delete today
+- **Checkout toast.** `CheckoutBanner` (`src/components/settings/CheckoutBanner.tsx`) fires from `?checkout=success` alone, and anyone can visit that URL. The settings page already has the billing status in hand, so passing `isPro` down costs no query. Whether it should also refresh itself once the webhook lands is a decision for `start`
+- **Titles today.** The root layout sets `title: 'Devfetch'`; settings, profile and the four auth pages use `· DevFetch`; dashboard, items, `/items/[type]`, collections, `/collections/[id]`, favorites and upgrade use `| Devfetch`; the homepage has its own full title. Dynamic titles (`/items/[type]`, `/collections/[id]`) come from `generateMetadata` and need the same change
+- **Splitting.** `coding-standards.md` asks for functions under 50 lines and tests only for `src/actions` and `src/lib`, so the split is only worth it where logic lands somewhere testable — the chaos physics clearly does; for the palette and drawer the benefit is mostly readability. The homepage physics were verified by driving them (repel radius, wall bounces, reduced motion, pause offscreen) in the Homepage feature — the same checks re-run afterwards are the regression test
+- **Billing result shape.** The success-is-a-redirect reasoning in `src/types/billing.ts` stays; only the discriminant is added
+- **Decisions for `start`:**
+  - Open checkout sessions: expire them and create a fresh one, or reuse the open one (only possible when the interval matches)?
+  - Losing customer in the race: leave it orphaned in Stripe, or delete it?
+  - R2 cleanup: delete the items' `fileUrl`s, or everything under the user's key prefix?
+  - Checkout toast: message only, or also refresh the page once Pro lands?
+  - Carried over from the previous feature, include or leave: the delete-account message when the subscription cancel succeeded but the database delete then failed (it should say the subscription is already cancelled), and renaming the `items.test.ts` test "drops them for a free account too"
+  - Whether the component splits ship in this branch or a separate one — they are the largest and least risky-to-money item, and keeping them separate would keep the billing diff small
+- **Decided at `start`:** expire every open Checkout Session for the customer and create a fresh one; delete everything under `users/<id>/` on account delete; the toast changes its message only, with no polling; the race-losing Stripe customer is deleted rather than left orphaned; both carry-overs are included; and the component splits ship on this branch
+- **Testing:** no database, no Stripe, no R2 network — mock at the module boundary as the existing action tests do. Mutations restored from **file backups, never `git checkout`**. Live checks against the Stripe sandbox and dev branch need the user's go-ahead for writes, per `CLAUDE.md`
+- No migration expected
 
 ## History
 

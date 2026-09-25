@@ -237,3 +237,9 @@ export interface DeletedItem {
   deleted: boolean;
   fileKey: string | null;
 }
+
+/** What the item drawer knows while its detail request is in flight. */
+export type ItemDetailStatus = 'loading' | 'loaded' | 'error';
+
+/** Whether the item drawer is reading the item or editing it in place. */
+export type ItemDrawerMode = 'view' | 'edit';

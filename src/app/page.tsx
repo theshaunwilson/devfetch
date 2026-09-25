@@ -12,7 +12,8 @@ import { isProUser } from '@/lib/db/billing';
 import { getCurrentUser } from '@/lib/db/user';
 
 export const metadata: Metadata = {
-  title: 'DevFetch — One place for everything you keep',
+  // The homepage leads with the brand, so it opts out of the template.
+  title: { absolute: 'DevFetch — One place for everything you keep' },
   description:
     'DevFetch is a searchable hub for the snippets, prompts, commands, notes, files and links developers scatter across a dozen tools.',
 };

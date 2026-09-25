@@ -12,8 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { formatLongDate } from '@/lib/format';
 import { usesCodeEditor, usesMarkdownEditor } from '@/lib/items';
 import { isImageUploadType } from '@/lib/uploads';
-import type { ItemDetailStatus } from '@/components/items/ItemDrawerProvider';
-import type { DashboardItem, ItemDetail } from '@/types/item';
+import type { DashboardItem, ItemDetail, ItemDetailStatus } from '@/types/item';
 
 function SectionLabel({ icon: Icon, children }: { icon?: LucideIcon; children: React.ReactNode }) {
   return (

@@ -222,8 +222,16 @@ export function validateUpload({
   return { ok: true, contentType };
 }
 
-/** Where one user's objects live. The trailing slash is part of the boundary. */
-function keyPrefix(userId: string): string {
+/**
+ * Where one user's objects live. The trailing slash is part of the boundary —
+ * without it `users/user_1` would also match `users/user_10/…`.
+ *
+ * Throws on an empty id rather than returning `users//`, since the one caller
+ * that deletes by prefix must never be handed a prefix that names nobody.
+ */
+export function userKeyPrefix(userId: string): string {
+  if (!userId) throw new Error('A key prefix needs a user id');
+
   return `users/${userId}/`;
 }
 
@@ -236,7 +244,7 @@ function keyPrefix(userId: string): string {
  * after `validateUpload` has accepted it.
  */
 export function buildObjectKey(userId: string, extension: string, id: string): string {
-  return `${keyPrefix(userId)}${id}${extension}`;
+  return `${userKeyPrefix(userId)}${id}${extension}`;
 }
 
 /**
@@ -253,9 +261,9 @@ export function buildObjectKey(userId: string, extension: string, id: string): s
  * characters while naming something else entirely.
  */
 export function keyBelongsTo(key: string, userId: string): boolean {
-  if (!userId || !key.startsWith(keyPrefix(userId))) return false;
+  if (!userId || !key.startsWith(userKeyPrefix(userId))) return false;
 
-  const rest = key.slice(keyPrefix(userId).length);
+  const rest = key.slice(userKeyPrefix(userId).length);
 
   // One path segment, no traversal, and an extension we would have minted.
   return /^[A-Za-z0-9-]+\.[a-z0-9]+$/.test(rest);

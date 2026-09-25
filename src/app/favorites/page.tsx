@@ -5,7 +5,7 @@ import { getFavoriteCollections } from '@/lib/db/collections';
 import { getFavoriteItems } from '@/lib/db/items';
 
 export const metadata: Metadata = {
-  title: 'Favorites | Devfetch',
+  title: 'Favorites',
 };
 
 // Reads the signed-in user's favorites per request, so it cannot be

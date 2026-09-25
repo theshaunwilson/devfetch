@@ -18,7 +18,7 @@ import { getItemStats } from '@/lib/db/items';
 import { getEditorPreferences, getProfileUser } from '@/lib/db/user';
 
 export const metadata: Metadata = {
-  title: 'Settings · DevFetch',
+  title: 'Settings',
 };
 
 // Reads the session user per request, so it cannot be prerendered.
@@ -58,7 +58,7 @@ export default async function SettingsPage() {
           never prerendered, but `useSearchParams` wants the boundary either
           way. It renders nothing, so there is nothing to fall back to. */}
       <Suspense fallback={null}>
-        <CheckoutBanner />
+        <CheckoutBanner isPro={billing?.isPro ?? false} />
       </Suspense>
 
       <Button asChild variant="ghost" size="sm" className="self-start">

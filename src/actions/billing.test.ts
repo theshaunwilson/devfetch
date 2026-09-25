@@ -44,14 +44,19 @@ const CUSTOMER_ID = 'cus_existing';
 
 const listSubscriptions = vi.fn();
 const createCustomer = vi.fn();
+const deleteCustomer = vi.fn();
+const listCheckouts = vi.fn();
+const expireCheckout = vi.fn();
 const createCheckout = vi.fn();
 const createPortal = vi.fn();
 
 /** Only the three calls the actions make; the real client has hundreds. */
 const stripeClient = {
   subscriptions: { list: listSubscriptions },
-  customers: { create: createCustomer },
-  checkout: { sessions: { create: createCheckout } },
+  customers: { create: createCustomer, del: deleteCustomer },
+  checkout: {
+    sessions: { create: createCheckout, list: listCheckouts, expire: expireCheckout },
+  },
   billingPortal: { sessions: { create: createPortal } },
 };
 
@@ -69,6 +74,11 @@ beforeEach(() => {
   priceId.mockReturnValue('price_monthly');
   listSubscriptions.mockResolvedValue({ data: [] });
   createCustomer.mockResolvedValue({ id: 'cus_new' });
+  // Wins the link unless a test says otherwise, so the row names what was made.
+  linkCustomer.mockImplementation(async (_userId: string, customerId: string) => customerId);
+  deleteCustomer.mockResolvedValue({ deleted: true });
+  listCheckouts.mockResolvedValue({ data: [] });
+  expireCheckout.mockResolvedValue({});
   createCheckout.mockResolvedValue({ url: 'https://checkout.stripe.com/c/pay/abc' });
   createPortal.mockResolvedValue({ url: 'https://billing.stripe.com/p/session/xyz' });
   goTo.mockImplementation((url: string) => {
@@ -93,6 +103,7 @@ describe('startCheckout, refusals', () => {
     session.mockResolvedValue(null as unknown as never);
 
     await expect(startCheckout('monthly')).resolves.toEqual({
+      success: false,
       error: 'Your session has expired. Sign in again.',
     });
     expect(stripe).not.toHaveBeenCalled();
@@ -116,6 +127,7 @@ describe('startCheckout, refusals', () => {
     });
 
     await expect(startCheckout('monthly')).resolves.toEqual({
+      success: false,
       error: 'You are already on Pro. Use Manage billing to change your plan.',
     });
     expect(createCheckout).not.toHaveBeenCalled();
@@ -167,9 +179,89 @@ describe('startCheckout, the Stripe customer', () => {
   it('stamps the user id on the customer it creates', async () => {
     await expect(startCheckout('monthly')).rejects.toThrow('NEXT_REDIRECT');
 
-    expect(createCustomer).toHaveBeenCalledWith(
-      expect.objectContaining({ metadata: { userId: USER_ID } }),
+    expect(createCustomer.mock.calls[0][0]).toMatchObject({ metadata: { userId: USER_ID } });
+  });
+
+  /**
+   * The race. Two first checkouts started at once — `/upgrade` in one tab,
+   * `/settings` in another — each reach `customers.create`. The idempotency key
+   * makes Stripe hand both the same customer, and the conditional link means a
+   * customer that still lost is never the one a checkout is opened on.
+   */
+  it('creates the customer under a per-user idempotency key', async () => {
+    await expect(startCheckout('monthly')).rejects.toThrow('NEXT_REDIRECT');
+
+    expect(createCustomer.mock.calls[0][1]).toEqual({ idempotencyKey: `customer-${USER_ID}` });
+  });
+
+  it('opens the checkout on the customer the row holds when another request linked first', async () => {
+    linkCustomer.mockResolvedValue('cus_winner');
+
+    await expect(startCheckout('monthly')).rejects.toThrow('NEXT_REDIRECT');
+
+    expect(checkoutArgs().customer).toBe('cus_winner');
+  });
+
+  it('deletes the customer that lost the link, since nothing will ever hold it', async () => {
+    linkCustomer.mockResolvedValue('cus_winner');
+
+    await expect(startCheckout('monthly')).rejects.toThrow('NEXT_REDIRECT');
+
+    expect(deleteCustomer).toHaveBeenCalledWith('cus_new');
+  });
+
+  it('deletes nothing when its own customer won the link', async () => {
+    await expect(startCheckout('monthly')).rejects.toThrow('NEXT_REDIRECT');
+
+    expect(deleteCustomer).not.toHaveBeenCalled();
+  });
+
+  it('still opens the checkout when tidying up the losing customer fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    linkCustomer.mockResolvedValue('cus_winner');
+    deleteCustomer.mockRejectedValue(new Error('Stripe unreachable'));
+
+    await expect(startCheckout('monthly')).rejects.toThrow('NEXT_REDIRECT');
+
+    expect(checkoutArgs().customer).toBe('cus_winner');
+  });
+});
+
+/**
+ * An open session has no subscription yet, so the already-subscribed guard
+ * cannot see it — two tabs left open could both be paid. Expiring them first
+ * means only the newest checkout can ever be completed.
+ */
+describe('startCheckout, open sessions', () => {
+  beforeEach(() => {
+    billing.mockResolvedValue({
+      isPro: false,
+      stripeCustomerId: CUSTOMER_ID,
+      stripeSubscriptionId: null,
+    });
+  });
+
+  it('expires every open session for the customer before opening a new one', async () => {
+    listCheckouts.mockResolvedValue({ data: [{ id: 'cs_one' }, { id: 'cs_two' }] });
+
+    await expect(startCheckout('monthly')).rejects.toThrow('NEXT_REDIRECT');
+
+    expect(listCheckouts).toHaveBeenCalledWith(
+      expect.objectContaining({ customer: CUSTOMER_ID, status: 'open' }),
     );
+    expect(expireCheckout.mock.calls.map(([id]) => id)).toEqual(['cs_one', 'cs_two']);
+    expect(expireCheckout.mock.invocationCallOrder.at(-1)).toBeLessThan(
+      createCheckout.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('fails closed when an open session cannot be expired, opening nothing', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    listCheckouts.mockResolvedValue({ data: [{ id: 'cs_one' }] });
+    expireCheckout.mockRejectedValue(new Error('Stripe unreachable'));
+
+    await expect(startCheckout('monthly')).resolves.toMatchObject({ success: false });
+    expect(createCheckout).not.toHaveBeenCalled();
   });
 });
 
@@ -233,6 +325,7 @@ describe('openBillingPortal', () => {
     });
 
     await expect(openBillingPortal()).resolves.toEqual({
+      success: false,
       error: 'There is no billing account to manage yet.',
     });
     expect(createCustomer).not.toHaveBeenCalled();

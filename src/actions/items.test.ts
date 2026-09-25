@@ -470,7 +470,10 @@ describe('createItem, with a file', () => {
     });
   });
 
-  it('drops them for a free account too, so they cannot route round the upload gate', async () => {
+  it('drops them even when the key is the user’s own, so no text item ever holds a file', async () => {
+    // A valid key of their own passes `keyBelongsTo` — so without this rule a
+    // note could hold an upload, sidestepping the Pro check that only runs for
+    // file types.
     findType.mockResolvedValue({ id: 'type_1', slug: 'note' });
 
     await createItem({ ...file, typeId: 'type_1' });

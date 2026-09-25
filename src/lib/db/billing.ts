@@ -60,20 +60,44 @@ export const getBillingStatus = cache(async (): Promise<BillingStatus | null> =>
 });
 
 /**
- * Records the Stripe customer against the user.
+ * Records the Stripe customer against the user, unless one is already there,
+ * and returns whichever customer the row now holds.
  *
  * Separate from the webhook's write because it runs inside the checkout
  * request, before any event arrives — which is what lets the webhook resolve
  * a user by `stripeCustomerId` rather than trusting metadata.
+ *
+ * **Conditional, never last-write-wins.** Two first checkouts started at once
+ * each create a customer; an unconditional write would leave the row naming
+ * the second while the first tab's session sits on a customer nobody holds —
+ * so paying that tab would never grant Pro, and the duplicate-subscription
+ * guard would be checking the wrong customer. Matching on
+ * `stripeCustomerId: null` in the `where` lets exactly one write land; the
+ * loser reads back the winner's id and uses that instead.
+ *
+ * Throws when the row has gone entirely, since there is no customer to use.
  */
 export async function linkStripeCustomer(
   userId: string,
   stripeCustomerId: string,
-): Promise<void> {
-  await prisma.user.update({
-    where: { id: userId },
+): Promise<string> {
+  const result = await prisma.user.updateMany({
+    where: { id: userId, stripeCustomerId: null },
     data: { stripeCustomerId },
   });
+
+  if (result.count > 0) return stripeCustomerId;
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { stripeCustomerId: true },
+  });
+
+  if (!user?.stripeCustomerId) {
+    throw new Error(`Could not link a Stripe customer to user ${userId}`);
+  }
+
+  return user.stripeCustomerId;
 }
 
 /**

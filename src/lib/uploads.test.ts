@@ -16,6 +16,7 @@ import {
   keyBelongsTo,
   uploadConstraintsFor,
   usesFileList,
+  userKeyPrefix,
   usesFileUpload,
   validateUpload,
 } from './uploads';
@@ -280,6 +281,18 @@ describe('buildObjectKey', () => {
 
   it('produces a key that passes its own ownership check', () => {
     expect(keyBelongsTo(buildObjectKey(USER, '.png', 'abc-123'), USER)).toBe(true);
+  });
+});
+
+describe('userKeyPrefix', () => {
+  it('ends in a slash, so user_1 cannot match user_10’s objects', () => {
+    expect(userKeyPrefix('user_1')).toBe('users/user_1/');
+  });
+
+  it('throws on an empty id rather than returning a prefix that names nobody', () => {
+    // `users//` would never match a real key, but the prefix delete should
+    // never be handed a value that was built from nothing.
+    expect(() => userKeyPrefix('')).toThrow();
   });
 });
 

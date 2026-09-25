@@ -12,7 +12,8 @@ import { isActiveSubscriptionStatus, pickLiveSubscription } from '@/lib/stripe-e
  * `isPro` is a cache the webhook fills; Stripe is the authority. Every question
  * that decides money or access — is this account paying, may it open another
  * checkout, what must be cancelled before it is deleted — asks Stripe through
- * here, so all three read the same list through the same predicate.
+ * here, so all three read the same list through the same predicate. It also
+ * closes Checkout Sessions left open, which have no subscription to find yet.
  */
 
 /**
@@ -72,4 +73,29 @@ export async function cancelLiveSubscriptions(customerId: string): Promise<numbe
   }
 
   return live.length;
+}
+
+/**
+ * Expires every Checkout Session still open for the customer, returning how
+ * many it closed.
+ *
+ * An open session is invisible to `listLiveSubscriptions` — the subscription
+ * only exists once it is paid — so without this, two open tabs could both be
+ * completed and bill the account twice. Called before a new session is
+ * created, so only the newest checkout can ever be paid. Throws on failure,
+ * and the caller must not open another session when it does.
+ */
+export async function expireOpenCheckouts(customerId: string): Promise<number> {
+  const stripe = getStripe();
+  const open = await stripe.checkout.sessions.list({
+    customer: customerId,
+    status: 'open',
+    limit: 100,
+  });
+
+  for (const session of open.data) {
+    await stripe.checkout.sessions.expire(session.id);
+  }
+
+  return open.data.length;
 }

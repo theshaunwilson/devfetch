@@ -8,7 +8,9 @@ import { hashPassword } from '@/lib/auth/password';
 import { allScopedIdentifiers } from '@/lib/auth/token-scopes';
 import { SIGN_IN_PATH } from '@/lib/auth-redirect';
 import { prisma } from '@/lib/prisma';
+import { deleteObjectsWithPrefix } from '@/lib/r2';
 import { cancelLiveSubscriptions } from '@/lib/stripe-subscriptions';
+import { userKeyPrefix } from '@/lib/uploads';
 import { changePasswordSchema, deleteAccountSchema } from '@/lib/validation/auth';
 
 /**
@@ -116,6 +118,11 @@ export async function deleteAccount(
     return { fieldErrors: z.flattenError(parsed.error).fieldErrors };
   }
 
+  // How many subscriptions were cancelled before the delete was attempted, so
+  // a delete that then fails can say billing has already stopped.
+  let cancelled = 0;
+  let deletedUserId: string;
+
   try {
     const user = await getSessionAccount();
 
@@ -136,7 +143,7 @@ export async function deleteAccount(
     // account that never checked out has no customer and makes no call.
     if (user.stripeCustomerId) {
       try {
-        await cancelLiveSubscriptions(user.stripeCustomerId);
+        cancelled = await cancelLiveSubscriptions(user.stripeCustomerId);
       } catch (error) {
         console.error('Could not cancel the subscription before deleting the account:', error);
 
@@ -173,10 +180,32 @@ export async function deleteAccount(
       // Cascades to Account and Session.
       prisma.user.delete({ where: { id: user.id } }),
     ]);
+
+    deletedUserId = user.id;
   } catch (error) {
     console.error('Could not delete the account:', error);
 
-    return { error: 'Could not delete your account. Please try again.' };
+    // The cancel already happened and cannot be undone, so the user has to be
+    // told — otherwise they would find an account still here and quietly back
+    // on the free plan with no idea why.
+    return {
+      error:
+        cancelled > 0
+          ? 'Your subscription was cancelled, but your account could not be deleted. Please try again.'
+          : 'Could not delete your account. Please try again.',
+    };
+  }
+
+  // The account's stored files, after the rows and deliberately not fatal —
+  // the same call `deleteItem` makes. The account is already gone, so a
+  // storage failure must not report the delete as having failed; what it
+  // leaves behind is orphaned objects, which cost storage and nothing else.
+  // The whole `users/<id>/` prefix rather than the items' keys, which also
+  // catches uploads abandoned before their item was ever saved.
+  try {
+    await deleteObjectsWithPrefix(userKeyPrefix(deletedUserId));
+  } catch (error) {
+    console.error('Account %s was deleted but its files were not:', deletedUserId, error);
   }
 
   // Throws NEXT_REDIRECT, so nothing below runs — outside the try for exactly
