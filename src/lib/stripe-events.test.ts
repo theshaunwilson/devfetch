@@ -1,19 +1,19 @@
 /**
  * The webhook route itself gets no unit test — `coding-standards.md` scopes the
  * suite to server actions and utilities, which is why `/api/uploads` and
- * `/api/auth/register` have none either. Its one piece of real judgement lives
- * here instead, as a pure function, so the rule it enforces can be pinned:
- * **state comes from `subscription.status`, never from which event arrived.**
- *
- * That is not a stylistic preference. Stripe does not guarantee delivery
- * order, so a handler keyed on `event.type` leaves the account on whichever
- * event happened to land last — and the two events that most often cross are
- * exactly the ones that disagree.
+ * `/api/auth/register` have none either. Its pure pieces live here instead:
+ * which customer an event names, and which live subscription an account
+ * follows. The rule they serve — **state comes from Stripe, never from the
+ * event** — is pinned end to end in `stripe-subscriptions.test.ts`.
  */
 import { describe, expect, it } from 'vitest';
 import type Stripe from 'stripe';
 
-import { isActiveSubscriptionStatus, subscriptionIntentFrom } from './stripe-events';
+import {
+  isActiveSubscriptionStatus,
+  pickLiveSubscription,
+  subscriptionCustomerFrom,
+} from './stripe-events';
 
 const CUSTOMER = 'cus_123';
 const SUBSCRIPTION = 'sub_456';
@@ -72,82 +72,98 @@ describe('isActiveSubscriptionStatus', () => {
   );
 });
 
-describe('subscriptionIntentFrom', () => {
-  it('activates on a completed subscription checkout', () => {
-    expect(subscriptionIntentFrom(checkoutEvent())).toEqual({
-      kind: 'activate',
-      customerId: CUSTOMER,
-      subscriptionId: SUBSCRIPTION,
-    });
+describe('subscriptionCustomerFrom', () => {
+  it('names the customer of a completed subscription checkout', () => {
+    expect(subscriptionCustomerFrom(checkoutEvent())).toBe(CUSTOMER);
   });
 
   it('ignores a checkout that was not paying for a subscription', () => {
-    // A one-off payment must never grant Pro.
-    expect(subscriptionIntentFrom(checkoutEvent({ mode: 'payment' }))).toBeNull();
+    // A one-off payment must never trigger a resync.
+    expect(subscriptionCustomerFrom(checkoutEvent({ mode: 'payment' }))).toBeNull();
   });
 
-  it('ignores a checkout with no subscription to record', () => {
-    expect(subscriptionIntentFrom(checkoutEvent({ subscription: null }))).toBeNull();
+  it('ignores a checkout with no subscription on it', () => {
+    expect(subscriptionCustomerFrom(checkoutEvent({ subscription: null }))).toBeNull();
   });
 
-  it('ignores a checkout with no customer to key the write on', () => {
-    expect(subscriptionIntentFrom(checkoutEvent({ customer: null }))).toBeNull();
+  it('ignores a checkout with no customer to resync', () => {
+    expect(subscriptionCustomerFrom(checkoutEvent({ customer: null }))).toBeNull();
   });
 
   it('reads an expanded customer object as well as a bare id', () => {
     expect(
-      subscriptionIntentFrom(
+      subscriptionCustomerFrom(
         checkoutEvent({ customer: { id: CUSTOMER }, subscription: { id: SUBSCRIPTION } }),
       ),
-    ).toMatchObject({ customerId: CUSTOMER, subscriptionId: SUBSCRIPTION });
+    ).toBe(CUSTOMER);
   });
 
   /**
-   * The heart of it. Each of these pairs an event type with a status that
-   * disagrees with it, so anything reading the type rather than the status
-   * gets every one of them backwards.
+   * Every subscription event names its customer whatever its type or status
+   * says — both are a snapshot that can be stale by the time it lands, so the
+   * webhook resyncs from Stripe instead of reading either.
    */
-  it('deactivates on an `updated` that is past_due, not just on `deleted`', () => {
-    expect(subscriptionIntentFrom(subscriptionEvent('updated', 'past_due'))).toMatchObject({
-      kind: 'deactivate',
-    });
-  });
-
-  it('deactivates on a `created` that is incomplete, so an unpaid start grants nothing', () => {
-    expect(subscriptionIntentFrom(subscriptionEvent('created', 'incomplete'))).toMatchObject({
-      kind: 'deactivate',
-    });
-  });
-
-  it('activates on a `deleted` whose status is somehow still active', () => {
-    // Contrived on purpose: it is the case that separates reading the status
-    // from reading the event name, and the status is what Stripe means.
-    expect(subscriptionIntentFrom(subscriptionEvent('deleted', 'active'))).toMatchObject({
-      kind: 'activate',
-    });
-  });
-
-  it('deactivates on a cancelled subscription', () => {
-    expect(subscriptionIntentFrom(subscriptionEvent('deleted', 'canceled'))).toEqual({
-      kind: 'deactivate',
-      customerId: CUSTOMER,
-      subscriptionId: SUBSCRIPTION,
-    });
-  });
-
-  it('carries the subscription id on a deactivation, which the ordering guard matches on', () => {
-    expect(subscriptionIntentFrom(subscriptionEvent('deleted', 'canceled', { id: 'sub_old' })))
-      .toMatchObject({ subscriptionId: 'sub_old' });
+  it.each([
+    ['created', 'incomplete'],
+    ['updated', 'active'],
+    ['updated', 'past_due'],
+    ['deleted', 'canceled'],
+  ] as const)('names the customer of a `%s` event that is %s', (type, status) => {
+    expect(subscriptionCustomerFrom(subscriptionEvent(type, status))).toBe(CUSTOMER);
   });
 
   it('ignores a subscription event with no customer', () => {
-    expect(subscriptionIntentFrom(subscriptionEvent('updated', 'active', { customer: null })))
+    expect(subscriptionCustomerFrom(subscriptionEvent('updated', 'active', { customer: null })))
       .toBeNull();
   });
 
   it('ignores an event type we do not subscribe to', () => {
     const event = { type: 'invoice.paid', data: { object: {} } } as unknown as Stripe.Event;
 
-    expect(subscriptionIntentFrom(event)).toBeNull();
+    expect(subscriptionCustomerFrom(event)).toBeNull();
+  });
+});
+
+describe('pickLiveSubscription', () => {
+  const sub = (id: string, status: Stripe.Subscription.Status, created: number) => ({
+    id,
+    status,
+    created,
+  });
+
+  it('is null when nothing is live, so Pro is revoked', () => {
+    expect(
+      pickLiveSubscription([sub('sub_a', 'canceled', 1), sub('sub_b', 'past_due', 2)]),
+    ).toBeNull();
+  });
+
+  it('is null for a customer with no subscriptions at all', () => {
+    expect(pickLiveSubscription([])).toBeNull();
+  });
+
+  it('picks the live one over a newer one that is not', () => {
+    expect(
+      pickLiveSubscription([sub('sub_old', 'active', 1), sub('sub_new', 'canceled', 2)])?.id,
+    ).toBe('sub_old');
+  });
+
+  it('counts a trial as live', () => {
+    expect(pickLiveSubscription([sub('sub_trial', 'trialing', 1)])?.id).toBe('sub_trial');
+  });
+
+  it('picks the most recently created when two are live, whatever order they arrive in', () => {
+    const older = sub('sub_z', 'active', 1);
+    const newer = sub('sub_a', 'active', 2);
+
+    expect(pickLiveSubscription([older, newer])?.id).toBe('sub_a');
+    expect(pickLiveSubscription([newer, older])?.id).toBe('sub_a');
+  });
+
+  it('breaks a tie on creation time by id, so the answer never depends on list order', () => {
+    const a = sub('sub_a', 'active', 5);
+    const b = sub('sub_b', 'active', 5);
+
+    expect(pickLiveSubscription([a, b])?.id).toBe('sub_b');
+    expect(pickLiveSubscription([b, a])?.id).toBe('sub_b');
   });
 });

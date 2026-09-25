@@ -167,8 +167,18 @@ export async function createItem(data: CreateItemInput): Promise<CreateItemResul
     // what was checked — for the type and the collections alike. `contentType`
     // is decided here from the resolved slug rather than taken from the payload,
     // so a text item cannot claim to be a file — or the other way round.
+    //
+    // The file fields follow the same rule. The schema accepts them for every
+    // type, and the key and Pro checks above run only for a type that takes a
+    // file — so for any other type they would reach the row unchecked, and a
+    // snippet naming somebody else's key could then read that object through
+    // `/api/files/[id]` and delete it through `deleteItem`.
+    const fileFields = required.file
+      ? {}
+      : { fileUrl: null, fileName: null, fileSize: null };
+
     const outcome = await createItemRow(
-      { ...parsed.data, typeId: type.id, collectionIds: collections.ids },
+      { ...parsed.data, ...fileFields, typeId: type.id, collectionIds: collections.ids },
       required.file ? 'file' : 'text',
       isPro,
     );
@@ -265,7 +275,12 @@ export async function deleteItem(itemId: string): Promise<DeleteItemResult> {
       return { success: false, error: 'That item could not be found.' };
     }
 
-    if (fileKey) {
+    // Only a key this user minted. `createItem` no longer writes one on any
+    // other terms, but a row from before that check — or from any future path
+    // that forgets it — must not be able to delete somebody else's object.
+    if (fileKey && !keyBelongsTo(fileKey, session.user.id)) {
+      console.warn('Item %s named a file key its owner did not upload; left it alone.', itemId);
+    } else if (fileKey) {
       // Deliberately after the row, and deliberately not fatal. The row is what
       // the user asked to remove and it is already gone, so a storage failure
       // must not report the delete as having failed — it would invite a retry

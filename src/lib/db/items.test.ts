@@ -678,6 +678,31 @@ describe('getItemFile', () => {
 
     await expect(getItemFile(ITEM_ID)).resolves.toBeNull();
   });
+
+  /**
+   * Defence in depth behind `createItem`, which no longer writes a key for a
+   * type that takes no file. A row from before that check — or any future path
+   * that forgets it — must still not serve somebody else's object: owning the
+   * item is what authorises the read, so the item has to be a file item holding
+   * a key this user minted.
+   */
+  it('returns null for a key on an item whose type takes no file', async () => {
+    lookup.mockResolvedValue(fileRow({ type: { slug: 'snippet' } }));
+
+    await expect(getItemFile(ITEM_ID)).resolves.toBeNull();
+  });
+
+  it('returns null for a key that another user uploaded', async () => {
+    lookup.mockResolvedValue(fileRow({ fileUrl: 'users/user_2/abc-123.pdf' }));
+
+    await expect(getItemFile(ITEM_ID)).resolves.toBeNull();
+  });
+
+  it('serves an image item as well as a file item', async () => {
+    lookup.mockResolvedValue(fileRow({ fileUrl: `users/${USER_ID}/abc-123.png`, type: { slug: 'image' } }));
+
+    await expect(getItemFile(ITEM_ID)).resolves.toMatchObject({ typeSlug: 'image' });
+  });
 });
 
 describe('createItem, with a file', () => {

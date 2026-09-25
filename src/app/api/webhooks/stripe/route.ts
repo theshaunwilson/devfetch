@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 
-import { applySubscriptionState, clearSubscriptionState } from '@/lib/db/billing';
 import { getStripe } from '@/lib/stripe';
-import { subscriptionIntentFrom } from '@/lib/stripe-events';
+import { subscriptionCustomerFrom } from '@/lib/stripe-events';
+import { syncSubscriptionState } from '@/lib/stripe-subscriptions';
 
 /**
  * Stripe's webhook endpoint — the one route in this app that no session
@@ -13,11 +13,15 @@ import { subscriptionIntentFrom } from '@/lib/stripe-events';
  * header is what proves it. That signature is the entire authentication story
  * here, which is why an unset secret is a 500 rather than a shrug — see below.
  *
- * **Idempotency needs no dedupe table.** Both writes set absolute values —
- * `applySubscriptionState` sets `isPro` and the subscription id outright rather
- * than toggling anything — so applying the same event twice changes nothing the
- * second time. That is what makes it safe to answer 500 on a handler error and
- * let Stripe retry.
+ * **An event names a customer; Stripe says what their state is.** The event's
+ * own snapshot is never written, because Stripe does not guarantee delivery
+ * order — see `src/lib/stripe-events.ts`. `syncSubscriptionState` fetches the
+ * customer's current subscriptions instead, so the order events arrive in
+ * cannot change the outcome.
+ *
+ * **Idempotency needs no dedupe table.** The write sets absolute values, so
+ * handling the same event twice changes nothing the second time. That is what
+ * makes it safe to answer 500 on a handler error and let Stripe retry.
  *
  * Runs on Node rather than the edge: `@/lib/db/billing` reaches Prisma.
  */
@@ -61,35 +65,30 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
   }
 
-  const intent = subscriptionIntentFrom(event);
+  const customerId = subscriptionCustomerFrom(event);
 
   // An event we do not act on — a type we did not subscribe to, a one-off
-  // payment, or one missing the ids a write needs. Acknowledged, so Stripe
-  // stops sending it.
-  if (!intent) {
+  // payment, or one with no customer to resync. Acknowledged, so Stripe stops
+  // sending it.
+  if (!customerId) {
     return NextResponse.json({ received: true });
   }
 
   try {
-    const matched =
-      intent.kind === 'activate'
-        ? await applySubscriptionState(intent.customerId, intent.subscriptionId, true)
-        : await clearSubscriptionState(intent.customerId, intent.subscriptionId);
+    const matched = await syncSubscriptionState(customerId);
 
     if (!matched) {
-      // No row held that customer — or, for a deactivation, not that
-      // subscription. Both are 200: a retry would resolve neither, so Stripe
-      // would be left redelivering an event forever. Logged, because an
-      // unknown customer is worth knowing about.
-      console.warn(
-        `Stripe webhook: ${event.type} (${intent.kind}) matched no user for customer ${intent.customerId}.`,
-      );
+      // No row holds that customer. 200 all the same: a retry would not
+      // resolve it, so Stripe would be left redelivering an event forever — an
+      // account deleted after its subscriptions were cancelled lands here.
+      // Logged, because an unknown customer is worth knowing about.
+      console.warn(`Stripe webhook: ${event.type} matched no user for customer ${customerId}.`);
     }
 
     return NextResponse.json({ received: true });
   } catch (error) {
-    // 500 so Stripe retries. Safe precisely because the handlers are
-    // idempotent — a retry re-applies the same absolute state.
+    // 500 so Stripe retries — a Stripe API failure as much as a database one.
+    // Safe precisely because the write is idempotent.
     console.error(`Stripe webhook: handling ${event.type} failed.`, error);
 
     return NextResponse.json({ error: 'Handler failed' }, { status: 500 });

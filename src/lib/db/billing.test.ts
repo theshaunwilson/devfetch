@@ -24,7 +24,6 @@ const { auth } = await import('@/auth');
 const { prisma } = await import('@/lib/prisma');
 const {
   applySubscriptionState,
-  clearSubscriptionState,
   getBillingStatus,
   isProUser,
   linkStripeCustomer,
@@ -257,50 +256,5 @@ describe('applySubscriptionState', () => {
     await applySubscriptionState(CUSTOMER_ID, SUBSCRIPTION_ID, true);
 
     expect(session).not.toHaveBeenCalled();
-  });
-});
-
-/**
- * The ordering guard. Stripe does not guarantee delivery order, so a `deleted`
- * for a subscription the account has already replaced can arrive *after* the
- * `created` for its replacement — and revoke a live subscription if the write
- * keyed on the customer alone.
- */
-describe('clearSubscriptionState', () => {
-  it('matches on the subscription as well as the customer', async () => {
-    updateMany.mockResolvedValue({ count: 1 });
-
-    await clearSubscriptionState(CUSTOMER_ID, SUBSCRIPTION_ID);
-
-    const [args] = updateMany.mock.calls[0] as [{ where: Record<string, unknown> }];
-
-    // Both, not just the customer. This is the guard.
-    expect(args.where).toEqual({
-      stripeCustomerId: CUSTOMER_ID,
-      stripeSubscriptionId: SUBSCRIPTION_ID,
-    });
-  });
-
-  it('revokes Pro and clears the subscription id', async () => {
-    updateMany.mockResolvedValue({ count: 1 });
-
-    await clearSubscriptionState(CUSTOMER_ID, SUBSCRIPTION_ID);
-
-    const [args] = updateMany.mock.calls[0] as [{ data: Record<string, unknown> }];
-
-    expect(args.data).toEqual({ isPro: false, stripeSubscriptionId: null });
-  });
-
-  it('reports no match rather than throwing, so a stale event is not retried forever', async () => {
-    // Exactly what a stale `deleted` for a replaced subscription looks like.
-    updateMany.mockResolvedValue({ count: 0 });
-
-    await expect(clearSubscriptionState(CUSTOMER_ID, 'sub_old')).resolves.toBe(false);
-  });
-
-  it('reports a match when a row was revoked', async () => {
-    updateMany.mockResolvedValue({ count: 1 });
-
-    await expect(clearSubscriptionState(CUSTOMER_ID, SUBSCRIPTION_ID)).resolves.toBe(true);
   });
 });

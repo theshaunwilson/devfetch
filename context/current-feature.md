@@ -1,12 +1,33 @@
-# Current Feature
+# Current Feature: Code scan high-severity fixes
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
+- **File fields only on file types.** `createItem` stores `fileUrl`, `fileName` and `fileSize` only when the resolved type takes a file (`required.file`), and writes them as `null` for every other type. A snippet posted with somebody else's R2 key must save with no key, so it can neither be read through `GET /api/files/[id]` nor deleted from R2 by `deleteItem`
+- **Defense in depth on the read and delete paths.** `getItemFile` serves an object only when the item's type takes a file, and `deleteItem` only removes an object whose key passes `keyBelongsTo(key, userId)` — so a row written before this fix, or by any future path that forgets the rule, still cannot reach another user's object
+- **Deleting a Pro account stops the billing.** `deleteAccount` cancels every live Stripe subscription on the user's customer **before** the database transaction, and **fails closed**: if Stripe cannot be reached or the cancel fails, the account is not deleted and the user sees a retryable error. An account with no `stripeCustomerId` makes no Stripe call at all
+- **`scripts/prune-users.ts` cannot orphan a paying subscription either** — it cancels (or at minimum refuses to prune) users holding a live subscription, per the decision below
+- **Webhook state comes from Stripe, not the event snapshot.** For every subscription event the handler asks Stripe for the customer's current subscriptions and writes the result: `isPro` true with the live subscription's id if one is live (`isActiveSubscriptionStatus`), otherwise `isPro` false with the id cleared. A stale `updated: active` landing after `deleted` then re-derives "no live subscription" and cannot grant Pro, and a late event for an old subscription cannot overwrite the id of a newer one
+- The webhook stays idempotent (absolute writes, no dedupe table), still answers 200 for an unknown customer and 500 on a handler failure — now including a Stripe API failure, so Stripe retries
+- Unit tests for every change, each proven by a mutation: file fields on a non-file type, the read/delete guards, cancel-before-delete and fail-closed, and the webhook's order-independence (the stale-active-after-deleted case and the old-subscription-overwrites-new case)
+
 ## Notes
+
+- Source: the `code-scanner` audit run after the last cleanup — findings 1, 2 and 3 (High). Mediums (two-customer checkout race, R2 objects orphaned on account delete) and Lows (checkout toast, title template, long components, billing result shape) are a **separate follow-up feature**; the scanner's Low #10 (`ProTypeUpgrade` dead file) was a false positive, the file was deleted in `48004b8`
+- **Finding 1 — where the gap is.** `createItemSchema` (`src/lib/validation/items.ts:154-161`) accepts the three file fields for every type. `keyBelongsTo` and the Pro check both sit inside `if (required.file)` in `src/actions/items.ts:115-154`, and `createItemRow` (`src/lib/db/items.ts:481-484`) writes `fileUrl ?? null` regardless. The fix belongs in the action, which has already resolved the type: pass the file fields through only when `required.file`. `contentType` is already decided the same way, so this is the same rule applied to three more columns
+- Finding 1's attack needs a victim's key, which is `users/<id>/<uuid>` — hard to guess, but the delete path is irreversible data loss, and the same hole lets a free account attach pre-gate keys to new items, bypassing the upload gate
+- **Finding 2 — no Stripe call on account delete.** `deleteAccount` (`src/actions/profile.ts:106-169`) runs a Prisma transaction and signs out; nothing in `src/` calls `subscriptions.cancel` or `customers.del`. `getSessionAccount` will need to return `stripeCustomerId`
+- **Finding 3 — the unguarded arm.** `clearSubscriptionState` already matches on the stored subscription id, but `applySubscriptionState(..., true)` matches on customer alone and overwrites the id with whatever the event names, using the event's snapshot status. The planned fix lists the customer's subscriptions (`status: 'all'`) — the same call and predicate `hasLiveSubscription` in `src/actions/billing.ts:44` already uses — so it should be shared rather than written twice. The choice of live subscription when there are several (should never happen, but did once in the sandbox) needs a deterministic rule, and belongs in `src/lib/stripe-events.ts` as a pure function so it is testable without Stripe
+- Consequence of finding 3's fix: the webhook now makes a Stripe API call per event. `subscriptionIntentFrom` stays as the filter deciding *whether* an event is one we act on and which customer it names; it just stops deciding the state
+- **Decisions for `start`:**
+  - Cancel immediately (`subscriptions.cancel`) or delete the customer (`customers.del`, which cancels everything and removes the payment method)? Immediate cancel with no proration refund is the simplest; refunds are out of scope unless asked
+  - `prune-users`: cancel subscriptions for pruned users, or refuse to prune any user with a `stripeCustomerId`? The script runs against dev branches whose test users live in the Stripe sandbox
+  - Whether `stripeSubscriptionId` should still be written by the webhook from the resolved live subscription (planned) — the duplicate-subscription guard and the settings card read it
+- **Testing:** no database, no Stripe network — mock `@/lib/stripe`, `@/lib/prisma` and `@/lib/db/billing` at the module boundary, as `src/actions/billing.test.ts` does. Mutations restored from **file backups, never `git checkout`**. Live verification of the webhook changes needs `stripe listen` against the sandbox; ask before any Stripe write or DB write, per `CLAUDE.md`
+- No migration expected
 
 ## History
 

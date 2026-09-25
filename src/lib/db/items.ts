@@ -10,6 +10,7 @@ import { getCurrentUserId } from '@/lib/db/user';
 import { buildPagination, pageSkip } from '@/lib/pagination';
 import { prisma } from '@/lib/prisma';
 import { SEARCH_PREVIEW_LENGTH } from '@/lib/search';
+import { keyBelongsTo, usesFileUpload } from '@/lib/uploads';
 import type { CreateItemData, UpdateItemData } from '@/lib/validation/items';
 import { Prisma } from '@/generated/prisma/client';
 import { isWithinLimit } from '@/lib/usage-limits';
@@ -412,6 +413,11 @@ export async function getItemFile(id: string): Promise<ItemFile | null> {
   });
 
   if (!item?.fileUrl || !item.fileName) return null;
+
+  // Only a file item, holding a key its owner uploaded. `createItem` no longer
+  // writes a key on any other terms, but a row from before that check must not
+  // be able to serve somebody else's object through the proxy.
+  if (!usesFileUpload(item.type.slug) || !keyBelongsTo(item.fileUrl, userId)) return null;
 
   return {
     key: item.fileUrl,

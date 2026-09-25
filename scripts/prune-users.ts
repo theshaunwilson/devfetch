@@ -1,5 +1,6 @@
 /**
- * Removes every user except the demo account, along with all of their content.
+ * Removes every user except the demo account, along with all of their content —
+ * skipping any account with a Stripe customer, which could still be billed.
  *
  * Built for clearing test accounts off the development branch. Prints what it
  * would delete and changes nothing unless `--yes` is passed.
@@ -50,9 +51,27 @@ interface DoomedUser {
   sessions: number;
 }
 
+/**
+ * Accounts with a Stripe customer are never pruned.
+ *
+ * Deleting the row does not stop Stripe charging: the subscription carries on
+ * with no account left to cancel it from. `deleteAccount` cancels first, but
+ * this script deliberately never calls Stripe — so it leaves those accounts
+ * alone and says so. Cancel in Stripe, clear the columns, then re-run.
+ */
+async function findBilledUsers(prisma: Prisma): Promise<string[]> {
+  const users = await prisma.user.findMany({
+    where: { email: { not: KEEP_EMAIL }, stripeCustomerId: { not: null } },
+    select: { email: true },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  return users.map((user) => user.email);
+}
+
 async function findDoomedUsers(prisma: Prisma): Promise<DoomedUser[]> {
   const users = await prisma.user.findMany({
-    where: { email: { not: KEEP_EMAIL } },
+    where: { email: { not: KEEP_EMAIL }, stripeCustomerId: null },
     select: {
       id: true,
       email: true,
@@ -158,10 +177,18 @@ async function main(): Promise<void> {
       return;
     }
 
+    const billed = await findBilledUsers(prisma);
+
+    if (billed.length > 0) {
+      heading(`Skipped — has a Stripe customer (${billed.length})`);
+
+      for (const email of billed) console.log(`  ${email}`);
+    }
+
     const users = await findDoomedUsers(prisma);
 
     if (users.length === 0) {
-      console.log(`\nNothing to do — ${KEEP_EMAIL} is the only user.`);
+      console.log(`\nNothing to delete.`);
 
       return;
     }

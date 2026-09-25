@@ -452,6 +452,32 @@ describe('createItem, with a file', () => {
     expect(createRow.mock.calls[0][1]).toBe('text');
   });
 
+  /**
+   * The key and Pro checks run only for a type that takes a file, so for any
+   * other type the fields would otherwise reach the row unchecked — and a
+   * snippet naming somebody else's key could read that object through the
+   * proxy and delete it through `deleteItem`.
+   */
+  it('drops the file fields from a type that takes no file, whoever’s key they name', async () => {
+    findType.mockResolvedValue({ id: 'type_1', slug: 'snippet' });
+
+    await createItem({ ...file, typeId: 'type_1', fileUrl: 'users/user_2/abc-123.pdf' });
+
+    expect(createRow.mock.calls[0][0]).toMatchObject({
+      fileUrl: null,
+      fileName: null,
+      fileSize: null,
+    });
+  });
+
+  it('drops them for a free account too, so they cannot route round the upload gate', async () => {
+    findType.mockResolvedValue({ id: 'type_1', slug: 'note' });
+
+    await createItem({ ...file, typeId: 'type_1' });
+
+    expect(createRow.mock.calls[0][0]).toMatchObject({ fileUrl: null });
+  });
+
   it('refuses a file item with no file, which is nothing at all', async () => {
     const result = await createItem({ typeId: 'type_2', title: 'Empty' });
 
@@ -523,6 +549,16 @@ describe('deleteItem, with a file', () => {
     // The row is already gone, which is what was asked for. Reporting a
     // failure would invite a retry against an item that no longer exists.
     await expect(deleteItem(ITEM_ID)).resolves.toEqual({ success: true });
+  });
+
+  it('leaves an object alone when the key is not one this user uploaded', async () => {
+    // A row written before `createItem` refused foreign keys must not be able
+    // to delete somebody else's object on its way out.
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    deleteRow.mockResolvedValue({ deleted: true, fileKey: 'users/user_2/abc.pdf' });
+
+    await expect(deleteItem(ITEM_ID)).resolves.toEqual({ success: true });
+    expect(removeObject).not.toHaveBeenCalled();
   });
 
   it('leaves storage alone when the row was not this user’s', async () => {

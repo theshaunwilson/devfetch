@@ -7,7 +7,7 @@ import { auth } from '@/auth';
 import { absoluteUrl } from '@/lib/app-url';
 import { getBillingStatus, linkStripeCustomer } from '@/lib/db/billing';
 import { getPriceId, getStripe } from '@/lib/stripe';
-import { isActiveSubscriptionStatus } from '@/lib/stripe-events';
+import { listLiveSubscriptions } from '@/lib/stripe-subscriptions';
 import type { BillingInterval, OpenBillingPortalResult, StartCheckoutResult } from '@/types/billing';
 
 /**
@@ -34,23 +34,14 @@ const GENERIC_ERROR = 'Could not start checkout. Please try again.';
  * again, and again, each time opening another subscription against the same
  * account. Stripe is the authority; the row is a copy.
  *
- * `status: 'all'` and then our own predicate rather than asking Stripe to
- * filter, so this and the webhook agree on what "live" means by construction:
- * `isActiveSubscriptionStatus` is the single definition both read.
+ * `listLiveSubscriptions` is the same list the webhook syncs from, so this and
+ * the webhook agree on what "live" means by construction.
  *
  * Only ever called for an account that already has a customer, so a first
  * checkout costs no extra API call.
  */
 async function hasLiveSubscription(customerId: string): Promise<boolean> {
-  const subscriptions = await getStripe().subscriptions.list({
-    customer: customerId,
-    status: 'all',
-    limit: 100,
-  });
-
-  return subscriptions.data.some((subscription) =>
-    isActiveSubscriptionStatus(subscription.status),
-  );
+  return (await listLiveSubscriptions(customerId)).length > 0;
 }
 
 /**

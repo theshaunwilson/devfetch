@@ -1,17 +1,18 @@
 /**
- * What a Stripe webhook event means for an account's Pro access.
+ * The pure half of keeping `isPro` in step with Stripe.
  *
- * Pure on purpose: no Prisma, no Stripe API call, no `server-only`. The event
- * comes from the caller already verified, so every branch is unit-testable
- * without a database or a network — the call `src/lib/usage-limits.ts` makes
- * for the free tier's ceilings.
+ * Pure on purpose: no Prisma, no Stripe API call, no `server-only`, so every
+ * branch is unit-testable without a database or a network — the call
+ * `src/lib/usage-limits.ts` makes for the free tier's ceilings. The half that
+ * talks to Stripe is `src/lib/stripe-subscriptions.ts`.
  *
- * This is also where the webhook's one load-bearing rule lives, so it can be
- * pinned by a test rather than only stated in a route: **state is derived from
- * `subscription.status`, never from which event arrived.** Stripe does not
- * guarantee delivery order, so an `.updated` can land after the `.deleted` that
- * followed it, and a handler keyed on `event.type` would then leave the account
- * on whichever event happened to arrive last.
+ * **An event says *whose* subscriptions changed, never what they now are.**
+ * Stripe does not guarantee delivery order, and a failed delivery is retried
+ * for days, so any event's snapshot can be stale by the time it lands: an
+ * `.updated` reading `active` can arrive after the `.deleted` that followed it.
+ * Reading the state off the event — its type *or* its status — leaves the
+ * account on whichever event happened to arrive last. So the webhook takes
+ * only the customer from the event and asks Stripe for the current state.
  */
 import type Stripe from 'stripe';
 
@@ -29,18 +30,6 @@ export function isActiveSubscriptionStatus(status: Stripe.Subscription.Status): 
   return ACTIVE_STATUSES.has(status);
 }
 
-/**
- * What one event asks us to write, or null for an event that asks for nothing.
- *
- * Both arms carry the subscription id. The deactivating one needs it for the
- * ordering guard — the write matches on it, so a stale `deleted` for a
- * subscription the account has already replaced matches no row instead of
- * revoking the newer one.
- */
-export type SubscriptionIntent =
-  | { kind: 'activate'; customerId: string; subscriptionId: string }
-  | { kind: 'deactivate'; customerId: string; subscriptionId: string };
-
 /** Stripe fields are `string | Object | null` depending on expansion; we never expand. */
 function idOf(value: string | { id: string } | null | undefined): string | null {
   if (!value) return null;
@@ -49,33 +38,24 @@ function idOf(value: string | { id: string } | null | undefined): string | null 
 }
 
 /**
- * Reads one verified event into the state it asks for, or null when the event
- * is not one we act on.
+ * The customer whose subscriptions one verified event says have changed, or
+ * null when the event is not one we act on.
  *
  * Null covers three cases that all mean "acknowledge and do nothing": an event
  * type we do not subscribe to, a checkout session that was not paying for a
- * subscription, and an event whose customer or subscription id is missing —
- * there is nothing to key a write on, so there is nothing to write.
+ * subscription, and an event with no customer to resync.
  */
-export function subscriptionIntentFrom(event: Stripe.Event): SubscriptionIntent | null {
+export function subscriptionCustomerFrom(event: Stripe.Event): string | null {
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session;
 
     // A one-off payment is not a subscription, and nothing else in this app
     // opens a Checkout Session — but the endpoint is public, so the mode is
-    // checked rather than assumed.
-    if (session.mode !== 'subscription') return null;
+    // checked rather than assumed. A session with no subscription on it has
+    // nothing to sync either.
+    if (session.mode !== 'subscription' || !idOf(session.subscription)) return null;
 
-    const customerId = idOf(session.customer);
-    const subscriptionId = idOf(session.subscription);
-
-    if (!customerId || !subscriptionId) return null;
-
-    // Deliberately not conditioned on `payment_status`. Since the Basil API
-    // version, the subscription is created only after payment completes, so a
-    // session that has one has been paid for; the subscription's own events
-    // are what correct it afterwards if that ever stops being true.
-    return { kind: 'activate', customerId, subscriptionId };
+    return idOf(session.customer);
   }
 
   if (
@@ -83,20 +63,41 @@ export function subscriptionIntentFrom(event: Stripe.Event): SubscriptionIntent 
     event.type === 'customer.subscription.updated' ||
     event.type === 'customer.subscription.deleted'
   ) {
-    const subscription = event.data.object as Stripe.Subscription;
-    const customerId = idOf(subscription.customer);
-
-    if (!customerId) return null;
-
-    // The status decides, not the event type. `.deleted` arrives with a
-    // `canceled` status and `.created` can arrive `incomplete`, so reading the
-    // type instead would get both of those wrong.
-    return {
-      kind: isActiveSubscriptionStatus(subscription.status) ? 'activate' : 'deactivate',
-      customerId,
-      subscriptionId: subscription.id,
-    };
+    return idOf((event.data.object as Stripe.Subscription).customer);
   }
 
   return null;
+}
+
+/** The fields `pickLiveSubscription` reads; a full subscription satisfies it. */
+export type SubscriptionSummary = Pick<Stripe.Subscription, 'id' | 'status' | 'created'>;
+
+/**
+ * The one subscription an account's Pro access follows, or null when none is
+ * live.
+ *
+ * There should only ever be one, since `startCheckout` refuses a second — but
+ * two have existed before (the sandbox account was charged twice), so the rule
+ * for choosing is spelled out rather than left to list order: the most
+ * recently created, then the greater id, so the answer never depends on which
+ * order Stripe happened to return them in.
+ */
+export function pickLiveSubscription<T extends SubscriptionSummary>(
+  subscriptions: readonly T[],
+): T | null {
+  let pick: T | null = null;
+
+  for (const subscription of subscriptions) {
+    if (!isActiveSubscriptionStatus(subscription.status)) continue;
+
+    if (
+      !pick ||
+      subscription.created > pick.created ||
+      (subscription.created === pick.created && subscription.id > pick.id)
+    ) {
+      pick = subscription;
+    }
+  }
+
+  return pick;
 }

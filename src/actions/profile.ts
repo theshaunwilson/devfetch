@@ -8,6 +8,7 @@ import { hashPassword } from '@/lib/auth/password';
 import { allScopedIdentifiers } from '@/lib/auth/token-scopes';
 import { SIGN_IN_PATH } from '@/lib/auth-redirect';
 import { prisma } from '@/lib/prisma';
+import { cancelLiveSubscriptions } from '@/lib/stripe-subscriptions';
 import { changePasswordSchema, deleteAccountSchema } from '@/lib/validation/auth';
 
 /**
@@ -25,7 +26,7 @@ async function getSessionAccount() {
 
   return prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { id: true, email: true, password: true },
+    select: { id: true, email: true, password: true, stripeCustomerId: true },
   });
 }
 
@@ -126,6 +127,24 @@ export async function deleteAccount(
     // choose one — typing someone else's email deletes nothing.
     if (parsed.data.confirmEmail !== user.email.toLowerCase()) {
       return { fieldErrors: { confirmEmail: ['That does not match your email address'] } };
+    }
+
+    // Billing stops first, and the delete does not happen unless it did. Once
+    // the row is gone nobody can reach Manage billing, so a subscription left
+    // running would keep charging a card for an account that no longer exists
+    // — refusing the delete is the only safe answer to a Stripe failure. An
+    // account that never checked out has no customer and makes no call.
+    if (user.stripeCustomerId) {
+      try {
+        await cancelLiveSubscriptions(user.stripeCustomerId);
+      } catch (error) {
+        console.error('Could not cancel the subscription before deleting the account:', error);
+
+        return {
+          error:
+            'Could not cancel your subscription, so your account was not deleted. Please try again.',
+        };
+      }
     }
 
     const identifiers = allScopedIdentifiers(user.email);
