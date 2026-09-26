@@ -1,8 +1,9 @@
 import Link from 'next/link';
-import { Star, Zap } from 'lucide-react';
+import { Zap } from 'lucide-react';
 
 import { CreateMenu } from '@/components/dashboard/CreateMenu';
 import { TopbarBrand } from '@/components/dashboard/TopbarBrand';
+import { TopbarFavoritesLink } from '@/components/dashboard/TopbarFavoritesLink';
 import { TopbarToggle } from '@/components/dashboard/TopbarToggle';
 import { SearchPalette } from '@/components/search/SearchPalette';
 import { Button } from '@/components/ui/button';
@@ -89,12 +90,7 @@ export function Topbar({
             </Button>
           )}
 
-          <Button asChild variant="ghost" size="icon" className="size-10">
-            <Link href="/favorites">
-              <Star className="size-4" />
-              <span className="sr-only">Favorites</span>
-            </Link>
-          </Button>
+          <TopbarFavoritesLink />
 
           <CreateMenu itemTypes={itemTypes} isPro={isPro} collectionOptions={collectionOptions} />
         </div>

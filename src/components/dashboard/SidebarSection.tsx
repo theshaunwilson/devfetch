@@ -19,7 +19,7 @@ export function SidebarSection({ title, children }: SidebarSectionProps) {
         type="button"
         onClick={() => setIsOpen((open) => !open)}
         aria-expanded={isOpen}
-        className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:font-bold hover:text-foreground"
+        className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 max-md:py-2.5 text-sm text-muted-foreground transition-colors hover:font-bold hover:text-foreground"
       >
         {title}
         <ChevronDown

@@ -16,7 +16,7 @@ export function SidebarViewAll({ href, label }: SidebarViewAllProps) {
     <Link
       href={href}
       onClick={closeMobile}
-      className="mt-1 rounded-md px-2 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      className="mt-1 rounded-md px-2 py-2 max-md:py-2.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
     >
       {label}
     </Link>
