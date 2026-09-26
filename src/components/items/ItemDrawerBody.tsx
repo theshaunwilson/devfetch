@@ -3,7 +3,7 @@
 import { CalendarDays, FolderOpen, Link2, Paperclip, Tag } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
-import { CodeEditor } from '@/components/items/CodeEditor';
+import { ExplainableCodeEditor } from '@/components/items/ExplainableCodeEditor';
 import { ItemFilePanel } from '@/components/items/ItemFilePanel';
 import { MarkdownEditor } from '@/components/items/MarkdownEditor';
 import { Badge } from '@/components/ui/badge';
@@ -38,6 +38,8 @@ interface ItemDrawerBodyProps {
   /** The full item, once the request comes back. */
   detail: ItemDetail | null;
   status: ItemDetailStatus;
+  /** Whether the code editor's Explain button works or asks for an upgrade. */
+  isPro: boolean;
 }
 
 /**
@@ -47,7 +49,7 @@ interface ItemDrawerBodyProps {
  * immediately; only the fields carried by `/api/items/[id]` wait behind a
  * skeleton.
  */
-export function ItemDrawerBody({ item, detail, status }: ItemDrawerBodyProps) {
+export function ItemDrawerBody({ item, detail, status, isPro }: ItemDrawerBodyProps) {
   return (
     <div className="flex flex-1 flex-col gap-6 overflow-y-auto p-6">
       {item.description && (
@@ -78,12 +80,16 @@ export function ItemDrawerBody({ item, detail, status }: ItemDrawerBodyProps) {
                   for a custom type, which has content but neither
                   editor. */}
               {usesCodeEditor(detail.type.slug) ? (
-                <CodeEditor
+                <ExplainableCodeEditor
+                  // A new item starts with no explanation rather than
+                  // showing the previous item's.
+                  key={detail.id}
+                  itemId={detail.id}
                   value={detail.content}
                   language={detail.language}
-                  readOnly
                   minHeight={80}
                   ariaLabel={`${detail.title} content`}
+                  isPro={isPro}
                 />
               ) : usesMarkdownEditor(detail.type.slug) ? (
                 <MarkdownEditor

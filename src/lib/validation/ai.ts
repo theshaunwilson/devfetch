@@ -67,3 +67,15 @@ export const generateSummarySchema = z
   });
 
 export type GenerateSummaryInput = z.input<typeof generateSummarySchema>;
+
+/**
+ * What the code explainer is sent: an item id and nothing else. The code is
+ * read from the saved row, which is both the ownership check and a guard
+ * against sending 100,000 characters back up from the drawer. A cuid is 25
+ * characters, so the ceiling is a sanity bound.
+ */
+export const explainCodeSchema = z.object({
+  itemId: z.string().trim().min(1, 'Pick an item to explain.').max(64),
+});
+
+export type ExplainCodeInput = z.input<typeof explainCodeSchema>;

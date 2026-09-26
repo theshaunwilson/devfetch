@@ -22,6 +22,18 @@ export class AiOutputError extends Error {
 }
 
 /**
+ * The request cannot be served before the model is ever asked: the item it
+ * names is missing, somebody else's, or not code. Its message is written for
+ * the user and is shown as is — unlike the SDK's, it carries nothing internal.
+ */
+export class AiRequestError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AiRequestError';
+  }
+}
+
+/**
  * How to report one AI failure: the sentence the user sees, and how loudly to
  * log it. `error` is for failures that are ours to fix — a missing or revoked
  * key, an exhausted budget, a bad request — and `warn` for the transient ones
@@ -43,8 +55,14 @@ const GENERIC = 'Something went wrong. Try again.';
  * `insufficient_quota` arrives as a 429 — so specific cases are tested first.
  */
 export function describeAiError(error: unknown): AiErrorReport {
+  if (error instanceof AiRequestError) {
+    return { message: error.message, severity: 'warn' };
+  }
+
   if (error instanceof AiOutputError) {
-    return { message: 'The AI could not come up with suggestions. Try again.', severity: 'warn' };
+    // Worded for every feature, not only suggestions: an explanation can
+    // come back empty too.
+    return { message: 'The AI did not come back with anything usable. Try again.', severity: 'warn' };
   }
 
   if (error instanceof APIConnectionTimeoutError) {

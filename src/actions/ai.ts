@@ -3,13 +3,32 @@
 import type { z } from 'zod';
 
 import { auth } from '@/auth';
-import { describeAiError } from '@/lib/ai/errors';
-import { generateDescriptionSummary, generateTagSuggestions } from '@/lib/ai/generate';
+import { AiRequestError, describeAiError } from '@/lib/ai/errors';
+import {
+  generateCodeExplanation,
+  generateDescriptionSummary,
+  generateTagSuggestions,
+} from '@/lib/ai/generate';
 import { isProUser } from '@/lib/db/billing';
+import { getItemDetail } from '@/lib/db/items';
+import { usesCodeEditor } from '@/lib/items';
 import { aiRateLimitMessage, checkAiRateLimit } from '@/lib/rate-limit';
-import { generateAutoTagsSchema, generateSummarySchema } from '@/lib/validation/ai';
-import type { GenerateAutoTagsInput, GenerateSummaryInput } from '@/lib/validation/ai';
-import type { AiResult, GenerateAutoTagsResult, GenerateSummaryResult } from '@/types/ai';
+import {
+  explainCodeSchema,
+  generateAutoTagsSchema,
+  generateSummarySchema,
+} from '@/lib/validation/ai';
+import type {
+  ExplainCodeInput,
+  GenerateAutoTagsInput,
+  GenerateSummaryInput,
+} from '@/lib/validation/ai';
+import type {
+  AiResult,
+  ExplainCodeResult,
+  GenerateAutoTagsResult,
+  GenerateSummaryResult,
+} from '@/types/ai';
 
 /** What differs between one AI action and the next. */
 interface AiActionSpec<Schema extends z.ZodType, T> {
@@ -117,5 +136,49 @@ export async function generateSummary(
     run: async (data, userId) => ({
       summary: await generateDescriptionSummary(data, userId),
     }),
+  });
+}
+
+/**
+ * Explains one saved snippet or command, as markdown.
+ *
+ * The one AI action that takes an item id rather than text, because it runs
+ * from the drawer's read view on what is saved. So it is also the one with an
+ * ownership surface: the row is read through `getItemDetail`, which is scoped
+ * to the signed-in user, and somebody else's item reads exactly like one that
+ * never existed. The lookup runs after the rate limit, so probing ids costs
+ * budget like any other request.
+ *
+ * Never writes: an explanation is shown in the drawer and regenerated on the
+ * next click.
+ */
+export async function explainCode(input: ExplainCodeInput): Promise<ExplainCodeResult> {
+  return runAiAction(input, {
+    schema: explainCodeSchema,
+    proMessage: 'AI code explanations are part of Pro. Upgrade to use them.',
+    label: 'explain',
+    run: async (data, userId) => {
+      const item = await getItemDetail(data.itemId);
+
+      if (!item) {
+        throw new AiRequestError('That item could not be found.');
+      }
+
+      // The button only renders for code types, but the gate is not
+      // client-only: a caller can send any id it owns.
+      if (!usesCodeEditor(item.type.slug) || !item.content?.trim()) {
+        throw new AiRequestError('Only snippets and commands with code can be explained.');
+      }
+
+      return generateCodeExplanation(
+        {
+          title: item.title,
+          typeName: item.type.name,
+          content: item.content,
+          language: item.language,
+        },
+        userId,
+      );
+    },
   });
 }

@@ -1,12 +1,38 @@
-# Current Feature
+# Current Feature: AI Explain Code
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
+- An `explainCode` server action with auth, Pro gating, Zod validation and rate limiting, run through the existing `runAiAction` gates in `src/actions/ai.ts`
+- An "Explain" button in the code editor's window-chrome header, next to the Copy button
+- Shown only for snippet and command items (`usesCodeEditor`), and only in the item drawer's read view — never in the create or edit forms
+- Once an explanation exists, Code / Explain tabs in the editor header switch between the code and the explanation
+- The explanation renders as markdown through `MarkdownPreview`, in the same container space as the code editor
+- A concise explanation (~200–300 words) covering what the code does and the key concepts
+- A `Loader2` spinner while generating
+- Free accounts see a Crown icon with the tooltip "AI features require Pro subscription"
+- Errors (Pro refusal, rate limit, AI service failures) go through toasts
+- Unit tests for the server action
+
 ## Notes
+
+- Explanations are never saved to the database; each click generates a new one
+- `isPro` has to reach the drawer's code editor. It already reaches `ItemDrawer` (auto-tagging threaded it through for `ItemEditForm`), so only `ItemDrawer` → `ItemDrawerBody` → `CodeEditor` remains
+- See `docs/ai-integration-plan.md` §4.3, §6.3, §6.4 and §7.2 for the architecture
+- **Settled at `start`, all four on the recommended option:** the icon is `WandSparkles` (lucide's current name for `Wand2`), not `Sparkles`. Free accounts get a Crown button with the tooltip, and clicking it opens the upgrade toast with no server call. The action takes an **item id** and reads the saved row through `getItemDetail`. Up to **20,000 characters** are sent, and the explanation says when the code was cut. Plain markdown output was my own call.
+- **Load-time notes, from reading the code (settle at `start`):**
+  - **Icon.** The spec asks for `Sparkles`, but `Sparkles` is the Prompt type's own icon (`prisma/seed.ts`), which is why the plan (§6.3), the Upgrade button and both earlier AI buttons avoided it (`Wand2`). Using it would put the Prompt glyph on a snippet's toolbar.
+  - **Free-account treatment.** The spec asks for a Crown icon plus a tooltip. Two things to note. First, there is no tooltip component in `src/components/ui/`, so this needs `shadcn add tooltip`, and that command has pulled a third-party `cn` package on four earlier runs (`select`, `progress`, `command`, `tabs`), each needing its import repointed and the package uninstalled. Second, this reverses auto-tagging's decision to *hide* AI buttons from free accounts, so after this feature the three AI buttons would behave differently from each other. A tooltip also only appears on hover or focus, so on touch the click needs to do something: follow the plan (§6.2) and call `useUpgradeToast()` directly, with no server round trip.
+  - **What the action takes.** The spec does not say. The plan (§6.4) recommends taking an **item id** and loading the content through `getItemDetail(id)`, which is `findFirst` on `{ id, userId }`, so that another user's id reads as not-found. That is the only AI action with an ownership surface. The alternative is to send the content the drawer already holds, which is simpler and matches the other two actions. But content can be 100k characters, and the id route means the server reads what was actually saved.
+  - **Output format.** The plan (§4.3) suggests `json_object` with `{ explanation }`. Plain markdown text is simpler, and it worked for summaries. It also sidesteps the rule that "json" must appear in the input, which caused a 400 during auto-tagging.
+  - **Truncation.** The plan (§7.2) says to send up to ~20,000 characters and to tell the user when the code was cut. Summaries used 4,000 and tags 2,000. Do the truncation in a pure builder, so a test pins it.
+  - **Shared editor.** `CodeEditor` also renders in both forms. The tabs and the button should be opt-in props that only the drawer's read-only call site passes, so the forms stay unchanged.
+  - **Height.** Monaco caps at `EDITOR_MAX_HEIGHT` (400px) and scrolls. The explanation pane should use the same cap, so switching tabs does not resize the drawer much.
+  - **Budget.** The explanation shares the 20-per-hour AI limit with tags and summaries. Explaining uses more tokens (effort `low`, a larger output cap), but it is still roughly a tenth of a cent per call.
+  - **Stale state.** The explanation belongs to the item it was generated for, so opening a different item has to clear it, not show the previous item's explanation.
 
 ## History
 
