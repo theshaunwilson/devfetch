@@ -9,6 +9,7 @@ import { CollectionSelect } from '@/components/items/CollectionSelect';
 import { FileUpload } from '@/components/items/FileUpload';
 import { ItemContentField } from '@/components/items/ItemContentField';
 import { ItemFieldError } from '@/components/items/ItemFieldError';
+import { ItemTagsField } from '@/components/items/ItemTagsField';
 import { ItemTextField } from '@/components/items/ItemTextField';
 import { LanguageSelect } from '@/components/items/LanguageSelect';
 import { Button } from '@/components/ui/button';
@@ -333,14 +334,23 @@ function NewItemForm({
           </div>
         )}
 
-        <ItemTextField
+        <ItemTagsField
           id="new-item-tags"
-          label="Tags"
           value={tags}
           onChange={setTags}
-          placeholder="react, hooks, typescript"
-          hint="Separate tags with commas."
           messages={fieldErrors.tags}
+          // Only the fields the selected type shows: the others may still hold
+          // text from a type picked earlier, which the save would not send.
+          suggestFrom={
+            isPro
+              ? {
+                  title,
+                  description,
+                  content: fields.content ? content : undefined,
+                  url: fields.url ? url : undefined,
+                }
+              : undefined
+          }
         />
 
         <CollectionSelect

@@ -1,12 +1,45 @@
-# Current Feature
+# Current Feature: AI Auto-Tagging
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
+- `openai` installed and a lazy, `server-only` client in `src/lib/openai.ts` exporting `getOpenAI()` and `AI_MODEL = 'gpt-5-nano'` — built on first use, key read at call time, throws when `OPENAI_API_KEY` is missing (the `getStripe()` pattern), so `next build` passes without the key
+- Calls use the **Responses API** (`client.responses.create`, `instructions` + `input`, `text: { format: { type: 'json_object' } }`, read `response.output_text`) — never Chat Completions, which returns empty content on gpt-5-nano
+- A `generateAutoTags` server action: session → Pro → Zod parse → rate limit → OpenAI call, returning `{ success, data: { tags }, error }` with `upgradeRequired` on the Pro refusal so `useUpgradeToast` works unchanged
+- An AI rate limit of **20 requests per hour per user**, keyed by user id, added to `src/lib/rate-limit.ts` without moving or resetting any existing `devfetch:auth:*` bucket
+- Content truncated to **2000 characters** before it is sent
+- The model's reply parsed manually, accepting both `{"tags": [...]}` and a bare `[...]`; tags normalized to lowercase, trimmed, deduped, capped at `TAG_MAX_LENGTH`, and limited to 3–5; tags already on the item dropped
+- Tags are freeform — not restricted to tags already in the database
+- A "Suggest Tags" ghost button beside the Tags input in both the create dialog (`NewItemDialog`) and the drawer's edit mode (`ItemEditForm`)
+- Suggestions render as badges, each with an accept (check) and reject (X) control; accepting appends the tag to the form's tag list, rejecting removes the badge — nothing is written until the form's own Save
+- The button is hidden for free accounts, and the server refuses them regardless
+- Pro refusals, rate limiting and AI service errors surface as toasts
+- Unit tests for the server action (and the pure helpers it relies on), with no network
+
 ## Notes
+
+- **The AI plan exists and this is Phase 1 of it**: `docs/ai-integration-plan.md` (§11.1) makes auto-tag the first feature, carrying the whole foundation — client, rate-limit generalization, error mapping, the suggest → accept flow. Nothing AI is built yet: `openai` is not in `package.json` and no `src/lib/ai/` exists. `OPENAI_API_KEY` is in `.env` and `.env.example`; the plan notes `.env.production` never reaches Vercel, so production needs the key set in Vercel itself.
+- **Design principle from the plan (§3.3), kept:** the action suggests and never writes. It takes content rather than an item id, so there is no ownership surface, it works in the create dialog before an item exists, and accepted tags still pass through `createItem`/`updateItem`'s existing dedupe, `TAG_MAX_LENGTH` (50) and `TAGS_MAX_COUNT` (20) rules.
+- **The spec and the plan disagree in several places.** The spec is newer and specific, so it is the default; each is to be confirmed at `start`:
+  - **Structured output:** plan says `responses.parse()` + `zodTextFormat`; spec says `zodTextFormat` burns tokens and hits length limits on this model — use `json_object` and parse by hand. Following the spec.
+  - **Truncation:** plan 12,000 characters, spec 2,000. Following the spec.
+  - **Rate limit:** plan 10/min + 150/day shared across AI features; spec 20/hour. Following the spec. Whether the AI limiter should **fail closed** when Upstash is down (plan D3 — an outage costs money here, not a lockout) is open; the current module fails open for everything.
+  - **Pro gating in the UI:** plan says show the button disabled with a `PRO` chip ("a hidden feature cannot be sold", the File/Image precedent); spec says **hide** it. Needs a decision.
+  - **Icon:** spec says `Sparkles`; the plan says `Wand`, because `Sparkles` is the Prompt item type's own icon (`prisma/seed.ts`) and the Upgrade button already avoided it for that reason (`Topbar.tsx:72`). Needs a decision.
+  - **Action name:** plan `suggestTags`, spec `generateAutoTags`. Following the spec.
+  - **Review controls:** plan has `+` per chip plus Add all / Dismiss; spec has accept ✓ and reject ✗ per tag. Following the spec.
+  - **Tag vocabulary (plan D6):** the plan recommends sending up to 50 of the user's existing tag names so the model reuses `react` instead of inventing `ReactJS` (~150 tokens, needs a `getTagNames()` query). The spec says freeform and keep it simple. Needs a decision.
+- **Homepage copy (plan D1):** `AI_CHECKLIST` in `src/components/home/content.tsx` promises "Tags every item the moment you save it" — automatic tagging. This feature is on-demand suggest-and-accept, so the copy overstates it. Out of the spec's scope; flag at `start`.
+- **`isPro` plumbing — the spec's note is partly stale.** `NewItemDialog` already takes `isPro` (Stripe Phase 2, for the File/Image gate), so the create side needs no new threading. `ItemEditForm` does not have it: `AppShell` already resolves `isPro` but passes only `collectionOptions` to `ItemDrawerProvider`, so it needs threading `AppShell` → `ItemDrawerProvider` → `ItemDrawer` → `ItemEditForm`.
+- **Rate-limit module shape:** `RateLimitAction` is `keyof typeof AUTH_RATE_LIMITS` and the prefix is hardcoded `devfetch:auth:${action}`. Adding AI means a namespace so auth keys stay byte-identical, and an AI-worded message beside `rateLimitMessage` ("Too many attempts" is auth wording).
+- **Plan guidance worth keeping even with the simpler spec:** `store: false` on the call; `safety_identifier` as a sha256 of the user id, never the raw id or email; a client `timeout` (SDK default is 10 minutes); low `reasoning.effort`; no `temperature`/`top_p` (rejected by GPT-5 reasoning models); treat `status: 'incomplete'` (reasoning ate `max_output_tokens`) and empty/unparseable output as failures rather than crashes; map SDK errors to plain sentences and never show the raw SDK message; wrap content in delimiters and tell the model it is data, not instructions (prompt injection is bounded — no tools, output normalized, nothing applied without accept).
+- **Testing:** mock the module that calls OpenAI at the boundary (as `@/lib/prisma` is mocked), and pin the gate order — no session → no Pro query; free → `upgradeRequired` and no OpenAI call; bad input → no rate-limit token spent; rate limited → no OpenAI call. Plus the parser's two reply shapes, lowercase normalization, and truncation at 2000. Components stay untested per `coding-standards.md`.
+- Verify one real call during testing to confirm the chosen `reasoning.effort` is accepted by gpt-5-nano on the Responses endpoint (plan §2.4).
+- **Settled at `start`:** the button is **hidden** for free accounts (spec, not the plan's disabled-with-PRO-chip); the icon is **`Wand2`**, which lucide v1 exports as an alias of `WandSparkles` — a wand with small sparkle marks, still distinct from the Prompt type's own `Sparkles`, and imported under its current name; **no tag vocabulary** is sent (freeform, per the spec); and the AI rate limit **fails closed** — unconfigured, unreachable or timed-out Upstash refuses AI requests, while the auth limits keep failing open with their keys unchanged. The homepage's "Tags every item the moment you save it" copy was left alone as out of scope.
+- **Two real defects were found by one real OpenAI call, neither visible to the unit tests.** `json_object` output is refused with a **400** unless the word "json" appears in the **input** — the same sentence in `instructions` does not count — so every request would have failed; the reply format now closes the input, pinned by a test. And an account with no credit answers `type: 'insufficient_quota'` with `code: 'credit_balance_exhausted'`, so the plan's `code === 'insufficient_quota'` check would have shown "AI is busy" and logged a warning; it now reads `type` too. The account had no credit at first, so the UI was first verified against a temporary stub of `generateTagSuggestions` (restored byte-identical by sha256); once $5 was added, the whole path was **verified live**: a direct call came back `completed` in 1.5s with `reasoning.effort: 'minimal'` accepted, 0 reasoning tokens and 268 tokens in total (about $0.00003); through the app, the create dialog returned `port`, `kill-process`, `network-utility` in ~2s with accept and reject both working, and the drawer's edit mode returned tags for a snippet (`debounce`, `delay`) and a link with no content (`github-actions`, `workflow`) in 1.3–2s, each time leaving out the tags the item already had. Every edit was cancelled, so nothing was written, and the browser console showed no errors. **Worth knowing:** when the model repeats an item's existing tags they are filtered out, so fewer than 3 suggestions can come back — the snippet above got 2.
 
 ## History
 

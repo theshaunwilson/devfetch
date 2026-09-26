@@ -22,6 +22,8 @@ interface ItemDrawerProps {
   detail: ItemDetail | null;
   /** Every collection the user owns, for edit mode's picker. */
   collectionOptions: CollectionOption[];
+  /** Whether edit mode offers AI tag suggestions. */
+  isPro: boolean;
   status: ItemDetailStatus;
   mode: ItemDrawerMode;
   onModeChange: (mode: ItemDrawerMode) => void;
@@ -53,6 +55,7 @@ export function ItemDrawer({
   item,
   detail,
   collectionOptions,
+  isPro,
   status,
   mode,
   onModeChange,
@@ -104,6 +107,7 @@ export function ItemDrawer({
               key={detail.id}
               item={detail}
               collectionOptions={collectionOptions}
+              isPro={isPro}
               heading={heading}
               onSaved={onSaved}
               onCancel={() => onModeChange('view')}
