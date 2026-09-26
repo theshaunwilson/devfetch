@@ -6,11 +6,13 @@ import { useActionState } from 'react';
 import { z } from 'zod';
 
 import { FieldError } from '@/components/auth/FieldError';
+import { GitHubAuthSection } from '@/components/auth/GitHubAuthSection';
 import { PasswordFields } from '@/components/auth/PasswordFields';
 import { FormMessage } from '@/components/auth/FormMessage';
 import { SubmitButton } from '@/components/auth/SubmitButton';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { DEFAULT_SIGNED_IN_PATH } from '@/lib/auth-redirect';
 import { registerSchema } from '@/lib/validation/auth';
 
 /** Mirrors the `{ success, data, error }` shape of `/api/auth/register`. */
@@ -145,6 +147,8 @@ export function RegisterForm({ verificationRequired }: RegisterFormProps) {
           Create account
         </SubmitButton>
       </form>
+
+      <GitHubAuthSection callbackUrl={DEFAULT_SIGNED_IN_PATH} label="Sign up with GitHub" />
 
       <p className="text-center text-sm text-muted-foreground">
         Already have an account?{' '}
