@@ -45,6 +45,7 @@ export function useItemDrawer(): ItemDrawerContextValue {
 export function ItemDrawerProvider({
   children,
   collectionOptions,
+  isPro,
 }: {
   children: React.ReactNode;
   /**
@@ -54,6 +55,11 @@ export function ItemDrawerProvider({
    * picker is populated before the detail request resolves.
    */
   collectionOptions: CollectionOption[];
+  /**
+   * Whether edit mode offers AI tag suggestions. `AppShell` has already read
+   * it for the top bar's create dialog, so this costs no query of its own.
+   */
+  isPro: boolean;
 }) {
   const drawer = useItemDrawerState();
   const { openItem } = drawer;
@@ -76,6 +82,7 @@ export function ItemDrawerProvider({
         item={drawer.item}
         detail={drawer.detail}
         collectionOptions={collectionOptions}
+        isPro={isPro}
         status={drawer.status}
         mode={drawer.mode}
         onModeChange={drawer.setMode}

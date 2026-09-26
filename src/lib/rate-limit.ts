@@ -4,6 +4,9 @@ import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 import { headers } from 'next/headers';
 
+/** One sliding window: how many requests, over how long. */
+type LimitConfig = { limit: number; window: `${number} ${'s' | 'm' | 'h'}` };
+
 /**
  * Sliding-window limits for the auth surface, keyed per action so one cannot
  * eat another's budget.
@@ -19,9 +22,22 @@ export const AUTH_RATE_LIMITS = {
   forgotPassword: { limit: 3, window: '1 h' },
   resetPassword: { limit: 5, window: '15 m' },
   resendVerification: { limit: 3, window: '15 m' },
-} as const satisfies Record<string, { limit: number; window: `${number} ${'s' | 'm' | 'h'}` }>;
+} as const satisfies Record<string, LimitConfig>;
 
 export type RateLimitAction = keyof typeof AUTH_RATE_LIMITS;
+
+/**
+ * One budget shared by every AI feature, keyed per user rather than per IP —
+ * AI is signed-in only, and a shared office IP should not share a budget.
+ *
+ * Shared across features so a user cannot sidestep the cap by switching
+ * buttons. Unlike the auth limits this one protects spend: OpenAI's own limits
+ * are for the whole project, so one heavy account could otherwise starve the
+ * rest and run up the bill.
+ */
+export const AI_RATE_LIMITS = {
+  ai: { limit: 20, window: '1 h' },
+} as const satisfies Record<string, LimitConfig>;
 
 /** What every caller gets back, whether or not Upstash was reachable. */
 export interface RateLimitResult {
@@ -37,12 +53,12 @@ export interface RateLimitResult {
 const NOT_LIMITED: RateLimitResult = { success: true, remaining: Infinity, reset: 0 };
 
 /**
- * Built once per action and reused. Lazy rather than at module scope: the
+ * Built once per key prefix and reused. Lazy rather than at module scope: the
  * variables are read at call time so `next build` cannot bake in whatever was
  * (or was not) set on the build machine — the same rule `src/lib/features.ts`
  * follows.
  */
-const limiters = new Map<RateLimitAction, Ratelimit>();
+const limiters = new Map<string, Ratelimit>();
 
 let redis: Redis | undefined;
 let warnedUnconfigured = false;
@@ -65,8 +81,13 @@ function readConfig(): { url: string; token: string } | undefined {
   return { url, token };
 }
 
-function getLimiter(action: RateLimitAction): Ratelimit | undefined {
-  const cached = limiters.get(action);
+/**
+ * The limiter for one key prefix, or `undefined` when Upstash is not
+ * configured. Each prefix is its own key space, so no two budgets can be spent
+ * against each other.
+ */
+function getLimiter(prefix: string, { limit, window }: LimitConfig): Ratelimit | undefined {
+  const cached = limiters.get(prefix);
 
   if (cached) return cached;
 
@@ -74,13 +95,13 @@ function getLimiter(action: RateLimitAction): Ratelimit | undefined {
 
   if (!config) {
     // Once per process, not once per request. Loud enough that an
-    // unconfigured deploy is not mistaken for a protected one — this module
-    // fails open by design, so silence here would be indistinguishable from
-    // working.
+    // unconfigured deploy is not mistaken for a protected one — the auth
+    // limits fail open by design, so silence here would be indistinguishable
+    // from working.
     if (!warnedUnconfigured) {
       warnedUnconfigured = true;
       console.warn(
-        'Rate limiting is DISABLED: UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are not both set. Auth endpoints are unprotected.',
+        'Rate limiting is DISABLED: UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are not both set. Auth endpoints are unprotected and AI features are refused.',
       );
     }
 
@@ -89,20 +110,18 @@ function getLimiter(action: RateLimitAction): Ratelimit | undefined {
 
   redis ??= new Redis(config);
 
-  const { limit, window } = AUTH_RATE_LIMITS[action];
-
   const limiter = new Ratelimit({
     redis,
     limiter: Ratelimit.slidingWindow(limit, window),
-    // Each action gets its own key space, so the sign-in budget and the
-    // register budget cannot be spent against each other.
-    prefix: `devfetch:auth:${action}`,
-    // Upstash counts a slow call as a pass. Availability beats enforcement
-    // here: a Redis hiccup must not lock every user out of signing in.
+    prefix,
+    // Upstash counts a slow call as a pass, reported as `reason: 'timeout'`.
+    // Availability beats enforcement for auth — a Redis hiccup must not lock
+    // every user out of signing in — and `checkAiRateLimit` treats the same
+    // pass as a refusal.
     timeout: 1000,
   });
 
-  limiters.set(action, limiter);
+  limiters.set(prefix, limiter);
 
   return limiter;
 }
@@ -147,7 +166,9 @@ export async function checkRateLimit(
   action: RateLimitAction,
   identifier: string,
 ): Promise<RateLimitResult> {
-  const limiter = getLimiter(action);
+  // `devfetch:auth:<action>`, exactly as before the AI limits existed, so no
+  // live bucket was reset by adding them.
+  const limiter = getLimiter(`devfetch:auth:${action}`, AUTH_RATE_LIMITS[action]);
 
   if (!limiter) return NOT_LIMITED;
 
@@ -171,6 +192,47 @@ export async function checkRateLimit(
     console.error(`Rate limit check failed for "${action}", allowing the request:`, error);
 
     return NOT_LIMITED;
+  }
+}
+
+/** What an AI rate-limit check decided. */
+export type AiRateLimitResult =
+  | { status: 'allowed' }
+  | { status: 'limited'; reset: number }
+  /** Upstash could not be asked, so the request is refused rather than paid for. */
+  | { status: 'unavailable' };
+
+/**
+ * Consumes one token of the user's shared AI budget.
+ *
+ * **Fails closed**, the opposite of `checkRateLimit`. For auth, an outage that
+ * refused every request would lock everyone out of their account; here, one
+ * that allowed every request would mean unlimited paid OpenAI calls for as
+ * long as it lasted, while AI is never on anyone's critical path. So an
+ * unconfigured, unreachable or timed-out Upstash is `unavailable`, not a pass.
+ */
+export async function checkAiRateLimit(userId: string): Promise<AiRateLimitResult> {
+  const limiter = getLimiter('devfetch:ai', AI_RATE_LIMITS.ai);
+
+  if (!limiter) return { status: 'unavailable' };
+
+  try {
+    const { success, reset, reason } = await limiter.limit(userId);
+
+    // A timeout comes back as `success: true` — Upstash letting the request
+    // through because Redis did not answer, not because the user is under
+    // the limit.
+    if (reason === 'timeout') {
+      console.error('AI rate limit check timed out, refusing the request. Upstash is slow or unreachable.');
+
+      return { status: 'unavailable' };
+    }
+
+    return success ? { status: 'allowed' } : { status: 'limited', reset };
+  } catch (error) {
+    console.error('AI rate limit check failed, refusing the request:', error);
+
+    return { status: 'unavailable' };
   }
 }
 
@@ -215,4 +277,18 @@ export function rateLimitMessage(reset: number): string {
   const minutes = Math.ceil(seconds / 60);
 
   return `Too many attempts. Please try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`;
+}
+
+/**
+ * The AI limit's own wording. `rateLimitMessage` says "Too many attempts",
+ * which reads as a failed sign-in rather than a spent allowance.
+ */
+export function aiRateLimitMessage(reset: number): string {
+  const minutes = Math.ceil(retryAfterSeconds(reset) / 60);
+
+  if (minutes <= 1) {
+    return 'You have used your AI requests for now. Try again in a minute.';
+  }
+
+  return `You have used your AI requests for now. Try again in ${minutes} minutes.`;
 }

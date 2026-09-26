@@ -73,7 +73,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
       {/* Above the drawer, since the drawer's own editors read from it — and
           around the top bar too, whose create dialog renders one as well. */}
       <EditorPreferencesProvider preferences={editorPreferences}>
-        <ItemDrawerProvider collectionOptions={collectionOptions}>
+        <ItemDrawerProvider collectionOptions={collectionOptions} isPro={isPro}>
           <div className="flex h-svh overflow-hidden">
             <Sidebar itemTypes={itemTypes} collections={collections} user={user} isPro={isPro} />
             <div className="flex min-w-0 flex-1 flex-col">

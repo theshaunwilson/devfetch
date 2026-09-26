@@ -7,6 +7,7 @@ import { updateItem } from '@/actions/items';
 import { CollectionSelect } from '@/components/items/CollectionSelect';
 import { ItemContentField } from '@/components/items/ItemContentField';
 import { ItemFieldError } from '@/components/items/ItemFieldError';
+import { ItemTagsField } from '@/components/items/ItemTagsField';
 import { ItemTextField } from '@/components/items/ItemTextField';
 import { LanguageSelect } from '@/components/items/LanguageSelect';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,8 @@ interface ItemEditFormProps {
   item: ItemDetail;
   /** Every collection the user owns, for the collections picker. */
   collectionOptions: CollectionOption[];
+  /** Whether AI tag suggestions are offered. */
+  isPro: boolean;
   /** The drawer's identity block, so both modes show the same one. */
   heading: React.ReactNode;
   /** Handed the saved item, in full. */
@@ -45,6 +48,7 @@ interface ItemEditFormProps {
 export function ItemEditForm({
   item,
   collectionOptions,
+  isPro,
   heading,
   onSaved,
   onCancel,
@@ -177,14 +181,22 @@ export function ItemEditForm({
           />
         )}
 
-        <ItemTextField
+        <ItemTagsField
           id="item-tags"
-          label="Tags"
           value={tags}
           onChange={setTags}
-          placeholder="react, hooks, typescript"
-          hint="Separate tags with commas."
           messages={fieldErrors.tags}
+          // Only the fields this type shows, as with the save payload.
+          suggestFrom={
+            isPro
+              ? {
+                  title,
+                  description,
+                  content: fields.content ? content : undefined,
+                  url: fields.url ? url : undefined,
+                }
+              : undefined
+          }
         />
 
         <CollectionSelect

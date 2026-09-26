@@ -80,6 +80,28 @@ export function formatTagInput(tags: string[]): string {
   return tags.join(', ');
 }
 
+/** Whether the tags input already holds `tag`, ignoring case and padding. */
+export function hasTagInput(value: string, tag: string): boolean {
+  const needle = tag.trim().toLowerCase();
+
+  return parseTagInput(value).some((name) => name.toLowerCase() === needle);
+}
+
+/**
+ * The tags input's text with one more tag on the end — an accepted suggestion.
+ *
+ * Re-formatted from the parsed list rather than concatenated, so a trailing
+ * comma or stray spacing in what was typed does not leave `react,, hooks`
+ * behind. A tag the input already holds, in any case, leaves it unchanged.
+ */
+export function appendTagInput(value: string, tag: string): string {
+  const name = tag.trim();
+
+  if (!name || hasTagInput(value, name)) return value;
+
+  return formatTagInput([...parseTagInput(value), name]);
+}
+
 /**
  * Whether this type's content is code, and so gets the Monaco editor rather
  * than a plain textarea.

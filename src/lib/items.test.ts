@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  appendTagInput,
+  hasTagInput,
   buildCreateItemPayload,
   copyableFieldFor,
   editableFieldsFor,
@@ -480,5 +482,38 @@ describe('groupItemsByShape', () => {
 
   it('returns three empty groups for no items', () => {
     expect(groupItemsByShape([])).toEqual({ cards: [], images: [], files: [] });
+  });
+});
+
+describe('hasTagInput', () => {
+  it('finds a tag ignoring case and padding', () => {
+    expect(hasTagInput('React,  hooks ', 'react')).toBe(true);
+    expect(hasTagInput('react, hooks', ' HOOKS ')).toBe(true);
+  });
+
+  it('does not match part of a tag', () => {
+    expect(hasTagInput('react-hooks', 'react')).toBe(false);
+  });
+});
+
+describe('appendTagInput', () => {
+  it('adds a tag to the end', () => {
+    expect(appendTagInput('react, hooks', 'typescript')).toBe('react, hooks, typescript');
+  });
+
+  it('adds to an empty input without a leading comma', () => {
+    expect(appendTagInput('', 'react')).toBe('react');
+  });
+
+  it('tidies a trailing comma and stray spacing as it goes', () => {
+    expect(appendTagInput('react,  hooks,', 'docker')).toBe('react, hooks, docker');
+  });
+
+  it('leaves the input alone when it already holds the tag, in any case', () => {
+    expect(appendTagInput('React, hooks,', 'react')).toBe('React, hooks,');
+  });
+
+  it('ignores a blank tag', () => {
+    expect(appendTagInput('react', '  ')).toBe('react');
   });
 });
