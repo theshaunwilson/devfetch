@@ -10,6 +10,7 @@ import {
   type AutoTagInput,
 } from '@/lib/ai/auto-tags';
 import { AiOutputError } from '@/lib/ai/errors';
+import { buildExplainInput, cleanExplanation, EXPLAIN_INSTRUCTIONS, type ExplainInput } from '@/lib/ai/explain';
 import {
   buildSummaryInput,
   clampSummary,
@@ -34,6 +35,18 @@ interface AiRequest {
   format: 'text' | 'json_object';
   /** Names the feature in the usage log and in an incomplete-reply error. */
   label: string;
+  /**
+   * How hard the model thinks. `minimal` unless the feature needs more:
+   * reasoning tokens bill as output at eight times the input price.
+   */
+  effort?: 'minimal' | 'low';
+  /** How much it writes around the answer. `low` unless the answer is prose. */
+  verbosity?: 'low' | 'medium';
+  /**
+   * The output ceiling, reasoning included. The default leaves headroom well
+   * beyond the few dozen tokens a tag list or a description needs.
+   */
+  maxOutputTokens?: number;
 }
 
 /**
@@ -51,13 +64,9 @@ async function requestText(request: AiRequest, userId: string): Promise<string> 
     // apply if the instructions ever grow past the caching threshold.
     instructions: request.instructions,
     input: request.input,
-    text: { format: { type: request.format }, verbosity: 'low' },
-    // Reasoning tokens bill as output at eight times the input price, and
-    // naming a technology or describing a snippet does not need much of it.
-    reasoning: { effort: 'minimal' },
-    // Reasoning counts against this cap, so it leaves headroom well beyond
-    // the few dozen tokens either reply needs.
-    max_output_tokens: 1000,
+    text: { format: { type: request.format }, verbosity: request.verbosity ?? 'low' },
+    reasoning: { effort: request.effort ?? 'minimal' },
+    max_output_tokens: request.maxOutputTokens ?? 1000,
     // Responses are otherwise kept on OpenAI's side for 30 days, and nothing
     // here ever refers back to one.
     store: false,
@@ -140,4 +149,46 @@ export async function generateDescriptionSummary(
   }
 
   return summary;
+}
+
+/** An explanation, and whether the code had to be cut to fit the prompt. */
+export interface CodeExplanation {
+  explanation: string;
+  truncated: boolean;
+}
+
+/**
+ * Asks the model to explain one snippet or command, as markdown.
+ *
+ * More room than the other features on every axis: `low` effort, because
+ * following code takes a little thought where naming it does not; `medium`
+ * verbosity, because the answer is the prose; and a larger ceiling, since a
+ * 300-word explanation plus its reasoning would not fit in 1,000 tokens.
+ * Throws `AiOutputError` when nothing usable came back.
+ */
+export async function generateCodeExplanation(
+  input: ExplainInput,
+  userId: string,
+): Promise<CodeExplanation> {
+  const built = buildExplainInput(input);
+  const text = await requestText(
+    {
+      instructions: EXPLAIN_INSTRUCTIONS,
+      input: built.input,
+      format: 'text',
+      label: 'explain',
+      effort: 'low',
+      verbosity: 'medium',
+      maxOutputTokens: 3000,
+    },
+    userId,
+  );
+
+  const explanation = cleanExplanation(text);
+
+  if (!explanation) {
+    throw new AiOutputError('Explain response was empty');
+  }
+
+  return { explanation, truncated: built.truncated };
 }

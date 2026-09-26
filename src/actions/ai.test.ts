@@ -20,7 +20,9 @@ vi.mock('@/lib/db/billing', () => ({ isProUser: vi.fn() }));
 vi.mock('@/lib/ai/generate', () => ({
   generateTagSuggestions: vi.fn(),
   generateDescriptionSummary: vi.fn(),
+  generateCodeExplanation: vi.fn(),
 }));
+vi.mock('@/lib/db/items', () => ({ getItemDetail: vi.fn() }));
 vi.mock('@/lib/rate-limit', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/rate-limit')>()),
   checkAiRateLimit: vi.fn(),
@@ -28,15 +30,19 @@ vi.mock('@/lib/rate-limit', async (importOriginal) => ({
 
 const { auth } = await import('@/auth');
 const { isProUser } = await import('@/lib/db/billing');
-const { generateDescriptionSummary, generateTagSuggestions } = await import('@/lib/ai/generate');
+const { generateCodeExplanation, generateDescriptionSummary, generateTagSuggestions } =
+  await import('@/lib/ai/generate');
+const { getItemDetail } = await import('@/lib/db/items');
 const { checkAiRateLimit } = await import('@/lib/rate-limit');
-const { generateAutoTags, generateSummary } = await import('./ai');
+const { explainCode, generateAutoTags, generateSummary } = await import('./ai');
 
 const session = vi.mocked(auth);
 const isPro = vi.mocked(isProUser);
 const generate = vi.mocked(generateTagSuggestions);
 const summarize = vi.mocked(generateDescriptionSummary);
 const rateLimit = vi.mocked(checkAiRateLimit);
+const explain = vi.mocked(generateCodeExplanation);
+const itemDetail = vi.mocked(getItemDetail);
 
 const USER_ID = 'user_1';
 
@@ -47,6 +53,15 @@ const INPUT = {
   currentTags: ['react'],
 };
 
+/** The saved row `getItemDetail` hands back — only the fields the action reads matter. */
+const COMMAND_ITEM = {
+  id: 'item_1',
+  title: 'Kill port',
+  type: { name: 'command', slug: 'command' },
+  content: 'lsof -ti:3000 | xargs kill -9',
+  language: 'bash',
+} as unknown as Awaited<ReturnType<typeof getItemDetail>>;
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -56,6 +71,8 @@ beforeEach(() => {
   rateLimit.mockResolvedValue({ status: 'allowed' });
   generate.mockResolvedValue(['hooks', 'typescript', 'debounce']);
   summarize.mockResolvedValue('Debounces a value so a search input waits for the user to stop typing.');
+  explain.mockResolvedValue({ explanation: 'Kills whatever holds **port 3000**.', truncated: false });
+  itemDetail.mockResolvedValue(COMMAND_ITEM);
 });
 
 describe('generateAutoTags — gates', () => {
@@ -189,7 +206,7 @@ describe('generateAutoTags — the call', () => {
 
     expect(result).toEqual({
       success: false,
-      error: 'The AI could not come up with suggestions. Try again.',
+      error: 'The AI did not come back with anything usable. Try again.',
     });
     expect(console.warn).toHaveBeenCalled();
   });
@@ -360,5 +377,152 @@ describe('generateSummary — the call', () => {
 
     expect(result).toMatchObject({ success: false });
     expect(console.warn).toHaveBeenCalled();
+  });
+});
+
+describe('explainCode — gates', () => {
+  it('refuses a missing session before looking up the plan, the item or calling OpenAI', async () => {
+    session.mockResolvedValue(null as unknown as never);
+
+    const result = await explainCode({ itemId: 'item_1' });
+
+    expect(result).toEqual({ success: false, error: 'Your session has expired. Sign in again.' });
+    expect(isPro).not.toHaveBeenCalled();
+    expect(itemDetail).not.toHaveBeenCalled();
+    expect(explain).not.toHaveBeenCalled();
+  });
+
+  it('refuses a free account as an upgrade naming explanations, before any budget is spent', async () => {
+    isPro.mockResolvedValue(false);
+
+    const result = await explainCode({ itemId: 'item_1' });
+
+    expect(result).toEqual({
+      success: false,
+      error: 'AI code explanations are part of Pro. Upgrade to use them.',
+      upgradeRequired: true,
+    });
+    expect(rateLimit).not.toHaveBeenCalled();
+    expect(itemDetail).not.toHaveBeenCalled();
+    expect(explain).not.toHaveBeenCalled();
+  });
+
+  it('refuses a request with no item id before spending a rate-limit token', async () => {
+    const result = await explainCode({ itemId: '   ' });
+
+    expect(result).toEqual({ success: false, error: 'Pick an item to explain.' });
+    expect(rateLimit).not.toHaveBeenCalled();
+    expect(itemDetail).not.toHaveBeenCalled();
+  });
+
+  it('refuses a user over the limit without reading the item or calling OpenAI', async () => {
+    rateLimit.mockResolvedValue({ status: 'limited', reset: Date.now() + 30 * 60_000 });
+
+    const result = await explainCode({ itemId: 'item_1' });
+
+    expect(result).toMatchObject({ success: false });
+    expect(rateLimit).toHaveBeenCalledWith(USER_ID);
+    expect(itemDetail).not.toHaveBeenCalled();
+    expect(explain).not.toHaveBeenCalled();
+  });
+
+  it('refuses when the limiter cannot be consulted, rather than letting paid calls through', async () => {
+    rateLimit.mockResolvedValue({ status: 'unavailable' });
+
+    const result = await explainCode({ itemId: 'item_1' });
+
+    expect(result).toEqual({ success: false, error: 'AI features are unavailable right now.' });
+    expect(explain).not.toHaveBeenCalled();
+  });
+});
+
+describe('explainCode — the item', () => {
+  it('reads the item by the trimmed id, through the user-scoped lookup', async () => {
+    await explainCode({ itemId: '  item_1 ' });
+
+    expect(itemDetail).toHaveBeenCalledWith('item_1');
+  });
+
+  it("reads another user's item exactly like a missing one, without calling OpenAI", async () => {
+    // `getItemDetail` filters on the session user, so somebody else's id
+    // comes back null — the same answer as an id that never existed.
+    itemDetail.mockResolvedValue(null);
+
+    const result = await explainCode({ itemId: 'someone_elses_item' });
+
+    expect(result).toEqual({ success: false, error: 'That item could not be found.' });
+    expect(explain).not.toHaveBeenCalled();
+  });
+
+  it('refuses an item that is not code, so the gate is not client-only', async () => {
+    itemDetail.mockResolvedValue({
+      ...COMMAND_ITEM,
+      type: { name: 'note', slug: 'note' },
+    } as typeof COMMAND_ITEM);
+
+    const result = await explainCode({ itemId: 'item_1' });
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Only snippets and commands with code can be explained.',
+    });
+    expect(explain).not.toHaveBeenCalled();
+  });
+
+  it('refuses a code item with no code in it', async () => {
+    itemDetail.mockResolvedValue({ ...COMMAND_ITEM, content: '  \n ' } as typeof COMMAND_ITEM);
+
+    const result = await explainCode({ itemId: 'item_1' });
+
+    expect(result).toMatchObject({ success: false });
+    expect(explain).not.toHaveBeenCalled();
+  });
+});
+
+describe('explainCode — the call', () => {
+  it('returns the explanation and whether the code was cut', async () => {
+    const result = await explainCode({ itemId: 'item_1' });
+
+    expect(result).toEqual({
+      success: true,
+      data: { explanation: 'Kills whatever holds **port 3000**.', truncated: false },
+    });
+  });
+
+  it('explains the saved row, never anything the caller sent, for the session user', async () => {
+    await explainCode({
+      itemId: 'item_1',
+      content: 'rm -rf /',
+    } as Parameters<typeof explainCode>[0]);
+
+    expect(explain).toHaveBeenCalledWith(
+      {
+        title: 'Kill port',
+        typeName: 'command',
+        content: 'lsof -ti:3000 | xargs kill -9',
+        language: 'bash',
+      },
+      USER_ID,
+    );
+  });
+
+  it('maps an SDK error to a plain sentence, never the SDK message', async () => {
+    explain.mockRejectedValue(new APIConnectionTimeoutError({ message: 'secret request detail' }));
+
+    const result = await explainCode({ itemId: 'item_1' });
+
+    expect(result).toEqual({ success: false, error: 'That took too long. Try again.' });
+    expect(JSON.stringify(result)).not.toContain('secret request detail');
+  });
+
+  it('reports an empty reply as a retryable failure', async () => {
+    explain.mockRejectedValue(new AiOutputError('empty'));
+
+    const result = await explainCode({ itemId: 'item_1' });
+
+    expect(result).toEqual({
+      success: false,
+      error: 'The AI did not come back with anything usable. Try again.',
+    });
   });
 });

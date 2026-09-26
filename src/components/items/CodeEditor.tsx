@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import type { ReactNode } from 'react';
 
 import { CopyButton, WindowDots } from '@/components/items/EditorChrome';
 import { languageLabel } from '@/lib/code-language';
@@ -33,6 +34,20 @@ interface CodeEditorProps {
   /** Names the editor for assistive tech, since there is no real <label>. */
   ariaLabel?: string;
   'aria-invalid'?: boolean;
+  /**
+   * Header slots for the drawer's read view, which is the only caller that
+   * passes them: `tabs` sits before the language label and `actions` before the
+   * copy button. The forms render the editor without either.
+   */
+  tabs?: ReactNode;
+  actions?: ReactNode;
+  /**
+   * Wraps the editor pane, so a caller can put it in a tab beside something
+   * else rather than replace it. Omitted, the pane renders as is.
+   */
+  body?: (pane: ReactNode) => ReactNode;
+  /** What the copy button copies, when the visible panel is not the code. */
+  copy?: { value: string; label: string };
 }
 
 /**
@@ -53,8 +68,22 @@ export function CodeEditor({
   className,
   ariaLabel,
   'aria-invalid': ariaInvalid,
+  tabs,
+  actions,
+  body,
+  copy,
 }: CodeEditorProps) {
   const label = languageLabel(language);
+  const pane = (
+    <CodeEditorPane
+      value={value}
+      onChange={onChange}
+      language={language}
+      readOnly={readOnly}
+      minHeight={minHeight}
+      ariaLabel={ariaLabel}
+    />
+  );
 
   return (
     <div
@@ -67,23 +96,30 @@ export function CodeEditor({
       <div className="flex items-center gap-3 border-b bg-muted/40 py-1.5 pr-1.5 pl-3">
         <WindowDots />
 
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className="ml-auto flex min-w-0 items-center gap-1.5">
+          {tabs}
+
           {label && (
-            <span className="font-mono text-[11px] text-muted-foreground">{label}</span>
+            <span
+              className={cn(
+                'truncate font-mono text-[11px] text-muted-foreground',
+                // With tabs beside it there is no room on a phone, and a label
+                // truncated to "b…" says nothing. The drawer's own header
+                // already shows the language as a badge.
+                tabs && 'max-sm:hidden',
+              )}
+            >
+              {label}
+            </span>
           )}
 
-          <CopyButton value={value} label="Copy code" />
+          {actions}
+
+          <CopyButton value={copy?.value ?? value} label={copy?.label ?? 'Copy code'} />
         </div>
       </div>
 
-      <CodeEditorPane
-        value={value}
-        onChange={onChange}
-        language={language}
-        readOnly={readOnly}
-        minHeight={minHeight}
-        ariaLabel={ariaLabel}
-      />
+      {body ? body(pane) : pane}
     </div>
   );
 }

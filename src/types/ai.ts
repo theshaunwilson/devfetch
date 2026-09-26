@@ -13,3 +13,10 @@ export type AiResult<T> =
 export type GenerateAutoTagsResult = AiResult<{ tags: string[] }>;
 
 export type GenerateSummaryResult = AiResult<{ summary: string }>;
+
+/**
+ * An explanation is shown and never saved. `truncated` says the code was too
+ * long to send whole, so the drawer can say the explanation covers only its
+ * beginning.
+ */
+export type ExplainCodeResult = AiResult<{ explanation: string; truncated: boolean }>;

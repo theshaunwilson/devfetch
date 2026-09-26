@@ -9,7 +9,7 @@ import {
 } from 'openai';
 import { describe, expect, it } from 'vitest';
 
-import { AiOutputError, describeAiError } from './errors';
+import { AiOutputError, AiRequestError, describeAiError } from './errors';
 
 const UNAVAILABLE = 'AI features are unavailable right now.';
 
@@ -20,9 +20,22 @@ function headers() {
 describe('describeAiError', () => {
   it('treats an unusable reply as retryable', () => {
     expect(describeAiError(new AiOutputError('incomplete'))).toEqual({
-      message: 'The AI could not come up with suggestions. Try again.',
+      message: 'The AI did not come back with anything usable. Try again.',
       severity: 'warn',
     });
+  });
+
+  it('shows a request refusal as written, since its message is ours', () => {
+    expect(describeAiError(new AiRequestError('That item could not be found.'))).toEqual({
+      message: 'That item could not be found.',
+      severity: 'warn',
+    });
+  });
+
+  it('never shows an ordinary error message as written', () => {
+    expect(describeAiError(new Error('select * from "Item" failed')).message).not.toContain(
+      'select',
+    );
   });
 
   it('tells a timeout apart from the connection error it subclasses', () => {

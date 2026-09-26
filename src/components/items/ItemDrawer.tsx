@@ -22,7 +22,7 @@ interface ItemDrawerProps {
   detail: ItemDetail | null;
   /** Every collection the user owns, for edit mode's picker. */
   collectionOptions: CollectionOption[];
-  /** Whether edit mode offers AI tag suggestions. */
+  /** Whether the AI features — edit mode's suggestions, view mode's code explanation — are live. */
   isPro: boolean;
   status: ItemDetailStatus;
   mode: ItemDrawerMode;
@@ -130,7 +130,7 @@ export function ItemDrawer({
                 />
               </SheetHeader>
 
-              <ItemDrawerBody item={item} detail={detail} status={status} />
+              <ItemDrawerBody item={item} detail={detail} status={status} isPro={isPro} />
             </>
           ))}
       </SheetContent>

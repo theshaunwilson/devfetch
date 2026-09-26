@@ -9,14 +9,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AUTO_TAG_CONTENT_MAX_LENGTH } from './auto-tags';
 import { AiOutputError } from './errors';
+import { EXPLAIN_CONTENT_MAX_LENGTH } from './explain';
 import { SUMMARY_CONTENT_MAX_LENGTH } from './summary';
 
 vi.mock('@/lib/openai', () => ({ AI_MODEL: 'gpt-5-nano', getOpenAI: vi.fn() }));
 
 const { getOpenAI } = await import('@/lib/openai');
-const { generateDescriptionSummary, generateTagSuggestions, safetyIdentifier } = await import(
-  './generate'
-);
+const {
+  generateCodeExplanation,
+  generateDescriptionSummary,
+  generateTagSuggestions,
+  safetyIdentifier,
+} = await import('./generate');
 
 const create = vi.fn();
 
@@ -212,5 +216,85 @@ describe('generateDescriptionSummary', () => {
     create.mockRejectedValue(failure);
 
     await expect(generateDescriptionSummary(SUMMARY_INPUT, USER_ID)).rejects.toBe(failure);
+  });
+});
+
+describe('generateCodeExplanation', () => {
+  const EXPLAIN_INPUT = {
+    title: 'Kill port',
+    typeName: 'command',
+    content: 'lsof -ti:3000 | xargs kill -9',
+    language: 'bash',
+  };
+
+  beforeEach(() => {
+    create.mockResolvedValue(reply('```markdown\nFinds and **kills** the process on port 3000.\n```'));
+  });
+
+  it('asks for plain text with more room than tagging, and the same privacy settings', async () => {
+    await generateCodeExplanation(EXPLAIN_INPUT, USER_ID);
+
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: 'gpt-5-nano',
+        text: { format: { type: 'text' }, verbosity: 'medium' },
+        reasoning: { effort: 'low' },
+        max_output_tokens: 3000,
+        store: false,
+        safety_identifier: safetyIdentifier(USER_ID),
+      }),
+    );
+  });
+
+  it('leaves the other features on their own settings', async () => {
+    await generateDescriptionSummary({ ...EXPLAIN_INPUT, tags: [] }, USER_ID);
+
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ reasoning: { effort: 'minimal' }, max_output_tokens: 1000 }),
+    );
+  });
+
+  it('sends the explain instructions separately from the code', async () => {
+    await generateCodeExplanation(EXPLAIN_INPUT, USER_ID);
+
+    const [params] = create.mock.calls[0];
+
+    expect(params.instructions).toMatch(/200 to 300 words/);
+    expect(params.input).toContain('Language: bash');
+    expect(params.input).toContain(EXPLAIN_INPUT.content);
+  });
+
+  it('returns the reply cleaned up, not truncated', async () => {
+    await expect(generateCodeExplanation(EXPLAIN_INPUT, USER_ID)).resolves.toEqual({
+      explanation: 'Finds and **kills** the process on port 3000.',
+      truncated: false,
+    });
+  });
+
+  it('cuts long code at the explain ceiling and reports it', async () => {
+    const content = 'x'.repeat(EXPLAIN_CONTENT_MAX_LENGTH * 2);
+
+    const result = await generateCodeExplanation({ ...EXPLAIN_INPUT, content }, USER_ID);
+    const [params] = create.mock.calls[0];
+
+    expect(result.truncated).toBe(true);
+    expect(params.input.length).toBeGreaterThan(EXPLAIN_CONTENT_MAX_LENGTH);
+    expect(params.input.length).toBeLessThan(EXPLAIN_CONTENT_MAX_LENGTH + 300);
+  });
+
+  it('throws for an incomplete reply even when it has text', async () => {
+    create.mockResolvedValue(reply('Finds and', 'incomplete', 'max_output_tokens'));
+
+    await expect(generateCodeExplanation(EXPLAIN_INPUT, USER_ID)).rejects.toBeInstanceOf(
+      AiOutputError,
+    );
+  });
+
+  it('throws when nothing is left of the reply', async () => {
+    create.mockResolvedValue(reply('```markdown\n\n```'));
+
+    await expect(generateCodeExplanation(EXPLAIN_INPUT, USER_ID)).rejects.toBeInstanceOf(
+      AiOutputError,
+    );
   });
 });
