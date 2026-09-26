@@ -29,7 +29,7 @@ export const SHELL = 'mx-auto w-full max-w-280 px-5 sm:px-8';
 /** Small helper for the monospace keycap that appears in two places. */
 export function Keycap({ children }: { children: ReactNode }) {
   return (
-    <kbd className="rounded border border-border bg-muted px-1.5 py-px font-code text-[0.6875rem] text-muted-foreground">
+    <kbd className="rounded border border-border bg-muted px-1.5 py-px font-mono text-[0.6875rem] text-muted-foreground">
       {children}
     </kbd>
   );

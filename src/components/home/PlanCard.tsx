@@ -51,13 +51,13 @@ export function PlanCard({
       )}
     >
       <div className="flex items-start justify-between gap-3">
-        <h3 className="font-display text-xl font-semibold tracking-[-0.02em]">{name}</h3>
+        <h3 className="font-heading text-xl font-semibold tracking-[-0.02em]">{name}</h3>
         {featured && <Badge>Most popular</Badge>}
       </div>
       <p className="mt-1.5 text-muted-foreground">{pitch}</p>
 
       <p className="mt-5.5 flex items-baseline gap-2.5">
-        <span className="font-display text-[2.75rem] leading-none font-semibold tracking-[-0.04em]">
+        <span className="font-heading text-[2.75rem] leading-none font-semibold tracking-[-0.04em]">
           {amount}
         </span>
         <span className="text-muted-foreground">{period}</span>

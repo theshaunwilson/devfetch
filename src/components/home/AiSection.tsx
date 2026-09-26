@@ -42,7 +42,7 @@ export function AiSection() {
           >
             Pro
           </Badge>
-          <h2 className="mt-4.5 font-display text-[clamp(1.75rem,3.6vw,2.5rem)] font-semibold tracking-[-0.03em] text-balance">
+          <h2 className="mt-4.5 font-heading text-[clamp(1.75rem,3.6vw,2.5rem)] font-semibold tracking-[-0.03em] text-balance">
             Let AI do the filing
           </h2>
           <p className="mt-3.5 text-pretty text-muted-foreground">
@@ -68,8 +68,8 @@ export function AiSection() {
           <figure className="m-0 overflow-hidden rounded-xl border border-border bg-card">
             <div className="flex h-10.5 items-center gap-3.5 border-b border-border bg-muted/40 px-3.5">
               <WindowDots />
-              <span className="font-code text-xs">useDebounce.ts</span>
-              <span className="ml-auto font-code text-[0.6875rem] text-muted-foreground">
+              <span className="font-mono text-xs">useDebounce.ts</span>
+              <span className="ml-auto font-mono text-[0.6875rem] text-muted-foreground">
                 typescript
               </span>
             </div>
@@ -80,7 +80,7 @@ export function AiSection() {
               number emerald, which are the hues the prototype used and which
               keep purple out of the page's chrome.
             */}
-            <pre className="m-0 overflow-x-auto px-4.5 py-4 font-code text-[0.78rem] leading-[1.85]">
+            <pre className="m-0 overflow-x-auto px-4.5 py-4 font-mono text-[0.78rem] leading-[1.85]">
               <code>
                 <CodeLine n={1}>
                   <span className="text-blue-500">export function</span>{' '}
@@ -128,7 +128,7 @@ export function AiSection() {
                   key={label}
                   variant="outline"
                   className={cn(
-                    'font-code text-[0.6875rem]',
+                    'font-mono text-[0.6875rem]',
                     softBgColorClass(accent),
                     brightTextColorClass(accent)
                   )}

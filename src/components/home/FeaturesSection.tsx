@@ -29,7 +29,7 @@ export function FeaturesSection() {
                   >
                     <Icon className="size-5" />
                   </span>
-                  <h3 className="font-display text-lg font-semibold tracking-[-0.02em]">{title}</h3>
+                  <h3 className="font-heading text-lg font-semibold tracking-[-0.02em]">{title}</h3>
                   <p className="mt-2.5 text-pretty text-muted-foreground">{body}</p>
                 </Card>
               </Reveal>

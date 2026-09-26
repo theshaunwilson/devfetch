@@ -15,7 +15,7 @@ export function SiteFooter({ year }: SiteFooterProps) {
         <div>
           <Link
             href="#top"
-            className="inline-flex items-center gap-2.5 rounded-lg font-display text-[1.0625rem] font-semibold tracking-tight focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            className="inline-flex items-center gap-2.5 rounded-lg text-[1.0625rem] font-semibold tracking-tight focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           >
             <BrandMark />
             DevFetch
