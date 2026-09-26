@@ -1,6 +1,7 @@
 'use client';
 
 import { useLayoutEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 
 import { CopyButton, WindowDots } from '@/components/items/EditorChrome';
 import { MarkdownPreview } from '@/components/items/MarkdownPreview';
@@ -8,7 +9,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { EDITOR_MAX_HEIGHT } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 
-type Tab = 'write' | 'preview';
+/** A tab a caller adds beside Write and Preview, with the panel it shows. */
+export interface MarkdownEditorPanel {
+  value: string;
+  label: string;
+  content: ReactNode;
+}
 
 interface MarkdownEditorProps {
   value: string;
@@ -20,6 +26,20 @@ interface MarkdownEditorProps {
   /** Names the textarea for assistive tech, since there is no real <label>. */
   ariaLabel?: string;
   'aria-invalid'?: boolean;
+  /**
+   * Opt-in slots for the drawer's read view, which is the only caller that
+   * passes them, as with `CodeEditor`: `panels` add tabs after Preview,
+   * `actions` sits before the copy button, and `copy` overrides what it copies
+   * when the visible panel is not the markdown. The tab is controlled when
+   * `tab` is passed, so a caller can switch to its own panel. They cannot pass
+   * tabs of their own instead, because this is already a `Tabs` root and a
+   * nested trigger would bind to it.
+   */
+  panels?: MarkdownEditorPanel[];
+  actions?: ReactNode;
+  copy?: { value: string; label: string };
+  tab?: string;
+  onTabChange?: (tab: string) => void;
 }
 
 /**
@@ -41,13 +61,22 @@ export function MarkdownEditor({
   className,
   ariaLabel,
   'aria-invalid': ariaInvalid,
+  panels = [],
+  actions,
+  copy,
+  tab: controlledTab,
+  onTabChange,
 }: MarkdownEditorProps) {
-  const [tab, setTab] = useState<Tab>(readOnly ? 'preview' : 'write');
+  const [ownTab, setOwnTab] = useState(readOnly ? 'preview' : 'write');
+  const tab = controlledTab ?? ownTab;
 
   return (
     <Tabs
       value={tab}
-      onValueChange={(next) => setTab(next as Tab)}
+      onValueChange={(next) => {
+        setOwnTab(next);
+        onTabChange?.(next);
+      }}
       className={cn(
         'gap-0 overflow-hidden rounded-lg border bg-card',
         ariaInvalid && 'border-destructive',
@@ -69,9 +98,16 @@ export function MarkdownEditor({
             <TabsTrigger value="preview" className="h-6 px-2 text-[11px]">
               Preview
             </TabsTrigger>
+            {panels.map((panel) => (
+              <TabsTrigger key={panel.value} value={panel.value} className="h-6 px-2 text-[11px]">
+                {panel.label}
+              </TabsTrigger>
+            ))}
           </TabsList>
 
-          <CopyButton value={value} label="Copy markdown" />
+          {actions}
+
+          <CopyButton value={copy?.value ?? value} label={copy?.label ?? 'Copy markdown'} />
         </div>
       </div>
 
@@ -106,6 +142,12 @@ export function MarkdownEditor({
           </div>
         )}
       </TabsContent>
+
+      {panels.map((panel) => (
+        <TabsContent key={panel.value} value={panel.value}>
+          {panel.content}
+        </TabsContent>
+      ))}
     </Tabs>
   );
 }

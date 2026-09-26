@@ -166,3 +166,17 @@ export type CreateItemInput = z.input<typeof createItemSchema>;
 
 /** What the server action hands the query function, after normalization. */
 export type CreateItemData = z.output<typeof createItemSchema>;
+
+/**
+ * A replacement for one item's content, and nothing else — what accepting an
+ * optimized prompt sends. Required rather than optional: an empty replacement
+ * would clear the item, which is not something accepting a rewrite can mean.
+ */
+export const updateItemContentSchema = z.object({
+  content: trimmed().pipe(
+    z
+      .string()
+      .min(1, 'Content cannot be empty')
+      .max(CONTENT_MAX_LENGTH, `Content must be at most ${CONTENT_MAX_LENGTH} characters`),
+  ),
+});

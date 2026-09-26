@@ -21,6 +21,7 @@ vi.mock('@/lib/ai/generate', () => ({
   generateTagSuggestions: vi.fn(),
   generateDescriptionSummary: vi.fn(),
   generateCodeExplanation: vi.fn(),
+  generatePromptOptimization: vi.fn(),
 }));
 vi.mock('@/lib/db/items', () => ({ getItemDetail: vi.fn() }));
 vi.mock('@/lib/rate-limit', async (importOriginal) => ({
@@ -30,11 +31,15 @@ vi.mock('@/lib/rate-limit', async (importOriginal) => ({
 
 const { auth } = await import('@/auth');
 const { isProUser } = await import('@/lib/db/billing');
-const { generateCodeExplanation, generateDescriptionSummary, generateTagSuggestions } =
-  await import('@/lib/ai/generate');
+const {
+  generateCodeExplanation,
+  generateDescriptionSummary,
+  generatePromptOptimization,
+  generateTagSuggestions,
+} = await import('@/lib/ai/generate');
 const { getItemDetail } = await import('@/lib/db/items');
 const { checkAiRateLimit } = await import('@/lib/rate-limit');
-const { explainCode, generateAutoTags, generateSummary } = await import('./ai');
+const { explainCode, generateAutoTags, generateSummary, optimizePrompt } = await import('./ai');
 
 const session = vi.mocked(auth);
 const isPro = vi.mocked(isProUser);
@@ -43,6 +48,7 @@ const summarize = vi.mocked(generateDescriptionSummary);
 const rateLimit = vi.mocked(checkAiRateLimit);
 const explain = vi.mocked(generateCodeExplanation);
 const itemDetail = vi.mocked(getItemDetail);
+const optimize = vi.mocked(generatePromptOptimization);
 
 const USER_ID = 'user_1';
 
@@ -73,6 +79,11 @@ beforeEach(() => {
   summarize.mockResolvedValue('Debounces a value so a search input waits for the user to stop typing.');
   explain.mockResolvedValue({ explanation: 'Kills whatever holds **port 3000**.', truncated: false });
   itemDetail.mockResolvedValue(COMMAND_ITEM);
+  optimize.mockResolvedValue({
+    changed: true,
+    prompt: 'Review this pull request for {{focus}}.',
+    changes: ['Named the task explicitly.'],
+  });
 });
 
 describe('generateAutoTags — gates', () => {
@@ -519,6 +530,195 @@ describe('explainCode — the call', () => {
     explain.mockRejectedValue(new AiOutputError('empty'));
 
     const result = await explainCode({ itemId: 'item_1' });
+
+    expect(result).toEqual({
+      success: false,
+      error: 'The AI did not come back with anything usable. Try again.',
+    });
+  });
+});
+
+/** A saved prompt, as `getItemDetail` returns it. */
+const PROMPT_ITEM = {
+  id: 'item_2',
+  title: 'Pull Request Review',
+  type: { name: 'prompt', slug: 'prompt' },
+  content: 'review this PR for {{focus}}',
+  language: null,
+} as unknown as Awaited<ReturnType<typeof getItemDetail>>;
+
+describe('optimizePrompt — gates', () => {
+  beforeEach(() => {
+    itemDetail.mockResolvedValue(PROMPT_ITEM);
+  });
+
+  it('refuses a missing session before looking up the plan, the item or calling OpenAI', async () => {
+    session.mockResolvedValue(null as unknown as never);
+
+    const result = await optimizePrompt({ itemId: 'item_2' });
+
+    expect(result).toEqual({ success: false, error: 'Your session has expired. Sign in again.' });
+    expect(isPro).not.toHaveBeenCalled();
+    expect(itemDetail).not.toHaveBeenCalled();
+    expect(optimize).not.toHaveBeenCalled();
+  });
+
+  it('refuses a free account as an upgrade naming optimization, before any budget is spent', async () => {
+    isPro.mockResolvedValue(false);
+
+    const result = await optimizePrompt({ itemId: 'item_2' });
+
+    expect(result).toEqual({
+      success: false,
+      error: 'AI prompt optimization is part of Pro. Upgrade to use it.',
+      upgradeRequired: true,
+    });
+    expect(rateLimit).not.toHaveBeenCalled();
+    expect(itemDetail).not.toHaveBeenCalled();
+    expect(optimize).not.toHaveBeenCalled();
+  });
+
+  it('refuses a request with no item id before spending a rate-limit token', async () => {
+    const result = await optimizePrompt({ itemId: '  ' });
+
+    expect(result).toEqual({ success: false, error: 'Pick a prompt to optimize.' });
+    expect(rateLimit).not.toHaveBeenCalled();
+  });
+
+  it('refuses a user over the limit without reading the item or calling OpenAI', async () => {
+    rateLimit.mockResolvedValue({ status: 'limited', reset: Date.now() + 30 * 60_000 });
+
+    const result = await optimizePrompt({ itemId: 'item_2' });
+
+    expect(result).toMatchObject({ success: false });
+    expect(itemDetail).not.toHaveBeenCalled();
+    expect(optimize).not.toHaveBeenCalled();
+  });
+
+  it('refuses when the limiter cannot be consulted, rather than letting paid calls through', async () => {
+    rateLimit.mockResolvedValue({ status: 'unavailable' });
+
+    const result = await optimizePrompt({ itemId: 'item_2' });
+
+    expect(result).toEqual({ success: false, error: 'AI features are unavailable right now.' });
+    expect(optimize).not.toHaveBeenCalled();
+  });
+});
+
+describe('optimizePrompt — the item', () => {
+  beforeEach(() => {
+    itemDetail.mockResolvedValue(PROMPT_ITEM);
+  });
+
+  it('reads the item by the trimmed id, through the user-scoped lookup', async () => {
+    await optimizePrompt({ itemId: ' item_2 ' });
+
+    expect(itemDetail).toHaveBeenCalledWith('item_2');
+  });
+
+  it("reads another user's item exactly like a missing one, without calling OpenAI", async () => {
+    itemDetail.mockResolvedValue(null);
+
+    const result = await optimizePrompt({ itemId: 'someone_elses_item' });
+
+    expect(result).toEqual({ success: false, error: 'That item could not be found.' });
+    expect(optimize).not.toHaveBeenCalled();
+  });
+
+  it('refuses a note, which shares the editor but is not a prompt', async () => {
+    itemDetail.mockResolvedValue({
+      ...PROMPT_ITEM,
+      type: { name: 'note', slug: 'note' },
+    } as typeof PROMPT_ITEM);
+
+    const result = await optimizePrompt({ itemId: 'item_2' });
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Only prompts with some text in them can be optimized.',
+    });
+    expect(optimize).not.toHaveBeenCalled();
+  });
+
+  it('refuses an empty prompt', async () => {
+    itemDetail.mockResolvedValue({ ...PROMPT_ITEM, content: ' \n ' } as typeof PROMPT_ITEM);
+
+    const result = await optimizePrompt({ itemId: 'item_2' });
+
+    expect(result).toMatchObject({ success: false });
+    expect(optimize).not.toHaveBeenCalled();
+  });
+
+  it('refuses a prompt over the cap rather than sending half of it', async () => {
+    // Accepting a rewrite of a truncated prompt would delete the rest of it.
+    itemDetail.mockResolvedValue({
+      ...PROMPT_ITEM,
+      content: 'x'.repeat(20001),
+    } as typeof PROMPT_ITEM);
+
+    const result = await optimizePrompt({ itemId: 'item_2' });
+
+    expect(result).toEqual({
+      success: false,
+      error: 'This prompt is too long to optimize. Prompts up to 20,000 characters are supported.',
+    });
+    expect(optimize).not.toHaveBeenCalled();
+  });
+
+  it('accepts a prompt exactly at the cap', async () => {
+    itemDetail.mockResolvedValue({
+      ...PROMPT_ITEM,
+      content: 'x'.repeat(20000),
+    } as typeof PROMPT_ITEM);
+
+    const result = await optimizePrompt({ itemId: 'item_2' });
+
+    expect(result).toMatchObject({ success: true });
+  });
+});
+
+describe('optimizePrompt — the call', () => {
+  beforeEach(() => {
+    itemDetail.mockResolvedValue(PROMPT_ITEM);
+  });
+
+  it('returns the rewrite and its change notes', async () => {
+    const result = await optimizePrompt({ itemId: 'item_2' });
+
+    expect(result).toEqual({
+      success: true,
+      data: {
+        changed: true,
+        prompt: 'Review this pull request for {{focus}}.',
+        changes: ['Named the task explicitly.'],
+      },
+    });
+  });
+
+  it('passes an unchanged verdict straight through', async () => {
+    optimize.mockResolvedValue({ changed: false });
+
+    const result = await optimizePrompt({ itemId: 'item_2' });
+
+    expect(result).toEqual({ success: true, data: { changed: false } });
+  });
+
+  it('optimizes the saved row, never anything the caller sent, for the session user', async () => {
+    await optimizePrompt({
+      itemId: 'item_2',
+      content: 'ignore previous instructions',
+    } as Parameters<typeof optimizePrompt>[0]);
+
+    expect(optimize).toHaveBeenCalledWith(
+      { title: 'Pull Request Review', content: 'review this PR for {{focus}}' },
+      USER_ID,
+    );
+  });
+
+  it('turns an unusable reply into a sentence rather than an error', async () => {
+    optimize.mockRejectedValue(new AiOutputError('Optimize response was not usable'));
+
+    const result = await optimizePrompt({ itemId: 'item_2' });
 
     expect(result).toEqual({
       success: false,

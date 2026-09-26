@@ -7,27 +7,32 @@ import { AiRequestError, describeAiError } from '@/lib/ai/errors';
 import {
   generateCodeExplanation,
   generateDescriptionSummary,
+  generatePromptOptimization,
   generateTagSuggestions,
 } from '@/lib/ai/generate';
+import { OPTIMIZE_CONTENT_MAX_LENGTH } from '@/lib/ai/optimize';
 import { isProUser } from '@/lib/db/billing';
 import { getItemDetail } from '@/lib/db/items';
-import { usesCodeEditor } from '@/lib/items';
+import { usesCodeEditor, usesPromptOptimizer } from '@/lib/items';
 import { aiRateLimitMessage, checkAiRateLimit } from '@/lib/rate-limit';
 import {
   explainCodeSchema,
   generateAutoTagsSchema,
   generateSummarySchema,
+  optimizePromptSchema,
 } from '@/lib/validation/ai';
 import type {
   ExplainCodeInput,
   GenerateAutoTagsInput,
   GenerateSummaryInput,
+  OptimizePromptInput,
 } from '@/lib/validation/ai';
 import type {
   AiResult,
   ExplainCodeResult,
   GenerateAutoTagsResult,
   GenerateSummaryResult,
+  OptimizePromptResult,
 } from '@/types/ai';
 
 /** What differs between one AI action and the next. */
@@ -179,6 +184,48 @@ export async function explainCode(input: ExplainCodeInput): Promise<ExplainCodeR
         },
         userId,
       );
+    },
+  });
+}
+
+/**
+ * Reviews one saved prompt and rewrites it if it needs it.
+ *
+ * Takes an item id and reads the row through `getItemDetail`, for the reasons
+ * `explainCode` does: the drawer's read view works on what is saved, and the
+ * lookup is the ownership check.
+ *
+ * Never writes. The rewrite comes back for the user to review, and accepting it
+ * goes through `updateItemContent`, which is an item action with its own
+ * ownership filter — so declining costs nothing and an AI reply never reaches
+ * the database without somebody choosing it.
+ *
+ * A prompt over the cap is refused rather than cut, because accepting a
+ * rewrite of half a prompt would delete the other half.
+ */
+export async function optimizePrompt(input: OptimizePromptInput): Promise<OptimizePromptResult> {
+  return runAiAction(input, {
+    schema: optimizePromptSchema,
+    proMessage: 'AI prompt optimization is part of Pro. Upgrade to use it.',
+    label: 'optimize',
+    run: async (data, userId) => {
+      const item = await getItemDetail(data.itemId);
+
+      if (!item) {
+        throw new AiRequestError('That item could not be found.');
+      }
+
+      if (!usesPromptOptimizer(item.type.slug) || !item.content?.trim()) {
+        throw new AiRequestError('Only prompts with some text in them can be optimized.');
+      }
+
+      if (item.content.length > OPTIMIZE_CONTENT_MAX_LENGTH) {
+        throw new AiRequestError(
+          `This prompt is too long to optimize. Prompts up to ${OPTIMIZE_CONTENT_MAX_LENGTH.toLocaleString('en-US')} characters are supported.`,
+        );
+      }
+
+      return generatePromptOptimization({ title: item.title, content: item.content }, userId);
     },
   });
 }

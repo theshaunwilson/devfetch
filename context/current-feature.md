@@ -1,12 +1,37 @@
-# Current Feature
+# Current Feature: AI Prompt Optimization
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
+- Prompt items get an **Optimize** button in the markdown editor's window-chrome header, in the item drawer's read view, placed and styled like **Explain with AI** in the snippet/command header (outlined `h-6` header button, `WandSparkles` icon, spinner and "Optimizing…" while pending, tooltip)
+- Only the **prompt** type gets it — notes share `MarkdownEditor` but show no button, and the create/edit forms render the editor unchanged
+- The model reviews the saved prompt and refines it **only if needed**: it keeps the user's intent, language and `{{placeholders}}`, adds no facts, and returns the prompt plus 2–5 short bullets on what changed and why
+- The result is shown for review, not applied: the optimized prompt beside the original, with the change list, and the user is asked whether to use it — **Use this prompt** replaces the item's content and saves; **Discard** leaves the item untouched
+- When the prompt is already good, say so ("This prompt already holds up") and offer nothing to accept
+- Free accounts see a Crown button with the "AI features require Pro subscription" tooltip; its click opens the upgrade toast with no server call, like Explain with AI
+- A new `optimizePrompt` server action runs through the shared `runAiAction` gates (session → Pro → parse → fail-closed AI rate limit → call) and takes an **item id**, reading the row through the user-scoped `getItemDetail`, and refusing non-prompt items or empty content on the server
+- Pure logic (input builder, reply parsing and cleaning) lives in `src/lib/ai/optimize.ts` with unit tests; action tests cover every gate, ownership and the type check
+- `npm run test`, `npm run lint`, `npx tsc --noEmit` and `npm run build` pass
+
 ## Notes
+
+- **Pattern to follow:** `src/components/items/ExplainableCodeEditor.tsx` wraps `CodeEditor` with a header action, tabs and a body override; `MarkdownEditor` has no such slots yet, so it needs opt-in `actions`/`tabs`/`body` slots (or an `OptimizablePromptEditor` wrapper) that only the drawer passes. `ItemDrawerBody.tsx:94` is where the read-only `MarkdownEditor` renders; key the wrapper by item id so opening another item starts clean.
+- **`docs/ai-integration-plan.md` §4.4** designs this: output `{ prompt, changes }`, effort `low`, `max_output_tokens` 4,000, returned prompt capped at `CONTENT_MAX_LENGTH`. `OptimizePromptResult` is already sketched there as `AiResult<{ prompt: string; changes: string[] }>`.
+- **JSON output needs "json" in the input**, not just the instructions — the 400 the auto-tag feature hit. Add a `changed`/unchanged signal so "refine if needed" has a way to say no change was needed.
+- **Truncation is unsafe here, unlike explain.** Accepting replaces the whole content, so a prompt cut to fit the model would lose its tail on save. Refuse prompts over the input cap rather than truncating them.
+- **Accepting is the first AI write.** `updateItem` needs `title` (required in `updateItemSchema`), so accepting through it means resending the title. A narrow content-only write — ownership in the `WHERE`, as `updateItem`/`setItemPinned` do — is likely cleaner. After a save the drawer's client-side `item`/`detail` must be patched (the `onFavoriteChanged`/`onPinChanged` pattern) and `router.refresh()` called, or the drawer shows stale content. Content changing should stamp `updatedAt`.
+- **Model output is rendered as markdown** through `MarkdownPreview`, which keeps raw HTML disabled — what makes it safe to show.
+- The optimization shares the 20-an-hour AI budget with tags, descriptions and explanations.
+
+### Decisions to settle at `start`
+
+1. **Where the button lives:** read view only, as Explain with AI does (recommended — the request says "much like" it), or also the edit form's Write tab, where accepting would fill the textarea and the form's Save would write it.
+2. **How the suggestion is reviewed:** Preview / Optimized tabs in the editor header (recommended, mirrors Code / Explanation) with the change list and Use / Discard under the optimized text, versus a confirm dialog or a side-by-side diff.
+3. **How accepting saves:** a new content-only action (recommended) versus `updateItem` with the title resent.
+4. **Input cap:** refuse prompts above a limit (e.g. 20,000 characters, explain's cap) rather than truncating.
 
 ## History
 

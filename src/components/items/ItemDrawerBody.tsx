@@ -6,11 +6,12 @@ import type { LucideIcon } from 'lucide-react';
 import { ExplainableCodeEditor } from '@/components/items/ExplainableCodeEditor';
 import { ItemFilePanel } from '@/components/items/ItemFilePanel';
 import { MarkdownEditor } from '@/components/items/MarkdownEditor';
+import { OptimizablePromptEditor } from '@/components/items/OptimizablePromptEditor';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatLongDate } from '@/lib/format';
-import { usesCodeEditor, usesMarkdownEditor } from '@/lib/items';
+import { usesCodeEditor, usesMarkdownEditor, usesPromptOptimizer } from '@/lib/items';
 import { isImageUploadType } from '@/lib/uploads';
 import type { DashboardItem, ItemDetail, ItemDetailStatus } from '@/types/item';
 
@@ -38,8 +39,10 @@ interface ItemDrawerBodyProps {
   /** The full item, once the request comes back. */
   detail: ItemDetail | null;
   status: ItemDetailStatus;
-  /** Whether the code editor's Explain button works or asks for an upgrade. */
+  /** Whether the AI buttons — Explain on code, Optimize on prompts — work or ask for an upgrade. */
   isPro: boolean;
+  /** Called with the saved item once an optimized prompt has been accepted. */
+  onSaved: (item: ItemDetail) => void;
 }
 
 /**
@@ -49,7 +52,7 @@ interface ItemDrawerBodyProps {
  * immediately; only the fields carried by `/api/items/[id]` wait behind a
  * skeleton.
  */
-export function ItemDrawerBody({ item, detail, status, isPro }: ItemDrawerBodyProps) {
+export function ItemDrawerBody({ item, detail, status, isPro, onSaved }: ItemDrawerBodyProps) {
   return (
     <div className="flex flex-1 flex-col gap-6 overflow-y-auto p-6">
       {item.description && (
@@ -76,7 +79,7 @@ export function ItemDrawerBody({ item, detail, status, isPro }: ItemDrawerBodyPr
             <section className="flex flex-col gap-2">
               <SectionLabel>Content</SectionLabel>
               {/* Code types get Monaco read-only, prose types get
-                  the rendered markdown. The <pre> is the fallback
+                  the rendered markdown — prompts with Optimize beside it. The <pre> is the fallback
                   for a custom type, which has content but neither
                   editor. */}
               {usesCodeEditor(detail.type.slug) ? (
@@ -90,6 +93,17 @@ export function ItemDrawerBody({ item, detail, status, isPro }: ItemDrawerBodyPr
                   minHeight={80}
                   ariaLabel={`${detail.title} content`}
                   isPro={isPro}
+                />
+              ) : usesPromptOptimizer(detail.type.slug) ? (
+                <OptimizablePromptEditor
+                  // As above: a new item starts with no suggestion.
+                  key={detail.id}
+                  itemId={detail.id}
+                  value={detail.content}
+                  minHeight={140}
+                  ariaLabel={`${detail.title} content`}
+                  isPro={isPro}
+                  onSaved={onSaved}
                 />
               ) : usesMarkdownEditor(detail.type.slug) ? (
                 <MarkdownEditor

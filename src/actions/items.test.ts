@@ -18,6 +18,7 @@ vi.mock('@/lib/db/collections', () => ({ getOwnedCollectionIds: vi.fn() }));
 vi.mock('@/lib/db/items', () => ({
   createItem: vi.fn(),
   updateItem: vi.fn(),
+  updateItemContent: vi.fn(),
   deleteItem: vi.fn(),
   setItemFavorite: vi.fn(),
   setItemPinned: vi.fn(),
@@ -31,17 +32,18 @@ const { getOwnedCollectionIds } = await import('@/lib/db/collections');
 const {
   createItem: createItemRow,
   updateItem: updateItemRow,
+  updateItemContent: updateItemContentRow,
   deleteItem: deleteItemRow,
   setItemFavorite: setItemFavoriteRow,
   setItemPinned: setItemPinnedRow,
 } = await import('@/lib/db/items');
-const { createItem, deleteItem, setItemFavorite, setItemPinned, updateItem } = await import(
-  './items'
-);
+const { createItem, deleteItem, setItemFavorite, setItemPinned, updateItem, updateItemContent } =
+  await import('./items');
 
 const session = vi.mocked(auth);
 const isPro = vi.mocked(isProUser);
 const writeRow = vi.mocked(updateItemRow);
+const writeContent = vi.mocked(updateItemContentRow);
 const deleteRow = vi.mocked(deleteItemRow);
 const createRow = vi.mocked(createItemRow);
 const findType = vi.mocked(getItemTypeById);
@@ -78,6 +80,7 @@ beforeEach(() => {
   // asserted through unknown rather than reconstructed in full.
   session.mockResolvedValue({ user: { id: USER_ID } } as unknown as never);
   writeRow.mockResolvedValue(saved);
+  writeContent.mockResolvedValue(saved);
   deleteRow.mockResolvedValue({ deleted: true, fileKey: null });
   createRow.mockResolvedValue({ ok: true, item: saved });
   // Free by default; the tests that are about uploads or the ceiling say so.
@@ -785,5 +788,53 @@ describe('createItem, at the ceiling', () => {
     await createItem({ typeId: 'type_1', title: 'A snippet' });
 
     expect(createRow.mock.calls[0][2]).toBe(true);
+  });
+});
+
+describe('updateItemContent', () => {
+  it('refuses a missing session without writing', async () => {
+    session.mockResolvedValue(null as unknown as never);
+
+    const result = await updateItemContent(ITEM_ID, 'New prompt');
+
+    expect(result).toEqual({ success: false, error: 'Your session has expired. Sign in again.' });
+    expect(writeContent).not.toHaveBeenCalled();
+  });
+
+  it('writes the trimmed content through the user-scoped query and returns the item', async () => {
+    const result = await updateItemContent(ITEM_ID, '  New prompt\n');
+
+    expect(writeContent).toHaveBeenCalledWith(ITEM_ID, 'New prompt');
+    expect(result).toEqual({ success: true, data: saved });
+  });
+
+  it('refuses empty content, which would clear the item', async () => {
+    const result = await updateItemContent(ITEM_ID, '   ');
+
+    expect(result).toEqual({ success: false, error: 'Content cannot be empty' });
+    expect(writeContent).not.toHaveBeenCalled();
+  });
+
+  it('refuses content over the ceiling, and a non-string', async () => {
+    expect(await updateItemContent(ITEM_ID, 'x'.repeat(100_001))).toMatchObject({ success: false });
+    expect(await updateItemContent(ITEM_ID, 42 as unknown as string)).toMatchObject({ success: false });
+    expect(writeContent).not.toHaveBeenCalled();
+  });
+
+  it("reads somebody else's item exactly like a missing one", async () => {
+    writeContent.mockResolvedValue(null);
+
+    const result = await updateItemContent('someone_elses_item', 'New prompt');
+
+    expect(result).toEqual({ success: false, error: 'That item could not be found.' });
+  });
+
+  it('turns a database failure into a retryable message', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    writeContent.mockRejectedValue(new Error('connection lost'));
+
+    const result = await updateItemContent(ITEM_ID, 'New prompt');
+
+    expect(result).toEqual({ success: false, error: 'Could not save your changes. Please try again.' });
   });
 });

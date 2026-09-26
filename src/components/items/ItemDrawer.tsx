@@ -22,12 +22,12 @@ interface ItemDrawerProps {
   detail: ItemDetail | null;
   /** Every collection the user owns, for edit mode's picker. */
   collectionOptions: CollectionOption[];
-  /** Whether the AI features — edit mode's suggestions, view mode's code explanation — are live. */
+  /** Whether the AI features — edit mode's suggestions, view mode's code explanation and prompt optimization — are live. */
   isPro: boolean;
   status: ItemDetailStatus;
   mode: ItemDrawerMode;
   onModeChange: (mode: ItemDrawerMode) => void;
-  /** Called with the saved item after an edit. */
+  /** Called with the saved item after an edit, or after an optimized prompt is accepted. */
   onSaved: (item: ItemDetail) => void;
   /** Called once the item has been deleted. */
   onDeleted: () => void;
@@ -130,7 +130,13 @@ export function ItemDrawer({
                 />
               </SheetHeader>
 
-              <ItemDrawerBody item={item} detail={detail} status={status} isPro={isPro} />
+              <ItemDrawerBody
+                item={item}
+                detail={detail}
+                status={status}
+                isPro={isPro}
+                onSaved={onSaved}
+              />
             </>
           ))}
       </SheetContent>

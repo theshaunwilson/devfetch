@@ -57,6 +57,7 @@ const {
   setItemFavorite,
   setItemPinned,
   updateItem,
+  updateItemContent,
 } = await import('./items');
 const { Prisma } = await import('@/generated/prisma/client');
 
@@ -1481,5 +1482,46 @@ describe('setItemPinned', () => {
     executeRaw.mockRejectedValue(new Error('connection lost'));
 
     await expect(setItemPinned(ITEM_ID, true)).rejects.toThrow('connection lost');
+  });
+});
+
+describe('updateItemContent', () => {
+  beforeEach(() => {
+    update.mockResolvedValue(row({ content: 'Review this pull request.' }));
+  });
+
+  it('writes the content and nothing else, scoped to the signed-in user in the write itself', async () => {
+    await updateItemContent(ITEM_ID, 'Review this pull request.');
+
+    expect(updateArgs().where).toEqual({ id: ITEM_ID, userId: USER_ID });
+    expect(updateArgs().data).toEqual({ content: 'Review this pull request.' });
+  });
+
+  it('returns the full item, serialized', async () => {
+    const item = await updateItemContent(ITEM_ID, 'Review this pull request.');
+
+    expect(item).toMatchObject({ id: ITEM_ID, content: 'Review this pull request.' });
+    expect(item?.updatedAt).toBe('2026-08-18T21:56:33.193Z');
+  });
+
+  it('returns null without writing when nobody is signed in', async () => {
+    currentUserId.mockResolvedValue(null);
+
+    await expect(updateItemContent(ITEM_ID, 'x')).resolves.toBeNull();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("returns null for somebody else's item, rather than throwing", async () => {
+    update.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('not found', { code: 'P2025', clientVersion: 'test' }),
+    );
+
+    await expect(updateItemContent(ITEM_ID, 'x')).resolves.toBeNull();
+  });
+
+  it('rethrows anything that is not a missing row', async () => {
+    update.mockRejectedValue(new Error('connection lost'));
+
+    await expect(updateItemContent(ITEM_ID, 'x')).rejects.toThrow('connection lost');
   });
 });
