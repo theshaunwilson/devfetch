@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { PLAINTEXT, languageLabel, monacoLanguage } from '@/lib/code-language';
+import {
+  LANGUAGE_OPTIONS,
+  PLAINTEXT,
+  findLanguageOption,
+  languageLabel,
+  languageSelectOptions,
+  monacoLanguage,
+} from '@/lib/code-language';
 
 describe('monacoLanguage', () => {
   it('falls back to plaintext when the item has no language', () => {
@@ -74,5 +81,70 @@ describe('languageLabel', () => {
     expect(languageLabel(undefined)).toBeNull();
     expect(languageLabel('')).toBeNull();
     expect(languageLabel('   ')).toBeNull();
+  });
+});
+
+// The ids monaco-editor 0.56 registers, as shipped in `public/monaco`. An id
+// Monaco does not know renders as plaintext with no error, so a typo in the
+// dropdown's list would only show up as missing colours.
+const MONACO_IDS = new Set([
+  'bat', 'c', 'coffeescript', 'cpp', 'csharp', 'css', 'dart', 'dockerfile',
+  'elixir', 'fsharp', 'go', 'graphql', 'hcl', 'html', 'ini', 'java',
+  'javascript', 'json', 'julia', 'kotlin', 'less', 'lua', 'markdown', 'mysql',
+  'objective-c', 'perl', 'pgsql', 'php', 'powershell', 'python', 'r', 'ruby',
+  'rust', 'scala', 'scss', 'shell', 'sql', 'swift', 'typescript', 'xml', 'yaml',
+]);
+
+describe('LANGUAGE_OPTIONS', () => {
+  it('only offers languages Monaco actually highlights', () => {
+    for (const option of LANGUAGE_OPTIONS) {
+      expect(MONACO_IDS, option.value).toContain(monacoLanguage(option.value));
+    }
+  });
+
+  // Stored values are what the user would have typed, so a new bash item
+  // saves as `bash` like the seeded ones rather than Monaco's `shell`.
+  it('stores bash as bash, not as the Monaco id', () => {
+    expect(findLanguageOption('bash')?.value).toBe('bash');
+    expect(LANGUAGE_OPTIONS.some((option) => option.value === 'shell')).toBe(false);
+  });
+
+  it('has no duplicate values', () => {
+    const values = LANGUAGE_OPTIONS.map((option) => option.value);
+
+    expect(new Set(values).size).toBe(values.length);
+  });
+});
+
+describe('findLanguageOption', () => {
+  it('matches on the value or the label, ignoring case and padding', () => {
+    expect(findLanguageOption('typescript')?.value).toBe('typescript');
+    expect(findLanguageOption('TypeScript')?.value).toBe('typescript');
+    expect(findLanguageOption('  BASH ')?.value).toBe('bash');
+    expect(findLanguageOption('C++')?.value).toBe('cpp');
+  });
+
+  it('is null for an unlisted language or none at all', () => {
+    expect(findLanguageOption('zsh')).toBeNull();
+    expect(findLanguageOption('')).toBeNull();
+    expect(findLanguageOption('   ')).toBeNull();
+    expect(findLanguageOption(null)).toBeNull();
+  });
+});
+
+describe('languageSelectOptions', () => {
+  it('is the fixed list when the stored language is listed or empty', () => {
+    expect(languageSelectOptions('bash')).toBe(LANGUAGE_OPTIONS);
+    expect(languageSelectOptions('Bash')).toBe(LANGUAGE_OPTIONS);
+    expect(languageSelectOptions('')).toBe(LANGUAGE_OPTIONS);
+    expect(languageSelectOptions(null)).toBe(LANGUAGE_OPTIONS);
+  });
+
+  // Otherwise an item saved as `zsh` would open with nothing selected.
+  it('prepends an unlisted stored language, trimmed, as its own option', () => {
+    const options = languageSelectOptions(' zsh ');
+
+    expect(options[0]).toEqual({ value: 'zsh', label: 'zsh' });
+    expect(options.slice(1)).toEqual(LANGUAGE_OPTIONS);
   });
 });
