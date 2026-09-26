@@ -1,21 +1,16 @@
-import { ArrowLeft } from 'lucide-react';
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 
-import { EditorPreferencesProvider } from '@/components/editor/EditorPreferencesProvider';
 import { AccountSettings } from '@/components/settings/AccountSettings';
 import { BillingSettings } from '@/components/settings/BillingSettings';
 import { CheckoutBanner } from '@/components/settings/CheckoutBanner';
 import { EditorPreferencesSettings } from '@/components/settings/EditorPreferencesSettings';
-import { Button } from '@/components/ui/button';
-import { Toaster } from '@/components/ui/sonner';
-import { DEFAULT_SIGNED_IN_PATH, SIGN_IN_PATH } from '@/lib/auth-redirect';
+import { SIGN_IN_PATH } from '@/lib/auth-redirect';
 import { getBillingStatus } from '@/lib/db/billing';
 import { getCollectionStats } from '@/lib/db/collections';
 import { getItemStats } from '@/lib/db/items';
-import { getEditorPreferences, getProfileUser } from '@/lib/db/user';
+import { getProfileUser } from '@/lib/db/user';
 
 export const metadata: Metadata = {
   title: 'Settings',
@@ -27,13 +22,12 @@ export const dynamic = 'force-dynamic';
 export default async function SettingsPage() {
   // The delete confirmation names what it is about to remove, so it needs
   // both totals; the profile page already runs exactly these three.
-  const [user, itemStats, collectionStats, editorPreferences, billing] = await Promise.all([
+  // The editor preferences come from `AppShell`'s provider, which every
+  // Monaco editor in the app already reads.
+  const [user, itemStats, collectionStats, billing] = await Promise.all([
     getProfileUser(),
     getItemStats(),
     getCollectionStats(),
-    // Read here rather than in the card: the card is a client component, and
-    // this page renders outside `AppShell`, so it mounts its own provider.
-    getEditorPreferences(),
     getBillingStatus(),
   ]);
 
@@ -46,55 +40,42 @@ export default async function SettingsPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-10">
-      {/* This page renders outside `AppShell`, which is the app's only other
-          mount of this. Without it the editor preferences would save and
-          confirm nothing at all — every settings component before this one
-          reported itself with an inline banner, so nothing here had toasted
-          before. The two are never mounted at once, so a toast cannot double. */}
-      <Toaster position="bottom-right" />
+    <div className="px-6 py-8">
+      <div className="mx-auto flex max-w-3xl flex-col gap-4">
+        {/* Reads `?checkout=`, so it suspends — the page is `force-dynamic` and
+            never prerendered, but `useSearchParams` wants the boundary either
+            way. It renders nothing, so there is nothing to fall back to. Its
+            toast lands in `AppShell`'s `Toaster`. */}
+        <Suspense fallback={null}>
+          <CheckoutBanner isPro={billing?.isPro ?? false} />
+        </Suspense>
 
-      {/* Reads `?checkout=`, so it suspends — the page is `force-dynamic` and
-          never prerendered, but `useSearchParams` wants the boundary either
-          way. It renders nothing, so there is nothing to fall back to. */}
-      <Suspense fallback={null}>
-        <CheckoutBanner isPro={billing?.isPro ?? false} />
-      </Suspense>
+        <div className="mb-4">
+          <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
+          <p className="mt-1 text-muted-foreground">Manage your editor, plan and account.</p>
+        </div>
 
-      <Button asChild variant="ghost" size="sm" className="self-start">
-        <Link href={DEFAULT_SIGNED_IN_PATH}>
-          <ArrowLeft className="size-4" />
-          Back to dashboard
-        </Link>
-      </Button>
-
-      <div>
-        <h1 className="text-2xl font-semibold">Settings</h1>
-        <p className="text-sm text-muted-foreground">Manage your account.</p>
-      </div>
-
-      <EditorPreferencesProvider preferences={editorPreferences}>
         <EditorPreferencesSettings />
-      </EditorPreferencesProvider>
 
-      {/* Between the editor and Account, whose destructive delete row stays
-          last. `canManage` is derived here rather than stored, since a copy of
-          `stripeCustomerId !== null` can only ever disagree with it. The two
-          counts are already fetched above for the delete confirmation, so the
-          usage lines cost no extra query. */}
-      <BillingSettings
-        isPro={billing?.isPro ?? false}
-        canManage={billing?.stripeCustomerId != null}
-        itemCount={itemStats.total}
-        collectionCount={collectionStats.total}
-      />
+        {/* Between the editor and Account, whose destructive delete row stays
+            last. `canManage` is derived here rather than stored, since a copy of
+            `stripeCustomerId !== null` can only ever disagree with it. The two
+            counts are already fetched above for the delete confirmation, so the
+            usage lines cost no extra query. */}
+        <BillingSettings
+          isPro={billing?.isPro ?? false}
+          canManage={billing?.stripeCustomerId != null}
+          itemCount={itemStats.total}
+          collectionCount={collectionStats.total}
+        />
 
-      <AccountSettings
-        email={user.email}
-        hasPassword={user.hasPassword}
-        itemCount={itemStats.total}
-        collectionCount={collectionStats.total}
-      />
+        <AccountSettings
+          email={user.email}
+          hasPassword={user.hasPassword}
+          itemCount={itemStats.total}
+          collectionCount={collectionStats.total}
+        />
+      </div>
     </div>
   );
 }

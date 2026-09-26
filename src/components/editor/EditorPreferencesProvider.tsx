@@ -29,10 +29,10 @@ const EditorPreferencesContext = createContext<EditorPreferencesValue | null>(nu
  * Holds the signed-in user's editor preferences for the client components that
  * read them: every Monaco editor, and the settings controls that change them.
  *
- * Mounted twice — by `AppShell`, which is where the editors are, and by
- * `/settings`, which renders standalone and outside the shell. Both hand in a
- * set already read on the server, so the first paint is the user's own
- * preferences rather than the defaults replaced a moment later.
+ * Mounted once, by `AppShell`, which every signed-in page renders inside —
+ * `/settings` included, so its controls and the editors share one state. The
+ * set is read on the server and handed in, so the first paint is the user's
+ * own preferences rather than the defaults replaced a moment later.
  */
 export function EditorPreferencesProvider({
   preferences: initialPreferences,
