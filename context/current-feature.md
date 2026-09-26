@@ -1,23 +1,12 @@
 # Current Feature
 
-# Language dropdown for code items
-
 ## Status
 
-Completed
+Not Started
 
 ## Goals
 
-- Language is picked from a dropdown instead of typed, in both the New Item dialog and the drawer's edit form
-- The Language field sits above the Content editor
-- Choosing a language re-highlights the Monaco editor immediately, so highlighting follows as you type
-- Existing items whose language is not in the list keep their value unchanged unless the user picks another
-
 ## Notes
-
-- `Item.language` stays free text — no migration. The dropdown stores a canonical value (`typescript`, `bash`, `cpp`) that `monacoLanguage` already resolves
-- An unlisted stored value (e.g. `zsh`) is shown as its own option so opening and saving an item never rewrites it
-- Radix Select cannot take an empty value, so "Plain text" is a sentinel mapped back to `''`
 
 ## History
 
