@@ -47,12 +47,17 @@ export function ItemCard({ item }: ItemCardProps) {
           <TypeIconTile icon={getIcon(type.icon)} color={type.color} />
 
           <div className="min-w-0 flex-1">
-            {/* min-w-0 is what makes `truncate` below do anything: the title
-                is a flex container in a grid item, both of which take a min
-                width of auto, so without it a long title grows to its content
-                width and is clipped by the card with no ellipsis. */}
-            <CardTitle className="flex min-w-0 items-center gap-2">
-              <span className="truncate">{item.title}</span>
+            {/* Two lines before the ellipsis, not one. The type tile and the
+                favorite and copy buttons share this row, which on a phone or a
+                three-column grid leaves the title ~130px — a single line cut
+                most titles to a word or two.
+
+                min-w-0 is what lets the clamp take effect at all: the title is
+                a flex container in a grid item, both of which take a min width
+                of auto, so without it a long title grows to its content width
+                and is clipped by the card. */}
+            <CardTitle className="flex min-w-0 items-start gap-2">
+              <span className="line-clamp-2 wrap-break-word">{item.title}</span>
               <ItemMarkers isPinned={item.isPinned} />
             </CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">{formatShortDate(item.updatedAt)}</p>
