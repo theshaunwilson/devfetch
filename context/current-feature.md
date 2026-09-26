@@ -1,12 +1,36 @@
-# Current Feature
+# Current Feature: AI Description Summary
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
+- An icon button beside the **Description** label, in both the New Item dialog (`NewItemDialog`) and the drawer's edit mode (`ItemEditForm`), generates a concise **1–2 sentence**, plain-text description of the item
+- Works from what is **currently in the form** — no save first, and no item id needed — so it works in the create dialog before an item exists
+- Works for **every item type**, using whatever that type has: title plus content for snippet/command/note/prompt (with the language for code types), title plus URL for links, and title plus file name for file/image items (nothing else about a file is readable)
+- Result lands in the description input and is saved only by the form's own Save, so it still passes `DESCRIPTION_MAX_LENGTH` (1000) and the normal Zod rules
+- New server action `generateSummary` in `src/actions/ai.ts` running the same gates as `generateAutoTags`, cheapest refusal first: session → `isProUser()` (row, not JWT) → Zod parse → `checkAiRateLimit` (fails closed, shares the 20/hour AI budget) → OpenAI call. Pro refusal carries `upgradeRequired` so `useUpgradeToast` shows it
+- Pure prompt/parse logic in a new `src/lib/ai/summary.ts` (instructions, input builder with the `<item>` delimiter and content truncation, reply parser, `clampSummary` trimming and cutting at `DESCRIPTION_MAX_LENGTH` on a word boundary), with the SDK call added beside `generateTagSuggestions` in `src/lib/ai/generate.ts`
+- Button hidden for free accounts, matching Suggest Tags; disabled with a pending state while generating, and disabled when there is nothing to summarize
+- Unit tests for the action, the pure summary module and the generate boundary; mutation-checked
+- Verified in the browser for a snippet, a note, a link and a file item in both forms
+
 ## Notes
+
+- **Second AI feature** — reuse everything the auto-tagging feature built: `getOpenAI()`/`AI_MODEL`, `safetyIdentifier`, `describeAiError`/`AiOutputError`, `AiResult<T>` (add `GenerateSummaryResult = AiResult<{ summary: string }>`), `checkAiRateLimit`, and the Responses API settings that were proven live: `store: false`, `reasoning.effort: 'minimal'`, `verbosity: 'low'`, `max_output_tokens: 1000`, and an `incomplete` status treated as an error
+- **The request diverges from `docs/ai-integration-plan.md` §4.2 in two places — the request wins:** the plan limits summaries to notes, prompts and long content (~300 chars), but the request asks for all types with whatever is available; and the plan's `canSummarize` is `editableFieldsFor(slug).content`, which would exclude links, files and images
+- Reply format is a decision for `start`: plain text is the obvious fit for one or two sentences, but `json_object` would need "json" in the **input** (the 400 the auto-tag feature hit). Plain text with `clampSummary` avoids that entirely
+- **How the result lands is a decision for `start`:** fill the description directly (fastest, matches "generate … for the description input", but overwrites what was typed) vs. the plan's review card with **Use/Replace/Discard** (safer when a description already exists). Suggested middle ground: fill directly when empty, show Replace/Discard when not
+- Icon: `WandSparkles` (what Suggest Tags already uses) — **not `Sparkles`**, which is the Prompt type's own icon
+- `isPro` already reaches both forms (threaded for auto-tagging), so no new plumbing expected
+- The form may still hold text from a type picked earlier in the create dialog, so send only the fields the selected type shows — the rule `ItemTagsField` already follows
+- File/image items: the file name is the only file-derived signal; the file's bytes are never read or sent. Links: **never fetch the URL** (SSRF, cost, latency) — summarize from title and the URL string
+- Treat the item as data, never instructions (same `<item>` delimiter and `stripDelimiter` as auto-tags); the model has no tools and nothing applies without the user saving
+- Content truncation: reuse the auto-tag 2000-character ceiling, or raise it for summaries (the plan suggests ~12,000) — decide at `start` on cost vs. quality
+- The homepage copy "Summarizes a long note into a line you can scan" becomes true with this feature
+- Production needs nothing new — `OPENAI_API_KEY` is already required by auto-tagging
+- **Settled at `start`:** the summary **fills the field when it is empty**, and when it already holds text it shows beneath it with **Replace / Discard**, so typed text is never lost silently. Content is truncated at **4,000 characters** (double auto-tagging's cap). The reply is **plain text** rather than `json_object`, so no "json" needs to appear in the input and there is no shape to parse — `clampSummary` handles what comes back
 
 ## History
 

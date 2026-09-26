@@ -4,6 +4,7 @@ import {
   appendTagInput,
   hasTagInput,
   buildCreateItemPayload,
+  buildSummarySource,
   copyableFieldFor,
   editableFieldsFor,
   formatTagInput,
@@ -11,6 +12,7 @@ import {
   initialTypeId,
   parseTagInput,
   requiredFieldsFor,
+  tagsForAi,
   usesCodeEditor,
   usesMarkdownEditor,
 } from './items';
@@ -515,5 +517,84 @@ describe('appendTagInput', () => {
 
   it('ignores a blank tag', () => {
     expect(appendTagInput('react', '  ')).toBe('react');
+  });
+});
+
+describe('tagsForAi', () => {
+  it('parses the input, dropping blanks and duplicates', () => {
+    expect(tagsForAi('react, , hooks, react,')).toEqual(['react', 'hooks']);
+  });
+
+  it('drops a tag the save would refuse rather than failing the request', () => {
+    expect(tagsForAi(`react, ${'x'.repeat(51)}, hooks`)).toEqual(['react', 'hooks']);
+  });
+
+  it('caps the list at the save limit', () => {
+    const input = Array.from({ length: 25 }, (_, i) => `tag-${i}`).join(', ');
+
+    expect(tagsForAi(input)).toHaveLength(20);
+  });
+});
+
+describe('buildSummarySource', () => {
+  // Every field filled, as the create form can be after switching type.
+  const VALUES = {
+    typeName: 'thing',
+    title: 'Title',
+    content: 'some content',
+    language: 'bash',
+    url: 'https://example.com',
+    tags: 'one, two',
+    fileName: 'notes.pdf',
+  };
+
+  it('sends a snippet its content and language, and nothing that belongs to other types', () => {
+    expect(buildSummarySource({ ...VALUES, slug: 'snippet' })).toEqual({
+      title: 'Title',
+      typeName: 'thing',
+      content: 'some content',
+      language: 'bash',
+      url: undefined,
+      fileName: undefined,
+      tags: ['one', 'two'],
+    });
+  });
+
+  it('sends a note its content with no language', () => {
+    const source = buildSummarySource({ ...VALUES, slug: 'note' });
+
+    expect(source.content).toBe('some content');
+    expect(source.language).toBeUndefined();
+  });
+
+  it('sends a link its URL and no content', () => {
+    const source = buildSummarySource({ ...VALUES, slug: 'link' });
+
+    expect(source.url).toBe('https://example.com');
+    expect(source.content).toBeUndefined();
+    expect(source.fileName).toBeUndefined();
+  });
+
+  it('sends a file or image its file name and nothing typed for another type', () => {
+    for (const slug of ['file', 'image']) {
+      const source = buildSummarySource({ ...VALUES, slug });
+
+      expect(source.fileName).toBe('notes.pdf');
+      expect(source.content).toBeUndefined();
+      expect(source.url).toBeUndefined();
+    }
+  });
+
+  it('sends an upload with nothing picked yet no file name', () => {
+    expect(buildSummarySource({ ...VALUES, slug: 'file', fileName: null }).fileName).toBeUndefined();
+  });
+
+  it('sends a custom type its title and tags only', () => {
+    const source = buildSummarySource({ ...VALUES, slug: 'recipe' });
+
+    expect(source).toMatchObject({ title: 'Title', tags: ['one', 'two'] });
+    expect(source.content).toBeUndefined();
+    expect(source.url).toBeUndefined();
+    expect(source.fileName).toBeUndefined();
   });
 });

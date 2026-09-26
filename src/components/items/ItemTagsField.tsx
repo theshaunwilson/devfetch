@@ -11,8 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useUpgradeToast } from '@/hooks/use-upgrade-toast';
-import { appendTagInput, hasTagInput, parseTagInput } from '@/lib/items';
-import { TAG_MAX_LENGTH, TAGS_MAX_COUNT } from '@/lib/validation/items';
+import { appendTagInput, hasTagInput, tagsForAi } from '@/lib/items';
 
 /** The item's text as it stands in the form — what tags are suggested from. */
 export interface TagSuggestionSource {
@@ -62,11 +61,7 @@ export function ItemTagsField({ id, value, onChange, messages, suggestFrom }: It
   function handleSuggest() {
     if (!suggestFrom) return;
 
-    // Only what the save would accept, so a form holding one over-long tag
-    // can still ask for suggestions — the save is where that gets reported.
-    const currentTags = parseTagInput(value)
-      .filter((tag) => tag.length <= TAG_MAX_LENGTH)
-      .slice(0, TAGS_MAX_COUNT);
+    const currentTags = tagsForAi(value);
 
     startTransition(async () => {
       const result = await generateAutoTags({ ...suggestFrom, currentTags });

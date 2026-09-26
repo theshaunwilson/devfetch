@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { createItem } from '@/actions/items';
 import { CollectionSelect } from '@/components/items/CollectionSelect';
 import { FileUpload } from '@/components/items/FileUpload';
+import { ItemDescriptionField } from '@/components/items/ItemDescriptionField';
 import { ItemContentField } from '@/components/items/ItemContentField';
 import { ItemFieldError } from '@/components/items/ItemFieldError';
 import { ItemTagsField } from '@/components/items/ItemTagsField';
@@ -30,12 +31,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { textColorClass } from '@/lib/colors';
 import { capitalize } from '@/lib/format';
 import { getIcon } from '@/lib/icons';
 import {
   buildCreateItemPayload,
+  buildSummarySource,
   editableFieldsFor,
   initialTypeId,
   requiredFieldsFor,
@@ -266,17 +267,27 @@ function NewItemForm({
           <ItemFieldError messages={fieldErrors.title} />
         </div>
 
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="new-item-description">Description</Label>
-          <Textarea
-            id="new-item-description"
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            aria-invalid={Boolean(fieldErrors.description)}
-            rows={2}
-          />
-          <ItemFieldError messages={fieldErrors.description} />
-        </div>
+        <ItemDescriptionField
+          id="new-item-description"
+          value={description}
+          onChange={setDescription}
+          rows={2}
+          messages={fieldErrors.description}
+          summarizeFrom={
+            isPro
+              ? buildSummarySource({
+                  slug: selected.slug,
+                  typeName: selected.name,
+                  title,
+                  content,
+                  language,
+                  url,
+                  tags,
+                  fileName: file?.fileName ?? null,
+                })
+              : undefined
+          }
+        />
 
         {fields.language && (
           <LanguageSelect

@@ -53,9 +53,10 @@ export function truncateText(text: string, max: number): string {
 
 /**
  * Stops the item's own text from closing the `<item>` block early and posing
- * as the instructions that follow it.
+ * as the instructions that follow it. Shared with the summary prompt, which
+ * delimits the item the same way.
  */
-function stripDelimiter(text: string): string {
+export function stripDelimiter(text: string): string {
   return text.replace(/<\/?item>/gi, '');
 }
 
