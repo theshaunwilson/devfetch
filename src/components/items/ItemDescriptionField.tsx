@@ -1,6 +1,6 @@
 'use client';
 
-import { LoaderCircle, WandSparkles } from 'lucide-react';
+import { WandSparkles } from 'lucide-react';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
@@ -100,8 +100,6 @@ export function ItemDescriptionField({
     setSuggestion(null);
   }
 
-  const label = isPending ? 'Writing description…' : 'Write description with AI';
-
   return (
     <div className="flex flex-col gap-2">
       <div className="flex min-h-7 items-center justify-between gap-2">
@@ -111,17 +109,12 @@ export function ItemDescriptionField({
           <Button
             type="button"
             variant="ghost"
-            size="icon-sm"
+            size="sm"
             onClick={handleSummarize}
             disabled={isPending || !hasSource}
-            aria-label={label}
-            title={label}
           >
-            {isPending ? (
-              <LoaderCircle aria-hidden="true" className="animate-spin" />
-            ) : (
-              <WandSparkles aria-hidden="true" />
-            )}
+            <WandSparkles aria-hidden="true" />
+            {isPending ? 'Generating…' : 'Generate Description'}
           </Button>
         )}
       </div>
