@@ -1,27 +1,17 @@
 'use client';
 
-import { Crown, Loader2, WandSparkles } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
 import { explainCode } from '@/actions/ai';
+import { AiHeaderButton } from '@/components/items/AiHeaderButton';
 import { CodeEditor } from '@/components/items/CodeEditor';
 import { MarkdownPreview } from '@/components/items/MarkdownPreview';
-import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useUpgradeToast } from '@/hooks/use-upgrade-toast';
 import { EDITOR_MAX_HEIGHT } from '@/lib/constants';
 
 const PRO_MESSAGE = 'AI code explanations are part of Pro. Upgrade to use them.';
-
-/**
- * Header-sized, so the button sits level with the tabs and the copy button,
- * but outlined in full-strength text rather than muted like the chrome around
- * it: the header is otherwise decoration, and this is the one thing in it
- * that does something a reader would not guess was there.
- */
-const HEADER_BUTTON = 'h-6 gap-1 px-2 text-[11px] font-medium';
 
 /** What the button promises, said once for both the Pro and the free tooltip. */
 const EXPLAIN_HINT = 'Get a plain-language AI explanation of this code';
@@ -105,32 +95,15 @@ export function ExplainableCodeEditor({
           )
         }
         actions={
-          isPro ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className={HEADER_BUTTON}
-                  onClick={handleExplain}
-                  disabled={isPending}
-                >
-                  {isPending ? (
-                    <Loader2 className="size-3 animate-spin" aria-hidden="true" />
-                  ) : (
-                    <WandSparkles className="size-3" aria-hidden="true" />
-                  )}
-                  {isPending ? 'Explaining…' : explanation ? 'Regenerate' : 'Explain with AI'}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {explanation ? 'Write a new AI explanation of this code' : EXPLAIN_HINT}
-              </TooltipContent>
-            </Tooltip>
-          ) : (
-            <ProExplainButton onClick={() => upgradeToast(PRO_MESSAGE)} />
-          )
+          <AiHeaderButton
+            isPro={isPro}
+            label={explanation ? 'Regenerate' : 'Explain with AI'}
+            pendingLabel="Explaining…"
+            isPending={isPending}
+            hint={explanation ? 'Write a new AI explanation of this code' : EXPLAIN_HINT}
+            onClick={handleExplain}
+            onUpgrade={() => upgradeToast(PRO_MESSAGE)}
+          />
         }
         body={(pane) =>
           explanation ? (
@@ -154,28 +127,6 @@ export function ExplainableCodeEditor({
         {explanation ? 'Explanation ready.' : ''}
       </p>
     </Tabs>
-  );
-}
-
-/**
- * The free account's button: shown rather than hidden, since a hidden feature
- * cannot be sold. The tooltip says why it is locked, and the click opens the
- * upgrade toast — a tooltip never appears on touch, so the click has to say it
- * too. The server refuses regardless; this is presentation, not the gate.
- */
-function ProExplainButton({ onClick }: { onClick: () => void }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className={HEADER_BUTTON} onClick={onClick}>
-          <Crown className="size-3 text-emerald-400" aria-hidden="true" />
-          Explain with AI
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>
-        {EXPLAIN_HINT}. AI features require Pro subscription.
-      </TooltipContent>
-    </Tooltip>
   );
 }
 

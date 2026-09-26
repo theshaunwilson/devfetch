@@ -596,6 +596,39 @@ export async function updateItem(id: string, data: UpdateItemData): Promise<Item
 }
 
 /**
+ * Replaces one item's content and returns the item in full.
+ *
+ * The narrow write behind accepting an optimized prompt: nothing but the
+ * content changes, so it needs none of `updateItem`'s other fields — the title
+ * in particular, which that schema requires. Scoped in the `where` of the write
+ * itself for the reason `updateItem` gives, with no match returning null.
+ *
+ * Through Prisma rather than raw SQL, unlike the favorite and pin writes: the
+ * content really has changed, so `updatedAt` should move.
+ */
+export async function updateItemContent(id: string, content: string): Promise<ItemDetail | null> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) return null;
+
+  try {
+    const item = await prisma.item.update({
+      where: { id, userId },
+      data: { content },
+      select: ITEM_DETAIL_SELECT,
+    });
+
+    return toItemDetail(item);
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+/**
  * Sets one item's favorite flag, returning whether it was this user's to set.
  *
  * Scoped in the `WHERE` of the update itself, exactly like `updateItem` and

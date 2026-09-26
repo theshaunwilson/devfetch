@@ -79,3 +79,13 @@ export const explainCodeSchema = z.object({
 });
 
 export type ExplainCodeInput = z.input<typeof explainCodeSchema>;
+
+/**
+ * What the prompt optimizer is sent: an item id, for the reasons
+ * `explainCodeSchema` gives. The prompt is read from the saved row.
+ */
+export const optimizePromptSchema = z.object({
+  itemId: z.string().trim().min(1, 'Pick a prompt to optimize.').max(64),
+});
+
+export type OptimizePromptInput = z.input<typeof optimizePromptSchema>;

@@ -12,12 +12,19 @@ import {
 import { AiOutputError } from '@/lib/ai/errors';
 import { buildExplainInput, cleanExplanation, EXPLAIN_INSTRUCTIONS, type ExplainInput } from '@/lib/ai/explain';
 import {
+  buildOptimizeInput,
+  OPTIMIZE_INSTRUCTIONS,
+  parseOptimization,
+  type OptimizeInput,
+} from '@/lib/ai/optimize';
+import {
   buildSummaryInput,
   clampSummary,
   SUMMARY_INSTRUCTIONS,
   type SummaryInput,
 } from '@/lib/ai/summary';
 import { AI_MODEL, getOpenAI } from '@/lib/openai';
+import type { PromptOptimization } from '@/types/ai';
 
 /**
  * Lets OpenAI attribute abuse to one account without being told who it is: a
@@ -191,4 +198,39 @@ export async function generateCodeExplanation(
   }
 
   return { explanation, truncated: built.truncated };
+}
+
+/**
+ * Asks the model to review one prompt and rewrite it if it needs it.
+ *
+ * `low` effort, since judging whether a prompt holds up takes a little
+ * thought, and a ceiling of 4,000 tokens: the reply carries the whole prompt
+ * back, and a 20,000-character prompt is roughly that many tokens on its own.
+ * `json_object` rather than a schema, for the reason tagging gives. Throws
+ * `AiOutputError` when the reply is unusable, including a rewrite that dropped
+ * one of the prompt's placeholders.
+ */
+export async function generatePromptOptimization(
+  input: OptimizeInput,
+  userId: string,
+): Promise<PromptOptimization> {
+  const text = await requestText(
+    {
+      instructions: OPTIMIZE_INSTRUCTIONS,
+      input: buildOptimizeInput(input),
+      format: 'json_object',
+      label: 'optimize',
+      effort: 'low',
+      maxOutputTokens: 4000,
+    },
+    userId,
+  );
+
+  const optimization = parseOptimization(text, input.content);
+
+  if (!optimization) {
+    throw new AiOutputError('Optimize response was not usable');
+  }
+
+  return optimization;
 }

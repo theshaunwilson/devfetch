@@ -12,12 +12,13 @@ import {
   setItemFavorite as setItemFavoriteRow,
   setItemPinned as setItemPinnedRow,
   updateItem as updateItemRow,
+  updateItemContent as updateItemContentRow,
 } from '@/lib/db/items';
 import { requiredFieldsFor } from '@/lib/items';
 import { deleteObject } from '@/lib/r2';
 import { keyBelongsTo } from '@/lib/uploads';
 import { limitMessage } from '@/lib/usage-limits';
-import { createItemSchema, updateItemSchema } from '@/lib/validation/items';
+import { createItemSchema, updateItemContentSchema, updateItemSchema } from '@/lib/validation/items';
 import type { CreateItemInput, UpdateItemInput } from '@/lib/validation/items';
 import type {
   CreateItemResult,
@@ -245,6 +246,47 @@ export async function updateItem(itemId: string, data: UpdateItemInput): Promise
     return { success: true, data: item };
   } catch (error) {
     console.error('Could not update the item:', error);
+
+    return { success: false, error: 'Could not save your changes. Please try again.' };
+  }
+}
+
+/**
+ * Replaces one item's content — how an optimized prompt is accepted.
+ *
+ * Its own action rather than `updateItem` with the title resent: the drawer's
+ * read view holds the saved item, not a form, and a write that sends back
+ * fields it did not change could overwrite an edit made in another tab. The id
+ * is trusted for nothing, as in `updateItem`; the write is scoped to the
+ * session's user in `updateItemContent`. Returns the full item, so the drawer
+ * refreshes through the same path an edit takes.
+ */
+export async function updateItemContent(
+  itemId: string,
+  content: string,
+): Promise<UpdateItemResult> {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    return { success: false, error: 'Your session has expired. Sign in again.' };
+  }
+
+  const parsed = updateItemContentSchema.safeParse({ content });
+
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? 'Check the content and try again.' };
+  }
+
+  try {
+    const item = await updateItemContentRow(itemId, parsed.data.content);
+
+    if (!item) {
+      return { success: false, error: 'That item could not be found.' };
+    }
+
+    return { success: true, data: item };
+  } catch (error) {
+    console.error('Could not update the item content:', error);
 
     return { success: false, error: 'Could not save your changes. Please try again.' };
   }

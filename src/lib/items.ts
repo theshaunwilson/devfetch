@@ -205,6 +205,15 @@ export function usesMarkdownEditor(slug: string): boolean {
   return TYPES_WITH_CONTENT.has(slug) && !TYPES_WITH_LANGUAGE.has(slug);
 }
 
+/**
+ * Whether this type's content is a prompt the AI can optimize. Only the prompt
+ * type: a note is prose too and shares its editor, but rewriting somebody's
+ * notes to be "better prompts" would be wrong for every one of them.
+ */
+export function usesPromptOptimizer(slug: string): boolean {
+  return slug === 'prompt';
+}
+
 /** Which field a copy button puts on the clipboard, or null for a type with no body. */
 export type CopyableField = 'content' | 'url';
 

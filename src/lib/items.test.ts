@@ -15,6 +15,7 @@ import {
   tagsForAi,
   usesCodeEditor,
   usesMarkdownEditor,
+  usesPromptOptimizer,
 } from './items';
 
 describe('editableFieldsFor', () => {
@@ -596,5 +597,21 @@ describe('buildSummarySource', () => {
     expect(source.content).toBeUndefined();
     expect(source.url).toBeUndefined();
     expect(source.fileName).toBeUndefined();
+  });
+});
+
+describe('usesPromptOptimizer', () => {
+  it('is the prompt type alone', () => {
+    expect(usesPromptOptimizer('prompt')).toBe(true);
+  });
+
+  it('excludes the note, which shares the markdown editor, and every other type', () => {
+    for (const slug of ['note', 'snippet', 'command', 'link', 'file', 'image', 'recipe']) {
+      expect(usesPromptOptimizer(slug)).toBe(false);
+    }
+  });
+
+  it('only ever applies to a type that gets the markdown editor', () => {
+    expect(usesMarkdownEditor('prompt')).toBe(true);
   });
 });

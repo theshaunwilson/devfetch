@@ -18,6 +18,7 @@ const { getOpenAI } = await import('@/lib/openai');
 const {
   generateCodeExplanation,
   generateDescriptionSummary,
+  generatePromptOptimization,
   generateTagSuggestions,
   safetyIdentifier,
 } = await import('./generate');
@@ -296,5 +297,73 @@ describe('generateCodeExplanation', () => {
     await expect(generateCodeExplanation(EXPLAIN_INPUT, USER_ID)).rejects.toBeInstanceOf(
       AiOutputError,
     );
+  });
+});
+
+describe('generatePromptOptimization', () => {
+  const PROMPT = { title: 'PR review', content: 'review this PR for {{focus}}' };
+
+  beforeEach(() => {
+    create.mockResolvedValue(
+      reply(
+        JSON.stringify({
+          changed: true,
+          prompt: 'Review this pull request for {{focus}}.',
+          changes: ['Named the task.'],
+        }),
+      ),
+    );
+  });
+
+  it('asks for JSON with room for a whole prompt back, and the same privacy settings', async () => {
+    await generatePromptOptimization(PROMPT, USER_ID);
+
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: 'gpt-5-nano',
+        text: { format: { type: 'json_object' }, verbosity: 'low' },
+        reasoning: { effort: 'low' },
+        max_output_tokens: 4000,
+        store: false,
+        safety_identifier: safetyIdentifier(USER_ID),
+      }),
+    );
+  });
+
+  it('puts "json" in the input, which JSON mode requires', async () => {
+    await generatePromptOptimization(PROMPT, USER_ID);
+
+    const [params] = create.mock.calls[0];
+
+    expect(params.input).toMatch(/json/i);
+    expect(params.input).toContain(PROMPT.content);
+  });
+
+  it('returns the parsed rewrite', async () => {
+    await expect(generatePromptOptimization(PROMPT, USER_ID)).resolves.toEqual({
+      changed: true,
+      prompt: 'Review this pull request for {{focus}}.',
+      changes: ['Named the task.'],
+    });
+  });
+
+  it('returns an unchanged verdict', async () => {
+    create.mockResolvedValue(reply('{"changed": false}'));
+
+    await expect(generatePromptOptimization(PROMPT, USER_ID)).resolves.toEqual({ changed: false });
+  });
+
+  it('throws for a rewrite that dropped a placeholder', async () => {
+    create.mockResolvedValue(
+      reply(JSON.stringify({ changed: true, prompt: 'Review this pull request.', changes: [] })),
+    );
+
+    await expect(generatePromptOptimization(PROMPT, USER_ID)).rejects.toBeInstanceOf(AiOutputError);
+  });
+
+  it('throws for a reply cut short, rather than parsing half a prompt', async () => {
+    create.mockResolvedValue(reply('{"changed": true, "prompt": "Rev', 'incomplete', 'max_output_tokens'));
+
+    await expect(generatePromptOptimization(PROMPT, USER_ID)).rejects.toBeInstanceOf(AiOutputError);
   });
 });
