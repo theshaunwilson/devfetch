@@ -8,7 +8,7 @@ export function ClosingCta() {
   return (
     <section className="border-t border-border py-[clamp(80px,11vw,140px)]">
       <Reveal className={cn(SHELL, 'text-center')}>
-        <h2 className="font-display text-[clamp(1.75rem,3.6vw,2.5rem)] font-semibold tracking-[-0.03em] text-balance">
+        <h2 className="font-heading text-[clamp(1.75rem,3.6vw,2.5rem)] font-semibold tracking-[-0.03em] text-balance">
           Ready to Organize Your Knowledge?
         </h2>
         <p className="mx-auto mt-4 max-w-[34rem] text-muted-foreground">

@@ -16,7 +16,7 @@ export function HomeNav({ signedIn }: HomeNavProps) {
       <div className={`${SHELL} flex h-16 items-center gap-3.5 sm:gap-8`}>
         <Link
           href="#top"
-          className="flex shrink-0 items-center gap-2.5 rounded-lg font-display font-semibold tracking-tight focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          className="flex shrink-0 items-center gap-2.5 rounded-lg font-semibold tracking-tight focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         >
           <BrandMark />
           {/*

@@ -14,13 +14,13 @@ export function Hero() {
     <section id="top" className="pt-[calc(64px+clamp(40px,6vw,76px))] pb-[clamp(64px,9vw,104px)]">
       <div className={SHELL}>
         <div className="mx-auto max-w-[44rem] text-center">
-          <h1 className="bg-linear-to-r from-foreground from-38% via-blue-500 via-68% to-emerald-500 bg-clip-text font-display text-[clamp(2.3rem,5.6vw,3.75rem)] leading-[1.04] font-semibold tracking-[-0.035em] text-transparent">
+          <h1 className="bg-linear-to-r from-foreground from-38% via-blue-500 via-68% to-emerald-500 bg-clip-text font-heading text-[clamp(2.3rem,5.6vw,3.75rem)] leading-[1.04] font-semibold tracking-[-0.035em] text-transparent">
             Stop Losing Your Developer Knowledge
           </h1>
           <p className="mt-5.5 text-[clamp(1rem,1.6vw,1.1875rem)] text-pretty text-muted-foreground">
             Your snippets are in VS Code, your prompts are in a chat history, your commands are
             in{' '}
-            <code className="rounded bg-muted px-1.5 py-0.5 font-code text-[0.875em] text-foreground">
+            <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.875em] text-foreground">
               .bash_history
             </code>
             . DevFetch keeps all of it in one place you can actually search.

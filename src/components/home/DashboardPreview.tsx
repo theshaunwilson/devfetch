@@ -56,7 +56,7 @@ export function DashboardPreview() {
               )}
             >
               <span className="truncate text-xs text-foreground">{item.title}</span>
-              <span className="truncate font-code text-[0.6875rem] text-muted-foreground">
+              <span className="truncate font-mono text-[0.6875rem] text-muted-foreground">
                 {item.meta}
               </span>
             </span>
