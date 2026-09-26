@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Clock, Pin } from 'lucide-react';
+import { Clock, FolderOpen, Pin } from 'lucide-react';
 import { CollectionCard } from '@/components/dashboard/CollectionCard';
 import { DashboardStats } from '@/components/dashboard/DashboardStats';
 import { ItemRow } from '@/components/dashboard/ItemRow';
@@ -35,7 +35,7 @@ export default async function DashboardPage() {
       </div>
 
       <section className="mt-10">
-        <SectionHeader title="Collections" viewAllHref="/collections" />
+        <SectionHeader title="Collections" icon={FolderOpen} viewAllHref="/collections" />
         <div className="grid gap-4 @2xl/main:grid-cols-2 @5xl/main:grid-cols-3">
           {recentCollections.map((collection) => (
             <CollectionCard key={collection.id} collection={collection} />

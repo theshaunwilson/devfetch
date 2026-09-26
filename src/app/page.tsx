@@ -53,11 +53,11 @@ export default async function HomePage() {
       <HomeNav signedIn={user !== null} />
 
       <main id={MAIN_CONTENT_ID}>
-        <Hero />
+        <Hero signedIn={user !== null} />
         <FeaturesSection />
         <AiSection />
         <PricingSection isSignedIn={user !== null} isPro={isPro} />
-        <ClosingCta />
+        <ClosingCta signedIn={user !== null} />
       </main>
 
       <SiteFooter year={new Date().getFullYear()} />

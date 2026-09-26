@@ -1,15 +1,18 @@
 import Link from 'next/link';
 import { ChaosField } from '@/components/home/ChaosField';
 import { DashboardPreview } from '@/components/home/DashboardPreview';
-import { REGISTER_PATH, SHELL } from '@/components/home/content';
+import { DASHBOARD_PATH, REGISTER_PATH, SHELL } from '@/components/home/content';
 import { Button } from '@/components/ui/button';
 
 /**
  * Chaos on the left, order on the right, an arrow between them. The whole
  * page's idea in one row — which is why it is the one thing above the fold
  * besides the headline.
+ *
+ * A signed-in visitor gets the dashboard rather than a sign-up form they would
+ * only be bounced from, the same answer the nav and `planCta` give.
  */
-export function Hero() {
+export function Hero({ signedIn }: { signedIn: boolean }) {
   return (
     <section id="top" className="pt-[calc(64px+clamp(40px,6vw,76px))] pb-[clamp(64px,9vw,104px)]">
       <div className={SHELL}>
@@ -27,7 +30,11 @@ export function Hero() {
           </p>
           <div className="mt-7 flex flex-wrap justify-center gap-3">
             <Button asChild className="h-12 grow px-6 text-[0.9375rem] sm:grow-0">
-              <Link href={REGISTER_PATH}>Start for free</Link>
+              {signedIn ? (
+                <Link href={DASHBOARD_PATH}>Go to dashboard</Link>
+              ) : (
+                <Link href={REGISTER_PATH}>Start for free</Link>
+              )}
             </Button>
             <Button asChild variant="outline" className="h-12 grow px-6 text-[0.9375rem] sm:grow-0">
               <Link href="#features">See how it works</Link>
