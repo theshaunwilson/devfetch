@@ -1,21 +1,12 @@
 # Current Feature
 
-# Homepage uses the app's fonts
-
 ## Status
 
-Completed
+Not Started
 
 ## Goals
 
-- The homepage renders in the same typefaces as the rest of the app: Geist for all text and headings, the app's `font-mono` stack for code
-- Remove Space Grotesk and JetBrains Mono from the root layout, and the `--font-display` / `--font-code` theme tokens
-- Homepage headings use `font-heading`, the token shadcn's card, dialog and sheet titles already use; code uses `font-mono`
-
 ## Notes
-
-- Only `src/components/home/` used `font-display` / `font-code`, so nothing in the app changes
-- Dropping the two faces also removes their preloads from every page, including the two unused-preload warnings the dashboard review recorded
 
 ## History
 
