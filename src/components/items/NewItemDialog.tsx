@@ -10,6 +10,7 @@ import { FileUpload } from '@/components/items/FileUpload';
 import { ItemContentField } from '@/components/items/ItemContentField';
 import { ItemFieldError } from '@/components/items/ItemFieldError';
 import { ItemTextField } from '@/components/items/ItemTextField';
+import { LanguageSelect } from '@/components/items/LanguageSelect';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -64,7 +65,6 @@ interface NewItemDialogProps {
   /** Called once the item has been created. */
   onCreated: () => void;
 }
-
 
 /**
  * The new-item form, in a dialog.
@@ -277,6 +277,16 @@ function NewItemForm({
           <ItemFieldError messages={fieldErrors.description} />
         </div>
 
+        {fields.language && (
+          <LanguageSelect
+            id="new-item-language"
+            value={language}
+            onChange={setLanguage}
+            disabled={isPending}
+            messages={fieldErrors.language}
+          />
+        )}
+
         {fields.content && (
           <ItemContentField
             idPrefix="new-item"
@@ -288,17 +298,6 @@ function NewItemForm({
             markdownMinHeight={220}
             textareaClassName="min-h-32 font-mono text-xs leading-relaxed"
             messages={fieldErrors.content}
-          />
-        )}
-
-        {fields.language && (
-          <ItemTextField
-            id="new-item-language"
-            label="Language"
-            value={language}
-            onChange={setLanguage}
-            placeholder="typescript"
-            messages={fieldErrors.language}
           />
         )}
 

@@ -115,3 +115,93 @@ export function monacoLanguage(language: string | null | undefined): string {
 export function languageLabel(language: string | null | undefined): string | null {
   return language?.trim() || null;
 }
+
+export interface LanguageOption {
+  /** What is stored in `Item.language`. Resolves through `monacoLanguage`. */
+  value: string;
+  /** What the dropdown shows. */
+  label: string;
+}
+
+/**
+ * The languages offered by the dropdown on the create and edit forms.
+ *
+ * Values are what gets stored, so they are the lowercase text a user would
+ * have typed before the dropdown existed — `bash` rather than Monaco's
+ * `shell` — which keeps new items consistent with the seeded ones. Every
+ * value resolves to a registered Monaco id, which a test pins.
+ */
+export const LANGUAGE_OPTIONS: readonly LanguageOption[] = [
+  { value: 'bash', label: 'Bash' },
+  { value: 'c', label: 'C' },
+  { value: 'cpp', label: 'C++' },
+  { value: 'csharp', label: 'C#' },
+  { value: 'css', label: 'CSS' },
+  { value: 'dart', label: 'Dart' },
+  { value: 'dockerfile', label: 'Dockerfile' },
+  { value: 'elixir', label: 'Elixir' },
+  { value: 'go', label: 'Go' },
+  { value: 'graphql', label: 'GraphQL' },
+  { value: 'hcl', label: 'HCL' },
+  { value: 'html', label: 'HTML' },
+  { value: 'ini', label: 'INI' },
+  { value: 'java', label: 'Java' },
+  { value: 'javascript', label: 'JavaScript' },
+  { value: 'json', label: 'JSON' },
+  { value: 'kotlin', label: 'Kotlin' },
+  { value: 'less', label: 'Less' },
+  { value: 'lua', label: 'Lua' },
+  { value: 'markdown', label: 'Markdown' },
+  { value: 'mysql', label: 'MySQL' },
+  { value: 'perl', label: 'Perl' },
+  { value: 'php', label: 'PHP' },
+  { value: 'pgsql', label: 'PostgreSQL' },
+  { value: 'powershell', label: 'PowerShell' },
+  { value: 'python', label: 'Python' },
+  { value: 'r', label: 'R' },
+  { value: 'ruby', label: 'Ruby' },
+  { value: 'rust', label: 'Rust' },
+  { value: 'scala', label: 'Scala' },
+  { value: 'scss', label: 'SCSS' },
+  { value: 'sql', label: 'SQL' },
+  { value: 'swift', label: 'Swift' },
+  { value: 'typescript', label: 'TypeScript' },
+  { value: 'xml', label: 'XML' },
+  { value: 'yaml', label: 'YAML' },
+];
+
+/**
+ * The option that stands for a stored language, matched on its value or its
+ * label ignoring case and padding — so `Bash` and `TypeScript`, typed before
+ * the dropdown existed, select `bash` and `typescript`. Null when it matches
+ * none, or when there is no language at all.
+ */
+export function findLanguageOption(language: string | null | undefined): LanguageOption | null {
+  const normalized = language?.trim().toLowerCase();
+
+  if (!normalized) return null;
+
+  return (
+    LANGUAGE_OPTIONS.find(
+      (option) => option.value === normalized || option.label.toLowerCase() === normalized,
+    ) ?? null
+  );
+}
+
+/**
+ * The dropdown's options for a stored language: the fixed list, with the
+ * stored text prepended when it matches none of it.
+ *
+ * Without that extra row an item saved as `zsh` would open with nothing
+ * selected, and the value would only survive by accident. With it, the item
+ * shows what it holds and round-trips unchanged unless the user picks again.
+ */
+export function languageSelectOptions(
+  language: string | null | undefined,
+): readonly LanguageOption[] {
+  const trimmed = language?.trim();
+
+  if (!trimmed || findLanguageOption(trimmed)) return LANGUAGE_OPTIONS;
+
+  return [{ value: trimmed, label: trimmed }, ...LANGUAGE_OPTIONS];
+}

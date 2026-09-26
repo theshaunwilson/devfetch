@@ -8,6 +8,7 @@ import { CollectionSelect } from '@/components/items/CollectionSelect';
 import { ItemContentField } from '@/components/items/ItemContentField';
 import { ItemFieldError } from '@/components/items/ItemFieldError';
 import { ItemTextField } from '@/components/items/ItemTextField';
+import { LanguageSelect } from '@/components/items/LanguageSelect';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -140,6 +141,16 @@ export function ItemEditForm({
           <ItemFieldError messages={fieldErrors.description} />
         </div>
 
+        {fields.language && (
+          <LanguageSelect
+            id="item-language"
+            value={language}
+            onChange={setLanguage}
+            disabled={isPending}
+            messages={fieldErrors.language}
+          />
+        )}
+
         {fields.content && (
           <ItemContentField
             idPrefix="item"
@@ -151,17 +162,6 @@ export function ItemEditForm({
             markdownMinHeight={240}
             textareaClassName="min-h-40 font-mono text-xs leading-relaxed"
             messages={fieldErrors.content}
-          />
-        )}
-
-        {fields.language && (
-          <ItemTextField
-            id="item-language"
-            label="Language"
-            value={language}
-            onChange={setLanguage}
-            placeholder="typescript"
-            messages={fieldErrors.language}
           />
         )}
 

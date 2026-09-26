@@ -17,7 +17,7 @@ interface ItemTextFieldProps {
   messages?: string[];
 }
 
-/** One labelled single-line item field: Language, URL or Tags. */
+/** One labelled single-line item field: URL or Tags. */
 export function ItemTextField({
   id,
   label,
