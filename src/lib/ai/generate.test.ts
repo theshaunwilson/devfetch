@@ -9,11 +9,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AUTO_TAG_CONTENT_MAX_LENGTH } from './auto-tags';
 import { AiOutputError } from './errors';
+import { SUMMARY_CONTENT_MAX_LENGTH } from './summary';
 
 vi.mock('@/lib/openai', () => ({ AI_MODEL: 'gpt-5-nano', getOpenAI: vi.fn() }));
 
 const { getOpenAI } = await import('@/lib/openai');
-const { generateTagSuggestions, safetyIdentifier } = await import('./generate');
+const { generateDescriptionSummary, generateTagSuggestions, safetyIdentifier } = await import(
+  './generate'
+);
 
 const create = vi.fn();
 
@@ -130,5 +133,84 @@ describe('generateTagSuggestions', () => {
     create.mockRejectedValue(failure);
 
     await expect(generateTagSuggestions(INPUT, USER_ID)).rejects.toBe(failure);
+  });
+});
+
+describe('generateDescriptionSummary', () => {
+  const SUMMARY_INPUT = {
+    title: 'useDebounce Hook',
+    typeName: 'snippet',
+    content: 'const x = 1;',
+    language: 'typescript',
+    tags: ['react'],
+  };
+
+  beforeEach(() => {
+    create.mockResolvedValue(reply('Summary: Debounces a value.\nUseful for search inputs.'));
+  });
+
+  it('asks for plain text with the same privacy and cost settings as tagging', async () => {
+    await generateDescriptionSummary(SUMMARY_INPUT, USER_ID);
+
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: 'gpt-5-nano',
+        text: { format: { type: 'text' }, verbosity: 'low' },
+        reasoning: { effort: 'minimal' },
+        store: false,
+        safety_identifier: safetyIdentifier(USER_ID),
+        max_output_tokens: expect.any(Number),
+      }),
+    );
+  });
+
+  it('sends the summary instructions separately from the item', async () => {
+    await generateDescriptionSummary(SUMMARY_INPUT, USER_ID);
+
+    const [params] = create.mock.calls[0];
+
+    expect(params.instructions).toMatch(/one or two/i);
+    expect(params.input).toContain('Type: snippet');
+    expect(params.input).toContain('Title: useDebounce Hook');
+  });
+
+  it('sends content truncated at the summary ceiling, not the tagging one', async () => {
+    const content = 'x'.repeat(SUMMARY_CONTENT_MAX_LENGTH * 3);
+
+    await generateDescriptionSummary({ ...SUMMARY_INPUT, content }, USER_ID);
+
+    const [params] = create.mock.calls[0];
+
+    expect(params.input.length).toBeGreaterThan(SUMMARY_CONTENT_MAX_LENGTH);
+    expect(params.input.length).toBeLessThan(SUMMARY_CONTENT_MAX_LENGTH + 200);
+  });
+
+  it('returns the reply cleaned up', async () => {
+    await expect(generateDescriptionSummary(SUMMARY_INPUT, USER_ID)).resolves.toBe(
+      'Debounces a value. Useful for search inputs.',
+    );
+  });
+
+  it('throws for an incomplete reply even when it has text', async () => {
+    create.mockResolvedValue(reply('Debounces a', 'incomplete', 'max_output_tokens'));
+
+    await expect(generateDescriptionSummary(SUMMARY_INPUT, USER_ID)).rejects.toBeInstanceOf(
+      AiOutputError,
+    );
+  });
+
+  it('throws when nothing is left of the reply', async () => {
+    create.mockResolvedValue(reply('  \n '));
+
+    await expect(generateDescriptionSummary(SUMMARY_INPUT, USER_ID)).rejects.toBeInstanceOf(
+      AiOutputError,
+    );
+  });
+
+  it('lets SDK errors through for the caller to map', async () => {
+    const failure = new Error('network');
+    create.mockRejectedValue(failure);
+
+    await expect(generateDescriptionSummary(SUMMARY_INPUT, USER_ID)).rejects.toBe(failure);
   });
 });

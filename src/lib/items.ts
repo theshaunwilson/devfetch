@@ -1,5 +1,7 @@
 import { canCreateType } from '@/lib/pro';
 import { isImageUploadType, usesFileList, usesFileUpload } from '@/lib/uploads';
+import type { GenerateSummaryInput } from '@/lib/validation/ai';
+import { TAG_MAX_LENGTH, TAGS_MAX_COUNT } from '@/lib/validation/items';
 import type { CreateItemInput } from '@/lib/validation/items';
 
 /**
@@ -100,6 +102,51 @@ export function appendTagInput(value: string, tag: string): string {
   if (!name || hasTagInput(value, name)) return value;
 
   return formatTagInput([...parseTagInput(value), name]);
+}
+
+/**
+ * The tags input's tags as an AI request may carry them: only what the save
+ * would accept, so a form holding one over-long tag can still ask for AI help
+ * — the save is where that gets reported.
+ */
+export function tagsForAi(value: string): string[] {
+  return parseTagInput(value)
+    .filter((tag) => tag.length <= TAG_MAX_LENGTH)
+    .slice(0, TAGS_MAX_COUNT);
+}
+
+/** What the forms hold that a description could be written from. */
+export interface SummarySourceValues {
+  slug: string;
+  typeName: string;
+  title: string;
+  content: string;
+  language: string;
+  url: string;
+  tags: string;
+  fileName: string | null;
+}
+
+/**
+ * The request to write a description from, for any item type.
+ *
+ * Sends only what the selected type shows — the create form may still hold
+ * text from a type picked earlier, which the save would not send either — so
+ * a snippet sends its code and language, a link its URL, and a file or image
+ * its file name, the only thing about an upload that is ever sent.
+ */
+export function buildSummarySource(values: SummarySourceValues): GenerateSummaryInput {
+  const fields = editableFieldsFor(values.slug);
+
+  return {
+    title: values.title,
+    typeName: values.typeName,
+    content: fields.content ? values.content : undefined,
+    language: fields.language ? values.language : undefined,
+    url: fields.url ? values.url : undefined,
+    fileName: usesFileUpload(values.slug) ? (values.fileName ?? undefined) : undefined,
+    tags: tagsForAi(values.tags),
+  };
 }
 
 /**

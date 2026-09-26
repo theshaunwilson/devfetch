@@ -1,31 +1,41 @@
 'use server';
 
+import type { z } from 'zod';
+
 import { auth } from '@/auth';
 import { describeAiError } from '@/lib/ai/errors';
-import { generateTagSuggestions } from '@/lib/ai/generate';
+import { generateDescriptionSummary, generateTagSuggestions } from '@/lib/ai/generate';
 import { isProUser } from '@/lib/db/billing';
 import { aiRateLimitMessage, checkAiRateLimit } from '@/lib/rate-limit';
-import { generateAutoTagsSchema } from '@/lib/validation/ai';
-import type { GenerateAutoTagsInput } from '@/lib/validation/ai';
-import type { GenerateAutoTagsResult } from '@/types/ai';
+import { generateAutoTagsSchema, generateSummarySchema } from '@/lib/validation/ai';
+import type { GenerateAutoTagsInput, GenerateSummaryInput } from '@/lib/validation/ai';
+import type { AiResult, GenerateAutoTagsResult, GenerateSummaryResult } from '@/types/ai';
+
+/** What differs between one AI action and the next. */
+interface AiActionSpec<Schema extends z.ZodType, T> {
+  schema: Schema;
+  /** The refusal a free account sees, naming the feature it asked for. */
+  proMessage: string;
+  /** Names the feature in the server log when the call fails. */
+  label: string;
+  run: (data: z.output<Schema>, userId: string) => Promise<T>;
+}
 
 /**
- * Suggests tags for an item from its title and content.
- *
- * Suggests and never writes: the item may not exist yet, and an accepted tag
- * goes into the form, so it still passes through `createItem` or `updateItem`
- * and their tag rules when the user saves. That is also why this takes text
- * rather than an item id — the user is sending back their own content, so there
- * is no ownership to check.
+ * Runs an AI action behind the gates every one of them shares.
  *
  * The gates run cheapest-refusal first, and each one protects the next: no
  * session is refused before the Pro lookup, a free account is refused before
  * validation or any AI budget is spent, a malformed request is refused before
  * it can use up a rate-limit token, and only then does anything cost money.
+ *
+ * Not exported: a `'use server'` module's exports are public endpoints, and
+ * this takes a function.
  */
-export async function generateAutoTags(
-  input: GenerateAutoTagsInput,
-): Promise<GenerateAutoTagsResult> {
+async function runAiAction<Schema extends z.ZodType, T>(
+  input: unknown,
+  spec: AiActionSpec<Schema, T>,
+): Promise<AiResult<T>> {
   const session = await auth();
   const userId = session?.user?.id;
 
@@ -36,14 +46,10 @@ export async function generateAutoTags(
   // Read from the row, never the token: a lapsed subscription in a JWT would
   // keep granting paid calls until the token refreshed.
   if (!(await isProUser())) {
-    return {
-      success: false,
-      error: 'AI tag suggestions are part of Pro. Upgrade to use them.',
-      upgradeRequired: true,
-    };
+    return { success: false, error: spec.proMessage, upgradeRequired: true };
   }
 
-  const parsed = generateAutoTagsSchema.safeParse(input);
+  const parsed = spec.schema.safeParse(input);
 
   if (!parsed.success) {
     return {
@@ -63,14 +69,53 @@ export async function generateAutoTags(
   }
 
   try {
-    const tags = await generateTagSuggestions(parsed.data, userId);
-
-    return { success: true, data: { tags } };
+    return { success: true, data: await spec.run(parsed.data, userId) };
   } catch (error) {
     const { message, severity } = describeAiError(error);
 
-    console[severity]('AI auto-tag failed:', error);
+    console[severity](`AI ${spec.label} failed:`, error);
 
     return { success: false, error: message };
   }
+}
+
+/**
+ * Suggests tags for an item from its title and content.
+ *
+ * Suggests and never writes: the item may not exist yet, and an accepted tag
+ * goes into the form, so it still passes through `createItem` or `updateItem`
+ * and their tag rules when the user saves. That is also why this takes text
+ * rather than an item id — the user is sending back their own content, so there
+ * is no ownership to check.
+ */
+export async function generateAutoTags(
+  input: GenerateAutoTagsInput,
+): Promise<GenerateAutoTagsResult> {
+  return runAiAction(input, {
+    schema: generateAutoTagsSchema,
+    proMessage: 'AI tag suggestions are part of Pro. Upgrade to use them.',
+    label: 'auto-tag',
+    run: async (data, userId) => ({ tags: await generateTagSuggestions(data, userId) }),
+  });
+}
+
+/**
+ * Writes a one- or two-sentence description of an item from whatever the form
+ * currently holds for its type.
+ *
+ * Never writes, for the reasons `generateAutoTags` does not: the summary goes
+ * into the Description field and is saved — within `DESCRIPTION_MAX_LENGTH` —
+ * only by the form's own Save.
+ */
+export async function generateSummary(
+  input: GenerateSummaryInput,
+): Promise<GenerateSummaryResult> {
+  return runAiAction(input, {
+    schema: generateSummarySchema,
+    proMessage: 'AI descriptions are part of Pro. Upgrade to use them.',
+    label: 'summary',
+    run: async (data, userId) => ({
+      summary: await generateDescriptionSummary(data, userId),
+    }),
+  });
 }

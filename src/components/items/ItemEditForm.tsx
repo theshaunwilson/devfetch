@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { updateItem } from '@/actions/items';
 import { CollectionSelect } from '@/components/items/CollectionSelect';
 import { ItemContentField } from '@/components/items/ItemContentField';
+import { ItemDescriptionField } from '@/components/items/ItemDescriptionField';
 import { ItemFieldError } from '@/components/items/ItemFieldError';
 import { ItemTagsField } from '@/components/items/ItemTagsField';
 import { ItemTextField } from '@/components/items/ItemTextField';
@@ -14,8 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SheetHeader } from '@/components/ui/sheet';
-import { Textarea } from '@/components/ui/textarea';
-import { editableFieldsFor, formatTagInput, parseTagInput } from '@/lib/items';
+import { buildSummarySource, editableFieldsFor, formatTagInput, parseTagInput } from '@/lib/items';
 import type { UpdateItemInput } from '@/lib/validation/items';
 import type { CollectionOption } from '@/types/collection';
 import type { ItemDetail } from '@/types/item';
@@ -133,17 +133,27 @@ export function ItemEditForm({
           <ItemFieldError messages={fieldErrors.title} />
         </div>
 
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="item-description">Description</Label>
-          <Textarea
-            id="item-description"
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            aria-invalid={Boolean(fieldErrors.description)}
-            rows={3}
-          />
-          <ItemFieldError messages={fieldErrors.description} />
-        </div>
+        <ItemDescriptionField
+          id="item-description"
+          value={description}
+          onChange={setDescription}
+          rows={3}
+          messages={fieldErrors.description}
+          summarizeFrom={
+            isPro
+              ? buildSummarySource({
+                  slug: item.type.slug,
+                  typeName: item.type.name,
+                  title,
+                  content,
+                  language,
+                  url,
+                  tags,
+                  fileName: item.fileName,
+                })
+              : undefined
+          }
+        />
 
         {fields.language && (
           <LanguageSelect

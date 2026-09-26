@@ -11,3 +11,5 @@ export type AiResult<T> =
   | { success: false; error: string; upgradeRequired?: true };
 
 export type GenerateAutoTagsResult = AiResult<{ tags: string[] }>;
+
+export type GenerateSummaryResult = AiResult<{ summary: string }>;
