@@ -59,7 +59,7 @@ export default async function AllItemsPage({ searchParams }: PageProps<'/items'>
               heading would only earn its place if the other two always
               appeared. */}
           {cards.length > 0 && (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-4 @2xl/main:grid-cols-2 @6xl/main:grid-cols-3">
               {cards.map((item) => (
                 <ItemCard key={item.id} item={item} />
               ))}
@@ -71,7 +71,7 @@ export default async function AllItemsPage({ searchParams }: PageProps<'/items'>
               <SectionHeading icon={ImageIcon} title="Images" count={images.length} />
               {/* A thumbnail carries a narrower card than a title-and-tags one,
                   so the gallery reaches three columns a breakpoint earlier. */}
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-4 @xl/main:grid-cols-2 @3xl/main:grid-cols-3">
                 {images.map((item) => (
                   <ImageCard key={item.id} item={item} />
                 ))}

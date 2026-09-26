@@ -25,13 +25,15 @@ export function SiteFooter({ year }: SiteFooterProps) {
 
         <nav aria-label="Footer" className="flex flex-wrap gap-x-16 gap-y-8">
           {FOOTER_COLUMNS.map((column) => (
-            <div key={column.heading} className="flex flex-col gap-2.5">
+            <div key={column.heading} className="flex flex-col gap-2.5 max-sm:gap-0">
               <h3 className="font-medium">{column.heading}</h3>
               {column.entries.map((entry) => (
                 <Link
                   key={entry.label}
                   href={entry.href}
-                  className="text-muted-foreground transition-colors hover:text-foreground"
+                  // 40px rows on a phone, with the column gap dropped to match,
+                  // so the links become tappable without spreading further.
+                  className="text-muted-foreground transition-colors hover:text-foreground max-sm:py-2"
                 >
                   {entry.label}
                 </Link>

@@ -22,7 +22,14 @@ export function SidebarToggle({ className, size = 'icon' }: SidebarToggleProps) 
       onClick={toggle}
       aria-expanded={expanded}
       aria-label={expanded ? 'Close sidebar' : 'Open sidebar'}
-      className={cn(className)}
+      // The ghost variant fills any `aria-expanded` button, which suits a menu
+      // trigger whose menu is showing but made this one — expanded whenever
+      // the sidebar is open, which is always — sit filled at rest and read as
+      // the selected row beside the real one. Hover still fills it.
+      className={cn(
+        'aria-expanded:bg-transparent aria-expanded:text-inherit aria-expanded:hover:bg-muted dark:aria-expanded:hover:bg-muted/50',
+        className
+      )}
     >
       <PanelLeft className="size-4.5" />
     </Button>

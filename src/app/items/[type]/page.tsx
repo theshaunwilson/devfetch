@@ -122,11 +122,14 @@ export default async function ItemsByTypePage({
             // metadata, and two of them side by side reads as a table nobody
             // asked for.
             isFileList && 'gap-2',
-            // A thumbnail carries a narrower card than a title-and-tags one
-            // does, so the gallery reaches three columns a breakpoint earlier
-            // than the item grid.
-            isGallery && 'sm:grid-cols-2 lg:grid-cols-3',
-            !isGallery && !isFileList && 'md:grid-cols-2 xl:grid-cols-3'
+            // Sized off `main`, not the viewport, so the open sidebar counts
+            // (see `AppShell`). A thumbnail carries a narrower card than a
+            // title-and-tags one does, so the gallery reaches three columns
+            // sooner. The item grid goes to three later than the collection
+            // grids (`@6xl` rather than `@5xl`) because its title row also
+            // holds the type tile and the favorite and copy buttons.
+            isGallery && '@xl/main:grid-cols-2 @3xl/main:grid-cols-3',
+            !isGallery && !isFileList && '@2xl/main:grid-cols-2 @6xl/main:grid-cols-3'
           )}
         >
           {items.map((item) => {

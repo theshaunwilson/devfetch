@@ -28,6 +28,13 @@ interface CodeEditorProps {
   onChange?: (value: string) => void;
   /** The item's own language text, mapped to a Monaco id inside the pane. */
   language?: string | null;
+  /**
+   * Whether the header names the language. The drawer's read view turns it
+   * off: its own header already shows the language as a badge, a few pixels
+   * above, and the two read as a duplicate. The forms keep it, since nothing
+   * else there shows the language next to the code.
+   */
+  showLanguage?: boolean;
   readOnly?: boolean;
   minHeight?: number;
   className?: string;
@@ -63,6 +70,7 @@ export function CodeEditor({
   value,
   onChange,
   language,
+  showLanguage = true,
   readOnly = false,
   minHeight = 120,
   className,
@@ -73,7 +81,7 @@ export function CodeEditor({
   body,
   copy,
 }: CodeEditorProps) {
-  const label = languageLabel(language);
+  const label = showLanguage ? languageLabel(language) : null;
   const pane = (
     <CodeEditorPane
       value={value}
@@ -100,17 +108,7 @@ export function CodeEditor({
           {tabs}
 
           {label && (
-            <span
-              className={cn(
-                'truncate font-mono text-[11px] text-muted-foreground',
-                // With tabs beside it there is no room on a phone, and a label
-                // truncated to "b…" says nothing. The drawer's own header
-                // already shows the language as a badge.
-                tabs && 'max-sm:hidden',
-              )}
-            >
-              {label}
-            </span>
+            <span className="truncate font-mono text-[11px] text-muted-foreground">{label}</span>
           )}
 
           {actions}

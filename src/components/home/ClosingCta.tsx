@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { Reveal } from '@/components/home/Reveal';
-import { REGISTER_PATH, SHELL } from '@/components/home/content';
+import { DASHBOARD_PATH, REGISTER_PATH, SHELL } from '@/components/home/content';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-export function ClosingCta() {
+/** Signed in, the button opens the dashboard rather than the sign-up form. */
+export function ClosingCta({ signedIn }: { signedIn: boolean }) {
   return (
     <section className="border-t border-border py-[clamp(80px,11vw,140px)]">
       <Reveal className={cn(SHELL, 'text-center')}>
@@ -15,7 +16,11 @@ export function ClosingCta() {
           It takes a paste to save your first snippet. Everything after that is search.
         </p>
         <Button asChild className="mt-7.5 h-12 px-6 text-[0.9375rem]">
-          <Link href={REGISTER_PATH}>Create your free account</Link>
+          {signedIn ? (
+            <Link href={DASHBOARD_PATH}>Open your dashboard</Link>
+          ) : (
+            <Link href={REGISTER_PATH}>Create your free account</Link>
+          )}
         </Button>
       </Reveal>
     </section>

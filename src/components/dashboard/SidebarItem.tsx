@@ -37,7 +37,10 @@ export function SidebarItem({
       onClick={closeMobile}
       aria-current={isActive ? 'page' : undefined}
       className={cn(
-        'flex items-center gap-2.5 rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent',
+        // `max-md:` is the mobile drawer, where a 36px row is under a comfortable
+        // tap target. The same focus ring the top bar's buttons draw, rather than the
+        // browser's default 1px outline.
+        'flex items-center gap-2.5 rounded-md px-2 py-2 max-md:py-2.5 text-sm transition-colors hover:bg-accent outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
         isActive && 'bg-accent font-medium'
       )}
     >

@@ -1,4 +1,4 @@
-import { Circle, Folder, Star } from 'lucide-react';
+import { Circle, Folder, FolderOpen, Layers, LayoutDashboard, Star } from 'lucide-react';
 import { Brand } from '@/components/dashboard/Brand';
 import { SidebarCloseButton } from '@/components/dashboard/SidebarCloseButton';
 import { SidebarItem } from '@/components/dashboard/SidebarItem';
@@ -43,6 +43,13 @@ function ProBadge() {
   );
 }
 
+const MAIN_LINKS = [
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/items', label: 'All items', icon: Layers },
+  { href: '/favorites', label: 'Favorites', icon: Star },
+  { href: '/collections', label: 'Collections', icon: FolderOpen },
+];
+
 function GroupLabel({ children }: { children: React.ReactNode }) {
   return (
     <p className="px-2 pt-3 pb-1 text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
@@ -70,7 +77,21 @@ export function SidebarContent({ itemTypes, collections, user, isPro }: SidebarC
           the top bar is a banner with its own links, and a screen reader
           listing landmarks would otherwise offer two unlabelled "navigation"
           entries. The homepage footer already does this. */}
-      <nav aria-label="Item types and collections" className="flex flex-col px-3 pt-2 pb-4">
+      <nav aria-label="Sidebar" className="flex flex-col px-3 pt-2 pb-4">
+          {/* The app's own pages. Before this group, Dashboard, All items and
+              Favorites had no sidebar link at all, so four of the five main
+              pages showed nothing active anywhere in the navigation. Not a
+              collapsible section: these are the way around the app, not a list
+              to fold away. Each row takes the active state from `SidebarItem`,
+              the rule the type and collection rows already use. */}
+          <div className="flex flex-col gap-0.5">
+            {MAIN_LINKS.map((link) => (
+              <SidebarItem key={link.href} {...link} />
+            ))}
+          </div>
+
+          <Separator className="my-4" />
+
           <SidebarSection title="Types">
             {itemTypes.map((type) => (
               <SidebarItem

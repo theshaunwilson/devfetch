@@ -3,15 +3,14 @@
 import Link from 'next/link';
 import { useActionState } from 'react';
 
-import { signInWithCredentials, signInWithGitHub, type SignInState } from '@/actions/auth';
+import { signInWithCredentials, type SignInState } from '@/actions/auth';
 import { FieldError } from '@/components/auth/FieldError';
 import { FormMessage } from '@/components/auth/FormMessage';
-import { GitHubIcon } from '@/components/auth/GitHubIcon';
+import { GitHubAuthSection } from '@/components/auth/GitHubAuthSection';
 import { ResendVerification } from '@/components/auth/ResendVerification';
 import { SubmitButton } from '@/components/auth/SubmitButton';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
 import { FORGOT_PASSWORD_PATH } from '@/lib/auth-redirect';
 
 interface SignInFormProps {
@@ -112,20 +111,7 @@ export function SignInForm({
         </SubmitButton>
       </form>
 
-      <div className="flex items-center gap-3">
-        <Separator className="flex-1" />
-        <span className="text-xs text-muted-foreground uppercase">or</span>
-        <Separator className="flex-1" />
-      </div>
-
-      {/* Its own form: a nested one is invalid, and this posts to a different action. */}
-      <form action={signInWithGitHub}>
-        <input type="hidden" name="callbackUrl" value={callbackUrl} />
-        <SubmitButton variant="outline" pendingLabel="Redirecting…" className="w-full">
-          <GitHubIcon className="size-4" />
-          Sign in with GitHub
-        </SubmitButton>
-      </form>
+      <GitHubAuthSection callbackUrl={callbackUrl} label="Sign in with GitHub" />
 
       <p className="text-center text-sm text-muted-foreground">
         Don&apos;t have an account?{' '}

@@ -31,7 +31,7 @@ function PeriodLabel({ children, active, onSelect }: PeriodLabelProps) {
       aria-pressed={active}
       onClick={onSelect}
       className={cn(
-        'min-h-6 cursor-pointer rounded-md px-1.5 py-0.5 transition-colors',
+        'min-h-6 max-sm:min-h-10 cursor-pointer rounded-md px-1.5 py-0.5 transition-colors',
         'focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
         active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
       )}
@@ -76,19 +76,10 @@ export function BillingToggle({ isSignedIn, isPro }: PlanViewer) {
         <PeriodLabel active={!yearly} onSelect={() => setYearly(false)}>
           Monthly
         </PeriodLabel>
-        {/*
-          The painted switch is 32x18, under the 24x24 minimum a pointer target
-          has to meet. Rather than resize the shared component — which would
-          also resize the ones on /settings — an empty `::after` extends only
-          the hit area, to 52x38. The 16px gap either side keeps it clear of
-          the two labels, which are now targets of their own.
-        */}
-        <Switch
-          checked={yearly}
-          onCheckedChange={setYearly}
-          aria-label="Bill yearly"
-          className="relative after:absolute after:-inset-2.5 after:content-['']"
-        />
+        {/* The shared switch extends its own hit area to 52x38; the 16px gap
+            either side keeps that clear of the two labels, which are targets
+            of their own. */}
+        <Switch checked={yearly} onCheckedChange={setYearly} aria-label="Bill yearly" />
         <PeriodLabel active={yearly} onSelect={() => setYearly(true)}>
           Yearly
         </PeriodLabel>

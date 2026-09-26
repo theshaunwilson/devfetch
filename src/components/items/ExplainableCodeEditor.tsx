@@ -79,6 +79,7 @@ export function ExplainableCodeEditor({
       <CodeEditor
         value={value}
         language={language}
+        showLanguage={false}
         readOnly
         minHeight={minHeight}
         ariaLabel={ariaLabel}

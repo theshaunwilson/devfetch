@@ -1,12 +1,9 @@
-import { ArrowLeft } from 'lucide-react';
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { ProfileHeader } from '@/components/profile/ProfileHeader';
 import { ProfileStats } from '@/components/profile/ProfileStats';
-import { Button } from '@/components/ui/button';
-import { DEFAULT_SIGNED_IN_PATH, SIGN_IN_PATH } from '@/lib/auth-redirect';
+import { SIGN_IN_PATH } from '@/lib/auth-redirect';
 import { getCollectionStats } from '@/lib/db/collections';
 import { getItemTypes } from '@/lib/db/item-types';
 import { getItemStats } from '@/lib/db/items';
@@ -39,17 +36,17 @@ export default async function ProfilePage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-10">
-      <Button asChild variant="ghost" size="sm" className="self-start">
-        <Link href={DEFAULT_SIGNED_IN_PATH}>
-          <ArrowLeft className="size-4" />
-          Back to dashboard
-        </Link>
-      </Button>
+    <div className="px-6 py-8">
+      <div className="mx-auto flex max-w-3xl flex-col gap-4">
+        <div className="mb-4">
+          <h1 className="text-3xl font-semibold tracking-tight">Profile</h1>
+          <p className="mt-1 text-muted-foreground">Your account and what you have stashed.</p>
+        </div>
 
-      <ProfileHeader user={user} isPro={isPro} />
+        <ProfileHeader user={user} isPro={isPro} />
 
-      <ProfileStats items={itemStats} collections={collectionStats} itemTypes={itemTypes} />
+        <ProfileStats items={itemStats} collections={collectionStats} itemTypes={itemTypes} />
+      </div>
     </div>
   );
 }

@@ -74,6 +74,17 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
           around the top bar too, whose create dialog renders one as well. */}
       <EditorPreferencesProvider preferences={editorPreferences}>
         <ItemDrawerProvider collectionOptions={collectionOptions} isPro={isPro}>
+          {/* First in the tab order, so a keyboard user can jump past the
+              sidebar's ~15 stops straight to the page. `<main>` already takes
+              `tabIndex={-1}`, so following the link moves focus there too.
+              Styled like the homepage's own skip link. */}
+          <a
+            href={`#${MAIN_CONTENT_ID}`}
+            className="absolute -top-16 left-4 z-100 rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background transition-[top] duration-200 focus-visible:top-4"
+          >
+            Skip to content
+          </a>
+
           <div className="flex h-svh overflow-hidden">
             <Sidebar itemTypes={itemTypes} collections={collections} user={user} isPro={isPro} />
             <div className="flex min-w-0 flex-1 flex-col">

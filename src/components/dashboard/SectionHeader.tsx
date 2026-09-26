@@ -3,7 +3,7 @@ import type { LucideIcon } from 'lucide-react';
 
 interface SectionHeaderProps {
   title: string;
-  /** Optional leading icon, used by the Pinned and Recent sections */
+  /** Optional leading icon */
   icon?: LucideIcon;
   /** Renders a "View all" link on the right when set */
   viewAllHref?: string;
@@ -21,7 +21,9 @@ export function SectionHeader({ title, icon: Icon, viewAllHref }: SectionHeaderP
       {viewAllHref && (
         <Link
           href={viewAllHref}
-          className="shrink-0 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          // The padding makes a 40px hit area out of a 20px line of text; the
+          // matching negative margins keep the row exactly where it was.
+          className="-my-2.5 -mr-2 shrink-0 rounded-md px-2 py-2.5 text-sm text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
         >
           View all
         </Link>

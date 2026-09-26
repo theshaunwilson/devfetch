@@ -52,26 +52,15 @@ export function BillingSettings({
         <CardDescription>Manage your subscription and billing.</CardDescription>
       </CardHeader>
 
-      <CardContent>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-          <div className="min-w-0 flex-1 space-y-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-sm font-medium">Current plan</h3>
-              {isPro ? <ProBadge /> : <FreeBadge />}
-            </div>
-
-            <dl className="space-y-3 sm:max-w-xs">
-              <UsageLine
-                label="Items"
-                count={itemCount}
-                limit={isPro ? null : FREE_ITEM_LIMIT}
-              />
-              <UsageLine
-                label="Collections"
-                count={collectionCount}
-                limit={isPro ? null : FREE_COLLECTION_LIMIT}
-              />
-            </dl>
+      {/* The plan and its action share a row; the usage lines run the full
+          width under both, so their values sit at the card's right edge — the
+          column the Editor card's controls use — rather than at the end of a
+          narrow list in the middle of the card. */}
+      <CardContent className="space-y-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-sm font-medium">Current plan</h3>
+            {isPro ? <ProBadge /> : <FreeBadge />}
           </div>
 
           {/*
@@ -88,6 +77,15 @@ export function BillingSettings({
             {isPro ? canManage && <ManageBillingButton /> : <CheckoutButtons />}
           </div>
         </div>
+
+        <dl className="space-y-3">
+          <UsageLine label="Items" count={itemCount} limit={isPro ? null : FREE_ITEM_LIMIT} />
+          <UsageLine
+            label="Collections"
+            count={collectionCount}
+            limit={isPro ? null : FREE_COLLECTION_LIMIT}
+          />
+        </dl>
       </CardContent>
     </Card>
   );
