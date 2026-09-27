@@ -10,7 +10,7 @@ import { AiHeaderButton } from '@/components/items/AiHeaderButton';
 import { MarkdownEditor } from '@/components/items/MarkdownEditor';
 import { MarkdownPreview } from '@/components/items/MarkdownPreview';
 import { Button } from '@/components/ui/button';
-import { useUpgradeToast } from '@/hooks/use-upgrade-toast';
+import { useFailureToast, useUpgradeToast } from '@/hooks/use-upgrade-toast';
 import { EDITOR_MAX_HEIGHT } from '@/lib/constants';
 import type { ItemDetail } from '@/types/item';
 
@@ -60,17 +60,15 @@ export function OptimizablePromptEditor({
   const [isOptimizing, startOptimizing] = useTransition();
   const [isSaving, startSaving] = useTransition();
   const upgradeToast = useUpgradeToast();
+  const failureToast = useFailureToast();
 
   function handleOptimize() {
     startOptimizing(async () => {
       const result = await optimizePrompt({ itemId });
 
       if (!result.success) {
-        if (result.upgradeRequired) {
-          upgradeToast(result.error);
-        } else {
-          toast.error(result.error);
-        }
+
+        failureToast(result);
 
         return;
       }

@@ -44,3 +44,31 @@ export function useUpgradeToast() {
     [router],
   );
 }
+
+/** The part of a failed action result that decides how it is reported. */
+interface FailedResult {
+  error: string;
+  upgradeRequired?: boolean;
+}
+
+/**
+ * Reports a failed action the way its result asks: the upgrade alert when the
+ * server marked it as a Pro wall, an ordinary error toast otherwise.
+ *
+ * The one place that split is made, so every form and AI button draws the two
+ * kinds of refusal the same way.
+ */
+export function useFailureToast() {
+  const upgradeToast = useUpgradeToast();
+
+  return useCallback(
+    (result: FailedResult) => {
+      if (result.upgradeRequired) {
+        upgradeToast(result.error);
+      } else {
+        toast.error(result.error);
+      }
+    },
+    [upgradeToast],
+  );
+}

@@ -5,24 +5,10 @@ import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
 import { createItem } from '@/actions/items';
-import { CollectionSelect } from '@/components/items/CollectionSelect';
+import { FormDialog, FormDialogBody } from '@/components/dialogs/FormDialog';
 import { FileUpload } from '@/components/items/FileUpload';
-import { ItemDescriptionField } from '@/components/items/ItemDescriptionField';
-import { ItemContentField } from '@/components/items/ItemContentField';
 import { ItemFieldError } from '@/components/items/ItemFieldError';
-import { ItemTagsField } from '@/components/items/ItemTagsField';
-import { ItemTextField } from '@/components/items/ItemTextField';
-import { LanguageSelect } from '@/components/items/LanguageSelect';
-import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
+import { ItemFormFields, type ItemFormValues } from '@/components/items/ItemFormFields';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -31,23 +17,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useFailureToast } from '@/hooks/use-upgrade-toast';
 import { textColorClass } from '@/lib/colors';
 import { capitalize } from '@/lib/format';
 import { getIcon } from '@/lib/icons';
-import {
-  buildCreateItemPayload,
-  buildSummarySource,
-  editableFieldsFor,
-  initialTypeId,
-  requiredFieldsFor,
-} from '@/lib/items';
-import { useUpgradeToast } from '@/hooks/use-upgrade-toast';
+import { buildCreateItemPayload, initialTypeId, requiredFieldsFor } from '@/lib/items';
 import { canCreateType } from '@/lib/pro';
 import { isImageUploadType } from '@/lib/uploads';
 import { cn } from '@/lib/utils';
 import type { CollectionOption } from '@/types/collection';
 import type { SidebarItemType } from '@/types/item';
 import type { UploadedFile } from '@/types/upload';
+
+const EMPTY_VALUES: ItemFormValues = {
+  title: '',
+  description: '',
+  content: '',
+  language: '',
+  url: '',
+  tags: '',
+  collectionIds: [],
+};
 
 interface NewItemDialogProps {
   /** Every type the user can see. Pro ones are shown disabled, never removed. */
@@ -71,17 +61,11 @@ interface NewItemDialogProps {
 /**
  * The new-item form, in a dialog.
  *
- * Controlled from outside rather than carrying its own trigger, the way
- * `EditCollectionDialog` is: the top bar opens it from a `DropdownMenuItem`,
- * which unmounts when the menu closes — so a dialog nested in one would be
- * torn down on the very click that opened it. Each call site renders its own
- * trigger and flips this open, which is also what lets the top bar's `+` menu
- * and the items page's labelled button share one dialog.
- *
- * The form lives in a child so it unmounts with the dialog: a half-typed item
- * and its errors belong to the attempt that was abandoned, not to the next one.
- * That is also what re-applies `defaultTypeSlug` on every open, rather than
- * leaving the selector wherever the last abandoned attempt left it.
+ * Controlled from outside, as every `FormDialog` is, which is what lets the top
+ * bar's `+` menu and the items page's labelled button share one dialog. The
+ * form unmounts with the dialog, which is also what re-applies
+ * `defaultTypeSlug` on every open rather than leaving the selector wherever
+ * the last abandoned attempt left it.
  */
 export function NewItemDialog({
   itemTypes,
@@ -93,28 +77,21 @@ export function NewItemDialog({
   onCreated,
 }: NewItemDialogProps) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* Capped and column-laid-out rather than left to `DialogContent`'s own
-          `grid`: the snippet form is taller than a short laptop viewport, and
-          the dialog is `fixed` inside an `overflow-hidden` shell, so without
-          this the submit button ends up below the fold with nothing to scroll.
-          `svh` rather than `vh` for the mobile browser chrome. */}
-      <DialogContent className="flex max-h-[calc(100svh-2rem)] flex-col sm:max-w-lg">
-        <DialogHeader className="shrink-0">
-          <DialogTitle>New item</DialogTitle>
-          <DialogDescription>Pick a type — the fields below follow from it.</DialogDescription>
-        </DialogHeader>
-
-        <NewItemForm
-          types={itemTypes}
-          isPro={isPro}
-          collectionOptions={collectionOptions}
-          defaultTypeSlug={defaultTypeSlug}
-          onCreated={onCreated}
-          onCancel={() => onOpenChange(false)}
-        />
-      </DialogContent>
-    </Dialog>
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="New item"
+      description="Pick a type — the fields below follow from it."
+    >
+      <NewItemForm
+        types={itemTypes}
+        isPro={isPro}
+        collectionOptions={collectionOptions}
+        defaultTypeSlug={defaultTypeSlug}
+        onCreated={onCreated}
+        onCancel={() => onOpenChange(false)}
+      />
+    </FormDialog>
   );
 }
 
@@ -137,61 +114,40 @@ function NewItemForm({
   onCancel,
 }: NewItemFormProps) {
   const [typeId, setTypeId] = useState(() => initialTypeId(types, defaultTypeSlug, isPro));
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [content, setContent] = useState('');
-  const [language, setLanguage] = useState('');
-  const [url, setUrl] = useState('');
-  const [tags, setTags] = useState('');
-  const [collectionIds, setCollectionIds] = useState<string[]>([]);
+  const [values, setValues] = useState<ItemFormValues>(EMPTY_VALUES);
   const [file, setFile] = useState<UploadedFile | null>(null);
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [isPending, startTransition] = useTransition();
-  const upgradeToast = useUpgradeToast();
+  const failureToast = useFailureToast();
 
   // Falls back to the first type only to keep the slug a string; the selected
   // id always names one of these, since it can only come from the list.
   const selected = types.find((type) => type.id === typeId) ?? types[0];
-  const fields = editableFieldsFor(selected.slug);
   const required = requiredFieldsFor(selected.slug);
+  const fileLabel = isImageUploadType(selected.slug) ? 'Image' : 'File';
 
   // A guard for the button only — the action re-checks both, and trims before
   // it measures just as this does.
   const canSave =
-    title.trim().length > 0 &&
-    (!required.url || url.trim().length > 0) &&
+    values.title.trim().length > 0 &&
+    (!required.url || values.url.trim().length > 0) &&
     (!required.file || file !== null);
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const payload = buildCreateItemPayload({
-      typeId,
-      slug: selected.slug,
-      title,
-      description,
-      content,
-      language,
-      url,
-      tags,
-      collectionIds,
-      file,
-    });
+    const payload = buildCreateItemPayload({ ...values, typeId, slug: selected.slug, file });
 
     startTransition(async () => {
       const result = await createItem(payload);
 
       if (!result.success) {
         setFieldErrors(result.fieldErrors ?? {});
-        // A Pro wall reads as its own alert, not as a failure: red, top
-        // centre, and offering the upgrade. The server decides which refusals
-        // those are — see `upgradeRequired` on `CreateItemResult`.
-        if (result.upgradeRequired) {
-          upgradeToast(result.error);
-        } else {
-          toast.error(result.error);
-        }
+        // A Pro wall reads as its own alert, not as a failure. The server
+        // decides which refusals those are — see `upgradeRequired` on
+        // `CreateItemResult`.
+        failureToast(result);
 
         return;
       }
@@ -202,192 +158,96 @@ function NewItemForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col gap-4">
-      {/* Only the fields scroll, so the footer's buttons stay put however tall
-          the form for the selected type is. */}
-      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-1">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="new-item-type">Type</Label>
-          <Select
-            value={typeId}
-            onValueChange={(next) => {
-              setTypeId(next);
-              // The upload belongs to the type it was made for: an image
-              // already sent is not a valid file item, and the limits differ.
-              setFile(null);
-            }}
-          >
-            <SelectTrigger id="new-item-type" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {types.map((type) => {
-                const Icon = getIcon(type.icon);
-                // Disabled rather than removed: a feature nobody can see is a
-                // feature nobody can be sold. The hint says why the row will
-                // not take a click.
-                const locked = !canCreateType(type.slug, isPro);
+    <FormDialogBody
+      onSubmit={handleSubmit}
+      onCancel={onCancel}
+      isPending={isPending}
+      canSubmit={canSave}
+      submitLabel="Create item"
+      pendingLabel="Creating…"
+    >
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="new-item-type">Type</Label>
+        <Select
+          value={typeId}
+          onValueChange={(next) => {
+            setTypeId(next);
+            // The upload belongs to the type it was made for: an image
+            // already sent is not a valid file item, and the limits differ.
+            setFile(null);
+          }}
+        >
+          <SelectTrigger id="new-item-type" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {types.map((type) => {
+              const Icon = getIcon(type.icon);
+              // Disabled rather than removed: a feature nobody can see is a
+              // feature nobody can be sold. The hint says why the row will
+              // not take a click.
+              const locked = !canCreateType(type.slug, isPro);
 
-                return (
-                  <SelectItem key={type.id} value={type.id} disabled={locked}>
-                    <Icon className={cn('size-4', textColorClass(type.color))} />
-                    {capitalize(type.name)}
-                    {locked && (
-                      <span className="ml-auto pl-3 text-[10px] tracking-wider text-muted-foreground">
-                        PRO
-                      </span>
-                    )}
-                  </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
-          <ItemFieldError messages={fieldErrors.typeId} />
-          {!isPro && (
-            <p className="text-xs text-muted-foreground">
-              File and image uploads are a Pro feature.{' '}
-              <Link href="/settings" className="underline underline-offset-2 hover:text-foreground">
-                Upgrade
-              </Link>{' '}
-              to add them.
-            </p>
-          )}
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="new-item-title">Title</Label>
-          <Input
-            id="new-item-title"
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            aria-invalid={Boolean(fieldErrors.title)}
-            autoFocus
-            required
-          />
-          <ItemFieldError messages={fieldErrors.title} />
-        </div>
-
-        <ItemDescriptionField
-          id="new-item-description"
-          value={description}
-          onChange={setDescription}
-          rows={2}
-          messages={fieldErrors.description}
-          summarizeFrom={
-            isPro
-              ? buildSummarySource({
-                  slug: selected.slug,
-                  typeName: selected.name,
-                  title,
-                  content,
-                  language,
-                  url,
-                  tags,
-                  fileName: file?.fileName ?? null,
-                })
-              : undefined
-          }
-        />
-
-        {fields.language && (
-          <LanguageSelect
-            id="new-item-language"
-            value={language}
-            onChange={setLanguage}
-            disabled={isPending}
-            messages={fieldErrors.language}
-          />
+              return (
+                <SelectItem key={type.id} value={type.id} disabled={locked}>
+                  <Icon className={cn('size-4', textColorClass(type.color))} />
+                  {capitalize(type.name)}
+                  {locked && (
+                    <span className="ml-auto pl-3 text-[10px] tracking-wider text-muted-foreground">
+                      PRO
+                    </span>
+                  )}
+                </SelectItem>
+              );
+            })}
+          </SelectContent>
+        </Select>
+        <ItemFieldError messages={fieldErrors.typeId} />
+        {!isPro && (
+          <p className="text-xs text-muted-foreground">
+            File and image uploads are a Pro feature.{' '}
+            <Link href="/settings" className="underline underline-offset-2 hover:text-foreground">
+              Upgrade
+            </Link>{' '}
+            to add them.
+          </p>
         )}
-
-        {fields.content && (
-          <ItemContentField
-            idPrefix="new-item"
-            slug={selected.slug}
-            value={content}
-            onChange={setContent}
-            language={language}
-            codeMinHeight={140}
-            markdownMinHeight={220}
-            textareaClassName="min-h-32 font-mono text-xs leading-relaxed"
-            messages={fieldErrors.content}
-          />
-        )}
-
-        {fields.url && (
-          <ItemTextField
-            id="new-item-url"
-            label="URL"
-            type="url"
-            value={url}
-            onChange={setUrl}
-            placeholder="https://example.com"
-            required={required.url}
-            messages={fieldErrors.url}
-          />
-        )}
-
-        {required.file && (
-          <div className="flex flex-col gap-2">
-            {/* The input is visually hidden and the drop target is a button,
-                so neither is a `<label for>` target — it names itself. */}
-            <Label>{isImageUploadType(selected.slug) ? 'Image' : 'File'}</Label>
-            <FileUpload
-              // Remounts on a type change, so the previous type's picker state
-              // does not carry over with its limits and accepted extensions.
-              key={selected.slug}
-              slug={selected.slug}
-              value={file}
-              onChange={setFile}
-              disabled={isPending}
-              ariaLabel={isImageUploadType(selected.slug) ? 'Image' : 'File'}
-            />
-            <ItemFieldError messages={fieldErrors.fileUrl} />
-          </div>
-        )}
-
-        <ItemTagsField
-          id="new-item-tags"
-          value={tags}
-          onChange={setTags}
-          messages={fieldErrors.tags}
-          // Only the fields the selected type shows: the others may still hold
-          // text from a type picked earlier, which the save would not send.
-          suggestFrom={
-            isPro
-              ? {
-                  title,
-                  description,
-                  content: fields.content ? content : undefined,
-                  url: fields.url ? url : undefined,
-                }
-              : undefined
-          }
-        />
-
-        <CollectionSelect
-          id="new-item-collections"
-          options={collectionOptions}
-          value={collectionIds}
-          onChange={setCollectionIds}
-          disabled={isPending}
-          messages={fieldErrors.collectionIds}
-        />
       </div>
 
-      <DialogFooter className="shrink-0">
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={onCancel}
-          disabled={isPending}
-          className="w-full sm:w-auto"
-        >
-          Cancel
-        </Button>
-        <Button type="submit" disabled={isPending || !canSave} className="w-full sm:w-auto">
-          {isPending ? 'Creating…' : 'Create item'}
-        </Button>
-      </DialogFooter>
-    </form>
+      <ItemFormFields
+        idPrefix="new-item"
+        size="dialog"
+        slug={selected.slug}
+        typeName={selected.name}
+        fileName={file?.fileName ?? null}
+        values={values}
+        onChange={(patch) => setValues((current) => ({ ...current, ...patch }))}
+        fieldErrors={fieldErrors}
+        collectionOptions={collectionOptions}
+        isPro={isPro}
+        disabled={isPending}
+        urlRequired={required.url}
+        fileField={
+          required.file && (
+            <div className="flex flex-col gap-2">
+              {/* The input is visually hidden and the drop target is a button,
+                  so neither is a `<label for>` target — it names itself. */}
+              <Label>{fileLabel}</Label>
+              <FileUpload
+                // Remounts on a type change, so the previous type's picker state
+                // does not carry over with its limits and accepted extensions.
+                key={selected.slug}
+                slug={selected.slug}
+                value={file}
+                onChange={setFile}
+                disabled={isPending}
+                ariaLabel={fileLabel}
+              />
+              <ItemFieldError messages={fieldErrors.fileUrl} />
+            </div>
+          )
+        }
+      />
+    </FormDialogBody>
   );
 }

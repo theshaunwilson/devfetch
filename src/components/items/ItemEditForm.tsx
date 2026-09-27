@@ -4,18 +4,10 @@ import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
 import { updateItem } from '@/actions/items';
-import { CollectionSelect } from '@/components/items/CollectionSelect';
-import { ItemContentField } from '@/components/items/ItemContentField';
-import { ItemDescriptionField } from '@/components/items/ItemDescriptionField';
-import { ItemFieldError } from '@/components/items/ItemFieldError';
-import { ItemTagsField } from '@/components/items/ItemTagsField';
-import { ItemTextField } from '@/components/items/ItemTextField';
-import { LanguageSelect } from '@/components/items/LanguageSelect';
+import { ItemFormFields, type ItemFormValues } from '@/components/items/ItemFormFields';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { SheetHeader } from '@/components/ui/sheet';
-import { buildSummarySource, editableFieldsFor, formatTagInput, parseTagInput } from '@/lib/items';
+import { editableFieldsFor, formatTagInput, parseTagInput } from '@/lib/items';
 import type { UpdateItemInput } from '@/lib/validation/items';
 import type { CollectionOption } from '@/types/collection';
 import type { ItemDetail } from '@/types/item';
@@ -32,7 +24,6 @@ interface ItemEditFormProps {
   onSaved: (item: ItemDetail) => void;
   onCancel: () => void;
 }
-
 
 /**
  * The drawer in edit mode.
@@ -55,38 +46,38 @@ export function ItemEditForm({
 }: ItemEditFormProps) {
   const fields = editableFieldsFor(item.type.slug);
 
-  const [title, setTitle] = useState(item.title);
-  const [description, setDescription] = useState(item.description ?? '');
-  const [content, setContent] = useState(item.content ?? '');
-  const [language, setLanguage] = useState(item.language ?? '');
-  const [url, setUrl] = useState(item.url ?? '');
-  const [tags, setTags] = useState(formatTagInput(item.tags));
-  const [collectionIds, setCollectionIds] = useState(() =>
-    item.collections.map((collection) => collection.id),
-  );
+  const [values, setValues] = useState<ItemFormValues>(() => ({
+    title: item.title,
+    description: item.description ?? '',
+    content: item.content ?? '',
+    language: item.language ?? '',
+    url: item.url ?? '',
+    tags: formatTagInput(item.tags),
+    collectionIds: item.collections.map((collection) => collection.id),
+  }));
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [isPending, startTransition] = useTransition();
 
   // A basic guard only — the schema in the server action is what actually
   // decides, and it trims before it measures just like this does.
-  const canSave = title.trim().length > 0;
+  const canSave = values.title.trim().length > 0;
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const payload: UpdateItemInput = {
-      title,
-      description,
-      tags: parseTagInput(tags),
-      collectionIds,
+      title: values.title,
+      description: values.description,
+      tags: parseTagInput(values.tags),
+      collectionIds: values.collectionIds,
     };
 
     // Only the fields this type actually shows. Sending the rest would clear
     // whatever a previous type-specific edit had put there.
-    if (fields.content) payload.content = content;
-    if (fields.language) payload.language = language;
-    if (fields.url) payload.url = url;
+    if (fields.content) payload.content = values.content;
+    if (fields.language) payload.language = values.language;
+    if (fields.url) payload.url = values.url;
 
     startTransition(async () => {
       const result = await updateItem(item.id, payload);
@@ -120,102 +111,18 @@ export function ItemEditForm({
       </SheetHeader>
 
       <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-6">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="item-title">Title</Label>
-          <Input
-            id="item-title"
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            aria-invalid={Boolean(fieldErrors.title)}
-            autoFocus
-            required
-          />
-          <ItemFieldError messages={fieldErrors.title} />
-        </div>
-
-        <ItemDescriptionField
-          id="item-description"
-          value={description}
-          onChange={setDescription}
-          rows={3}
-          messages={fieldErrors.description}
-          summarizeFrom={
-            isPro
-              ? buildSummarySource({
-                  slug: item.type.slug,
-                  typeName: item.type.name,
-                  title,
-                  content,
-                  language,
-                  url,
-                  tags,
-                  fileName: item.fileName,
-                })
-              : undefined
-          }
-        />
-
-        {fields.language && (
-          <LanguageSelect
-            id="item-language"
-            value={language}
-            onChange={setLanguage}
-            disabled={isPending}
-            messages={fieldErrors.language}
-          />
-        )}
-
-        {fields.content && (
-          <ItemContentField
-            idPrefix="item"
-            slug={item.type.slug}
-            value={content}
-            onChange={setContent}
-            language={language}
-            codeMinHeight={160}
-            markdownMinHeight={240}
-            textareaClassName="min-h-40 font-mono text-xs leading-relaxed"
-            messages={fieldErrors.content}
-          />
-        )}
-
-        {fields.url && (
-          <ItemTextField
-            id="item-url"
-            label="URL"
-            type="url"
-            value={url}
-            onChange={setUrl}
-            placeholder="https://example.com"
-            messages={fieldErrors.url}
-          />
-        )}
-
-        <ItemTagsField
-          id="item-tags"
-          value={tags}
-          onChange={setTags}
-          messages={fieldErrors.tags}
-          // Only the fields this type shows, as with the save payload.
-          suggestFrom={
-            isPro
-              ? {
-                  title,
-                  description,
-                  content: fields.content ? content : undefined,
-                  url: fields.url ? url : undefined,
-                }
-              : undefined
-          }
-        />
-
-        <CollectionSelect
-          id="item-collections"
-          options={collectionOptions}
-          value={collectionIds}
-          onChange={setCollectionIds}
+        <ItemFormFields
+          idPrefix="item"
+          size="drawer"
+          slug={item.type.slug}
+          typeName={item.type.name}
+          fileName={item.fileName}
+          values={values}
+          onChange={(patch) => setValues((current) => ({ ...current, ...patch }))}
+          fieldErrors={fieldErrors}
+          collectionOptions={collectionOptions}
+          isPro={isPro}
           disabled={isPending}
-          messages={fieldErrors.collectionIds}
         />
       </div>
     </form>

@@ -2,8 +2,8 @@ import { CopyItemButton } from '@/components/items/CopyItemButton';
 import { FavoriteItemButton } from '@/components/items/FavoriteItemButton';
 import { ItemMarkers } from '@/components/items/ItemMarkers';
 import { OpenItemButton } from '@/components/items/OpenItemButton';
+import { TagList } from '@/components/items/TagList';
 import { TypeIconTile } from '@/components/items/TypeIconTile';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { borderColorClass } from '@/lib/colors';
 import { formatShortDate } from '@/lib/format';
@@ -87,13 +87,7 @@ export function ItemCard({ item }: ItemCardProps) {
           )}
 
           {item.tags.length > 0 && (
-            <div className="mt-auto flex flex-wrap gap-1.5">
-              {item.tags.map((tag) => (
-                <Badge key={tag} variant="secondary">
-                  {tag}
-                </Badge>
-              ))}
-            </div>
+            <TagList tags={item.tags} className="mt-auto" />
           )}
         </CardContent>
       )}

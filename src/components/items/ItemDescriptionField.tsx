@@ -2,14 +2,13 @@
 
 import { WandSparkles } from 'lucide-react';
 import { useEffect, useRef, useState, useTransition } from 'react';
-import { toast } from 'sonner';
 
 import { generateSummary } from '@/actions/ai';
 import { ItemFieldError } from '@/components/items/ItemFieldError';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { useUpgradeToast } from '@/hooks/use-upgrade-toast';
+import { useFailureToast } from '@/hooks/use-upgrade-toast';
 import type { GenerateSummaryInput } from '@/lib/validation/ai';
 
 /**
@@ -50,7 +49,7 @@ export function ItemDescriptionField({
   const [suggestion, setSuggestion] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
   const [isPending, startTransition] = useTransition();
-  const upgradeToast = useUpgradeToast();
+  const failureToast = useFailureToast();
 
   // Whether the field is empty is decided when the summary *arrives*, not
   // when it was asked for: somebody who starts typing while it is on its way
@@ -75,11 +74,8 @@ export function ItemDescriptionField({
       const result = await generateSummary(summarizeFrom);
 
       if (!result.success) {
-        if (result.upgradeRequired) {
-          upgradeToast(result.error);
-        } else {
-          toast.error(result.error);
-        }
+
+        failureToast(result);
 
         return;
       }
