@@ -1,12 +1,20 @@
-# Current Feature
+# Current Feature: Demo email on devfetch.site
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
+- The demo account is `demo@devfetch.site` everywhere: `prisma/seed.ts`, `scripts/test-db.ts`, `scripts/prune-users.ts` and `README.md`
+- Test fixtures and comments that use `devfetch.io` move to `devfetch.site`, so nothing in the repo names a domain the project does not own
+- The existing demo row on the development branch is renamed in place, keeping its id, Pro status and Stripe ids, rather than reseeded
+
 ## Notes
+
+- The domain is `devfetch.site`, not `devfetch.io`
+- `scripts/prune-users.ts` refuses to run when its keep account is missing, so the seed, the scripts and the database row have to agree
+- Archived specs in `context/features/` and History keep the old address as a record
 
 ## History
 

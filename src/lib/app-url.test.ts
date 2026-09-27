@@ -13,9 +13,9 @@ afterEach(() => {
 
 describe('absoluteUrl', () => {
   it('builds an absolute URL on the configured origin', () => {
-    vi.stubEnv('APP_URL', 'https://devfetch.io');
+    vi.stubEnv('APP_URL', 'https://devfetch.site');
 
-    expect(absoluteUrl('/verify-email?token=abc')).toBe('https://devfetch.io/verify-email?token=abc');
+    expect(absoluteUrl('/verify-email?token=abc')).toBe('https://devfetch.site/verify-email?token=abc');
   });
 
   /**
@@ -39,8 +39,8 @@ describe('absoluteUrl', () => {
   });
 
   it('keeps a trailing path segment on a base that has one', () => {
-    vi.stubEnv('APP_URL', 'https://devfetch.io/app/');
+    vi.stubEnv('APP_URL', 'https://devfetch.site/app/');
 
-    expect(absoluteUrl('verify-email')).toBe('https://devfetch.io/app/verify-email');
+    expect(absoluteUrl('verify-email')).toBe('https://devfetch.site/app/verify-email');
   });
 });

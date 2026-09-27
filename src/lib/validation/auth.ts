@@ -8,7 +8,7 @@ export const PASSWORD_MIN_LENGTH = 8;
 
 /**
  * Postgres compares `User.email` case-sensitively, so every write and lookup
- * normalizes first — otherwise `Demo@devfetch.io` registers a second account.
+ * normalizes first — otherwise `Demo@devfetch.site` registers a second account.
  */
 const email = z
   .string()

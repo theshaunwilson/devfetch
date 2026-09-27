@@ -20,7 +20,7 @@ loadEnv({ path: '.env.local', quiet: true });
 loadEnv({ quiet: true });
 
 /** The one account that survives. Matches prisma/seed.ts. */
-const KEEP_EMAIL = 'demo@devfetch.io';
+const KEEP_EMAIL = 'demo@devfetch.site';
 
 const CONFIRM_FLAG = '--yes';
 

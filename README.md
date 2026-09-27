@@ -28,7 +28,7 @@ npm run db:seed             # demo user, 7 item types, 5 collections, 18 items
 npm run dev                 # http://localhost:3000
 ```
 
-The seed creates `demo@devfetch.io` with password `12345678`.
+The seed creates `demo@devfetch.site` with password `12345678`.
 
 ### Environment
 
