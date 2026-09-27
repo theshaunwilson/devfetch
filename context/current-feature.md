@@ -1,12 +1,26 @@
-# Current Feature
+# Current Feature: Deduplicate the item and collection components
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
+- **One field stack for the item forms.** `NewItemForm` (`src/components/items/NewItemDialog.tsx`) and `ItemEditForm` render the same fields in the same order — Title, Description with AI, Language, Content, URL, Tags with AI, Collections — with the same tag-suggestion source built twice. They share one component, parameterised by an `idPrefix` the way `ItemContentField` already is, with the create form keeping its type picker and file upload around it
+- **One way to report a refused action.** "`upgradeRequired` → upgrade toast, otherwise error toast" is written out in `NewItemDialog`, `NewCollectionDialog`, `ItemTagsField`, `ItemDescriptionField`, `ExplainableCodeEditor` and `OptimizablePromptEditor`. `useUpgradeToast` gains a companion that takes the failed result and does the right one
+- **One form-dialog scaffold.** `NewItemDialog`, `NewCollectionDialog` and `EditCollectionDialog` share the height-capped dialog, the form that unmounts on close, the scrolling body and the Cancel/submit footer with its pending label. That shell lives in one place, so the short-viewport fix does too
+- **One delete confirmation.** `DeleteItemDialog` and `DeleteCollectionDialog` share the Escape block while pending, the `wrap-anywhere` naming, the "Deleting…" button and the toast-then-close sequence. `DeleteAccountDialog` (typed-email confirmation) stays separate
+- **One `TagList`** for the tag badges drawn in `ItemCard`, `ItemRow` and `ItemDrawerBody`
+- No behaviour or visual change: every label, id, message and class a user or test can see stays the same
+- `npm run test`, `npm run lint`, `npx tsc --noEmit` and `npm run build` pass, and the create dialog, the drawer's edit mode, both delete dialogs, the collection dialogs and the card lists are checked in the browser
+
 ## Notes
+
+- From a scan of `src/components`. Out of scope from the same scan: splitting the type picker out of `NewItemDialog`, splitting the content view out of `ItemDrawerBody`, the AI field header shared by `ItemTagsField` and `ItemDescriptionField`, the scrolling panel repeated in the AI editors and `MarkdownEditor`, and the two "PRO" locked-type markers
+- **Components are not unit tested** (`coding-standards.md`), so the proof is the browser. The form ids matter to screen readers and to `<label for>`, so `new-item-*` and `item-*` must come out exactly as they are today
+- The field stack stays controlled by its parent: the create and edit forms own their state and submit, since they send different payloads to different actions. The stack only renders
+- The edit form's `display: contents` layout (header Save button submitting fields in the scrolling body) is not a dialog and does not use the new scaffold
+- `DeleteItemDialog` owns its open state and its trigger; `DeleteCollectionDialog` is controlled from outside because it opens from a menu item that unmounts. The shared confirmation is controlled, and the item dialog keeps its trigger around it
 
 ## History
 

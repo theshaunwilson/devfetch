@@ -1,14 +1,13 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { toast } from 'sonner';
 
 import { explainCode } from '@/actions/ai';
 import { AiHeaderButton } from '@/components/items/AiHeaderButton';
 import { CodeEditor } from '@/components/items/CodeEditor';
 import { MarkdownPreview } from '@/components/items/MarkdownPreview';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useUpgradeToast } from '@/hooks/use-upgrade-toast';
+import { useFailureToast, useUpgradeToast } from '@/hooks/use-upgrade-toast';
 import { EDITOR_MAX_HEIGHT } from '@/lib/constants';
 
 const PRO_MESSAGE = 'AI code explanations are part of Pro. Upgrade to use them.';
@@ -52,17 +51,15 @@ export function ExplainableCodeEditor({
   const [tab, setTab] = useState<'code' | 'explain'>('code');
   const [isPending, startTransition] = useTransition();
   const upgradeToast = useUpgradeToast();
+  const failureToast = useFailureToast();
 
   function handleExplain() {
     startTransition(async () => {
       const result = await explainCode({ itemId });
 
       if (!result.success) {
-        if (result.upgradeRequired) {
-          upgradeToast(result.error);
-        } else {
-          toast.error(result.error);
-        }
+
+        failureToast(result);
 
         return;
       }

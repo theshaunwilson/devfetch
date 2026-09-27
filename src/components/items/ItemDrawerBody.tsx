@@ -7,6 +7,7 @@ import { ExplainableCodeEditor } from '@/components/items/ExplainableCodeEditor'
 import { ItemFilePanel } from '@/components/items/ItemFilePanel';
 import { MarkdownEditor } from '@/components/items/MarkdownEditor';
 import { OptimizablePromptEditor } from '@/components/items/OptimizablePromptEditor';
+import { TagList } from '@/components/items/TagList';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -150,13 +151,7 @@ export function ItemDrawerBody({ item, detail, status, isPro, onSaved }: ItemDra
           {item.tags.length > 0 && (
             <section className="flex flex-col gap-2">
               <SectionLabel icon={Tag}>Tags</SectionLabel>
-              <div className="flex flex-wrap gap-1.5">
-                {item.tags.map((tag) => (
-                  <Badge key={tag} variant="secondary">
-                    {tag}
-                  </Badge>
-                ))}
-              </div>
+              <TagList tags={item.tags} />
             </section>
           )}
 

@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useUpgradeToast } from '@/hooks/use-upgrade-toast';
+import { useFailureToast } from '@/hooks/use-upgrade-toast';
 import { appendTagInput, hasTagInput, tagsForAi } from '@/lib/items';
 
 /** The item's text as it stands in the form — what tags are suggested from. */
@@ -44,7 +44,7 @@ interface ItemTagsFieldProps {
 export function ItemTagsField({ id, value, onChange, messages, suggestFrom }: ItemTagsFieldProps) {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [isPending, startTransition] = useTransition();
-  const upgradeToast = useUpgradeToast();
+  const failureToast = useFailureToast();
 
   // Derived, not stored: a suggestion the user has since typed in themselves
   // stops being offered, and one they delete from the input again does not
@@ -67,11 +67,8 @@ export function ItemTagsField({ id, value, onChange, messages, suggestFrom }: It
       const result = await generateAutoTags({ ...suggestFrom, currentTags });
 
       if (!result.success) {
-        if (result.upgradeRequired) {
-          upgradeToast(result.error);
-        } else {
-          toast.error(result.error);
-        }
+
+        failureToast(result);
 
         return;
       }
