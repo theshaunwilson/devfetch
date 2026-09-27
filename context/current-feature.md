@@ -1,12 +1,25 @@
-# Current Feature
+# Current Feature: Deduplicate the server actions
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
+- **One flag setter instead of three.** `setItemFavorite`, `setItemPinned` (`src/actions/items.ts`) and `setCollectionFavorite` (`src/actions/collections.ts`) run the same steps — session check, `z.boolean()` parse, the scoped write, "could not be found" when nothing matched, catch and log. They move onto one private helper; only the write, the noun and the log label differ
+- **Shared action messages.** "Your session has expired. Sign in again." (20 copies across 6 action files) and "Check the highlighted fields and try again." (8 in `items.ts`, a local `CHECK_FIELDS` in `collections.ts`) become constants in a new `src/lib/action-messages.ts`
+- **A `fieldError(field, message)` helper** for the one-field refusals in `items.ts` (6 hand-written blocks, two of them identical `collectionIds` errors), plus one shared result for the parse failure both forms already return
+- **The duplicate-name refusal written once**, shared by `createCollection` and `updateCollection`
+- **One `ActionResult` type** for the five identical `{ success: true } | { success: false; error: string }` results (`DeleteItemResult`, `SetItemFavoriteResult`, `SetItemPinnedResult`, `DeleteCollectionResult`, `SetCollectionFavoriteResult`)
+- No behaviour change: every message, field key and log line stays the same, and the existing action tests pass unchanged
+- `npm run test`, `npm run lint`, `npx tsc --noEmit` and `npm run build` pass
+
 ## Notes
+
+- **Nothing shared can be exported from a `'use server'` file.** Every export of one becomes a public endpoint and must be an async function, so the helpers that take functions stay private to their module, and the constants and `fieldError` live in `src/lib/action-messages.ts`, which has no `'use server'`
+- **The flag helper is shared across two action files**, so it cannot sit in either as a private function. It goes in its own `src/lib/set-flag.ts` (`server-only`) rather than beside the messages, because it imports `@/auth`: `action-messages.ts` stays pure, so an action whose tests do not mock `@/auth` can import `SESSION_EXPIRED` without loading NextAuth and the Prisma client behind it
+- **The five result types keep their names** as aliases of `ActionResult`. Their doc comments deliberately kept them per-domain "so the two can diverge without a rename"; an alias still allows that — redefine the alias — while stopping the five copies drifting
+- Out of scope, from the same scan: a `getSessionUserId()` helper, the item lookup shared by `explainCode` and `optimizePrompt`, and the one-line email echo in `auth.ts`. `profile.ts` and `auth.ts` return a different shape for `useActionState` forms and are left alone
 
 ## History
 

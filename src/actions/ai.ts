@@ -3,6 +3,7 @@
 import type { z } from 'zod';
 
 import { auth } from '@/auth';
+import { SESSION_EXPIRED } from '@/lib/action-messages';
 import { AiRequestError, describeAiError } from '@/lib/ai/errors';
 import {
   generateCodeExplanation,
@@ -64,7 +65,7 @@ async function runAiAction<Schema extends z.ZodType, T>(
   const userId = session?.user?.id;
 
   if (!userId) {
-    return { success: false, error: 'Your session has expired. Sign in again.' };
+    return { success: false, error: SESSION_EXPIRED };
   }
 
   // Read from the row, never the token: a lapsed subscription in a JWT would

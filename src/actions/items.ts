@@ -1,8 +1,7 @@
 'use server';
 
-import { z } from 'zod';
-
 import { auth } from '@/auth';
+import { SESSION_EXPIRED, fieldError, invalidFields } from '@/lib/action-messages';
 import { isProUser } from '@/lib/db/billing';
 import { getOwnedCollectionIds } from '@/lib/db/collections';
 import { getItemTypeById } from '@/lib/db/item-types';
@@ -16,6 +15,7 @@ import {
 } from '@/lib/db/items';
 import { requiredFieldsFor } from '@/lib/items';
 import { deleteObject } from '@/lib/r2';
+import { setFlag } from '@/lib/set-flag';
 import { keyBelongsTo } from '@/lib/uploads';
 import { limitMessage } from '@/lib/usage-limits';
 import { createItemSchema, updateItemContentSchema, updateItemSchema } from '@/lib/validation/items';
@@ -27,6 +27,8 @@ import type {
   SetItemPinnedResult,
   UpdateItemResult,
 } from '@/types/item';
+
+const FOREIGN_COLLECTIONS = fieldError('collectionIds', 'Pick collections from your own list');
 
 /**
  * Narrows the collection ids a caller sent to the ones they actually own.
@@ -75,17 +77,13 @@ export async function createItem(data: CreateItemInput): Promise<CreateItemResul
   const session = await auth();
 
   if (!session?.user?.id) {
-    return { success: false, error: 'Your session has expired. Sign in again.' };
+    return { success: false, error: SESSION_EXPIRED };
   }
 
   const parsed = createItemSchema.safeParse(data);
 
   if (!parsed.success) {
-    return {
-      success: false,
-      error: 'Check the highlighted fields and try again.',
-      fieldErrors: z.flattenError(parsed.error).fieldErrors,
-    };
+    return invalidFields(parsed.error);
   }
 
   try {
@@ -93,11 +91,7 @@ export async function createItem(data: CreateItemInput): Promise<CreateItemResul
 
     if (!type) {
       // An unknown type and one belonging to somebody else read the same way.
-      return {
-        success: false,
-        error: 'Check the highlighted fields and try again.',
-        fieldErrors: { typeId: ['Choose an item type'] },
-      };
+      return fieldError('typeId', 'Choose an item type');
     }
 
     const required = requiredFieldsFor(type.slug);
@@ -106,11 +100,7 @@ export async function createItem(data: CreateItemInput): Promise<CreateItemResul
     const isPro = await isProUser();
 
     if (required.url && !parsed.data.url) {
-      return {
-        success: false,
-        error: 'Check the highlighted fields and try again.',
-        fieldErrors: { url: ['URL is required'] },
-      };
+      return fieldError('url', 'URL is required');
     }
 
     if (required.file) {
@@ -130,11 +120,7 @@ export async function createItem(data: CreateItemInput): Promise<CreateItemResul
       const { fileUrl, fileName, fileSize } = parsed.data;
 
       if (!fileUrl || !fileName || !fileSize) {
-        return {
-          success: false,
-          error: 'Check the highlighted fields and try again.',
-          fieldErrors: { fileUrl: ['Upload a file'] },
-        };
+        return fieldError('fileUrl', 'Upload a file');
       }
 
       // The key arrives from the client, and every later read of that object is
@@ -146,22 +132,14 @@ export async function createItem(data: CreateItemInput): Promise<CreateItemResul
       // resolves the row by exactly this id, so the key is checked against the
       // owner the item actually gets.
       if (!keyBelongsTo(fileUrl, session.user.id)) {
-        return {
-          success: false,
-          error: 'Check the highlighted fields and try again.',
-          fieldErrors: { fileUrl: ['Upload the file again'] },
-        };
+        return fieldError('fileUrl', 'Upload the file again');
       }
     }
 
     const collections = await resolveCollectionIds(parsed.data.collectionIds);
 
     if (!collections.ok) {
-      return {
-        success: false,
-        error: 'Check the highlighted fields and try again.',
-        fieldErrors: { collectionIds: ['Pick collections from your own list'] },
-      };
+      return FOREIGN_COLLECTIONS;
     }
 
     // The resolved ids rather than the ones that arrived, so what is written is
@@ -187,7 +165,7 @@ export async function createItem(data: CreateItemInput): Promise<CreateItemResul
     if (!outcome.ok) {
       return outcome.reason === 'limit-reached'
         ? { success: false, error: limitMessage('items'), upgradeRequired: true }
-        : { success: false, error: 'Your session has expired. Sign in again.' };
+        : { success: false, error: SESSION_EXPIRED };
     }
 
     return { success: true, data: outcome.item };
@@ -210,30 +188,20 @@ export async function updateItem(itemId: string, data: UpdateItemInput): Promise
   const session = await auth();
 
   if (!session?.user?.id) {
-    return { success: false, error: 'Your session has expired. Sign in again.' };
+    return { success: false, error: SESSION_EXPIRED };
   }
 
   const parsed = updateItemSchema.safeParse(data);
 
   if (!parsed.success) {
-    return {
-      success: false,
-      error: 'Check the highlighted fields and try again.',
-      // Grouped on the first path segment, so a message Zod paths at `tags.0`
-      // still lands on the `tags` field the form renders.
-      fieldErrors: z.flattenError(parsed.error).fieldErrors,
-    };
+    return invalidFields(parsed.error);
   }
 
   try {
     const collections = await resolveCollectionIds(parsed.data.collectionIds);
 
     if (!collections.ok) {
-      return {
-        success: false,
-        error: 'Check the highlighted fields and try again.',
-        fieldErrors: { collectionIds: ['Pick collections from your own list'] },
-      };
+      return FOREIGN_COLLECTIONS;
     }
 
     const item = await updateItemRow(itemId, { ...parsed.data, collectionIds: collections.ids });
@@ -268,7 +236,7 @@ export async function updateItemContent(
   const session = await auth();
 
   if (!session?.user?.id) {
-    return { success: false, error: 'Your session has expired. Sign in again.' };
+    return { success: false, error: SESSION_EXPIRED };
   }
 
   const parsed = updateItemContentSchema.safeParse({ content });
@@ -306,7 +274,7 @@ export async function deleteItem(itemId: string): Promise<DeleteItemResult> {
   const session = await auth();
 
   if (!session?.user?.id) {
-    return { success: false, error: 'Your session has expired. Sign in again.' };
+    return { success: false, error: SESSION_EXPIRED };
   }
 
   try {
@@ -346,55 +314,22 @@ export async function deleteItem(itemId: string): Promise<DeleteItemResult> {
 /**
  * Favorites or unfavorites one item belonging to the signed-in user.
  *
- * Takes the value to store rather than flipping whatever is in the row: the
- * user clicked a star that was showing them a particular state, and honouring
- * that is both idempotent and one statement. See `setItemFavorite` in
- * `@/lib/db/items`, where the ownership filter that makes the id safe to accept
- * lives.
- *
- * The flag is parsed rather than trusted to its type. A server action is a
- * public endpoint, so the argument is whatever the caller posted — and a
- * non-boolean reaching Prisma is a 500 where it should be a refusal.
+ * Every decision — the value to store rather than a flip, the flag parsed
+ * rather than trusted to its type, a row that was not this user's reported like
+ * one that never existed — is `setFlag`'s, shared with the pin and the
+ * collection favorite. See `setItemFavorite` in `@/lib/db/items` for the
+ * ownership filter that makes the id safe to accept.
  */
 export async function setItemFavorite(
   itemId: string,
   isFavorite: boolean,
 ): Promise<SetItemFavoriteResult> {
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    return { success: false, error: 'Your session has expired. Sign in again.' };
-  }
-
-  const parsed = z.boolean().safeParse(isFavorite);
-
-  if (!parsed.success) {
-    return { success: false, error: 'Could not update that item. Please try again.' };
-  }
-
-  try {
-    const updated = await setItemFavoriteRow(itemId, parsed.data);
-
-    if (!updated) {
-      // Somebody else's item reads exactly like one that does not exist.
-      return { success: false, error: 'That item could not be found.' };
-    }
-
-    return { success: true };
-  } catch (error) {
-    console.error('Could not update the item favorite:', error);
-
-    return { success: false, error: 'Could not update that item. Please try again.' };
-  }
+  return setFlag(itemId, isFavorite, { noun: 'item', label: 'favorite', write: setItemFavoriteRow });
 }
 
 /**
- * Pins or unpins one item belonging to the signed-in user.
- *
- * `setItemFavorite` above, for the pin, and identical in every decision it
- * makes: the value to store rather than a flip, the flag parsed rather than
- * trusted to its type, and a row that was not this user's reported exactly like
- * one that never existed.
+ * Pins or unpins one item belonging to the signed-in user, through the same
+ * `setFlag` as the favorite above.
  *
  * Named `setItemPinned` rather than the spec's `toggleItemPin` for the reason
  * the favorite actions carry the names they do — the UI is a toggle, the
@@ -404,30 +339,5 @@ export async function setItemPinned(
   itemId: string,
   isPinned: boolean,
 ): Promise<SetItemPinnedResult> {
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    return { success: false, error: 'Your session has expired. Sign in again.' };
-  }
-
-  const parsed = z.boolean().safeParse(isPinned);
-
-  if (!parsed.success) {
-    return { success: false, error: 'Could not update that item. Please try again.' };
-  }
-
-  try {
-    const updated = await setItemPinnedRow(itemId, parsed.data);
-
-    if (!updated) {
-      // Somebody else's item reads exactly like one that does not exist.
-      return { success: false, error: 'That item could not be found.' };
-    }
-
-    return { success: true };
-  } catch (error) {
-    console.error('Could not update the item pin:', error);
-
-    return { success: false, error: 'Could not update that item. Please try again.' };
-  }
+  return setFlag(itemId, isPinned, { noun: 'item', label: 'pin', write: setItemPinnedRow });
 }
