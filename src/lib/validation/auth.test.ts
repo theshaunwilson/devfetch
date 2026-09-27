@@ -34,7 +34,7 @@ describe('password rules', () => {
   const register = (password: string) =>
     registerSchema.safeParse({
       name: 'Demo User',
-      email: 'demo@devfetch.io',
+      email: 'demo@devfetch.site',
       password,
       confirmPassword: password,
     });
@@ -68,7 +68,7 @@ describe('password rules', () => {
 });
 
 describe('registerSchema', () => {
-  const base = { email: 'demo@devfetch.io', password: VALID_PASSWORD };
+  const base = { email: 'demo@devfetch.site', password: VALID_PASSWORD };
 
   it('accepts a complete registration', () => {
     const parsed = registerSchema.safeParse({
@@ -104,11 +104,11 @@ describe('signInSchema', () => {
   it('accepts a password shorter than the register floor', () => {
     // Deliberately looser: rejecting a short password here would report the
     // policy rather than "invalid credentials".
-    expect(signInSchema.safeParse({ email: 'demo@devfetch.io', password: 'a' }).success).toBe(true);
+    expect(signInSchema.safeParse({ email: 'demo@devfetch.site', password: 'a' }).success).toBe(true);
   });
 
   it('still requires a password to be present', () => {
-    expect(signInSchema.safeParse({ email: 'demo@devfetch.io', password: '' }).success).toBe(false);
+    expect(signInSchema.safeParse({ email: 'demo@devfetch.site', password: '' }).success).toBe(false);
   });
 });
 
@@ -155,10 +155,10 @@ describe('changePasswordSchema', () => {
 
 describe('deleteAccountSchema', () => {
   it('normalizes the typed confirmation the same way an email is', () => {
-    const parsed = deleteAccountSchema.safeParse({ confirmEmail: '  DEMO@DevFetch.io ' });
+    const parsed = deleteAccountSchema.safeParse({ confirmEmail: '  DEMO@DevFetch.site ' });
 
     expect(parsed.success).toBe(true);
-    expect(parsed.data?.confirmEmail).toBe('demo@devfetch.io');
+    expect(parsed.data?.confirmEmail).toBe('demo@devfetch.site');
   });
 
   it('does not require a valid address here, since the server compares it anyway', () => {

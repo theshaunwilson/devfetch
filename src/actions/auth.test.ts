@@ -85,7 +85,7 @@ afterEach(() => {
 describe('signInWithCredentials', () => {
   it('signs in with the normalized credentials and the requested path', async () => {
     const state = await submit({
-      email: '  DEMO@DevFetch.io ',
+      email: '  DEMO@DevFetch.site ',
       password: '12345678',
       callbackUrl: '/items/snippet',
     });
@@ -94,7 +94,7 @@ describe('signInWithCredentials', () => {
     expect(signIn).toHaveBeenCalledWith('credentials', {
       // Normalized by the schema before it reaches Auth.js — Postgres compares
       // User.email case-sensitively.
-      email: 'demo@devfetch.io',
+      email: 'demo@devfetch.site',
       password: '12345678',
       redirectTo: '/items/snippet',
     });
@@ -102,7 +102,7 @@ describe('signInWithCredentials', () => {
 
   it('refuses to redirect off-site, whatever the form asked for', async () => {
     await submit({
-      email: 'demo@devfetch.io',
+      email: 'demo@devfetch.site',
       password: '12345678',
       callbackUrl: '//evil.example',
     });
@@ -124,7 +124,7 @@ describe('signInWithCredentials', () => {
   it('does not report the password policy on a short password', async () => {
     // signInSchema is deliberately looser than registerSchema: complaining
     // here would name the rule instead of refusing.
-    const state = await submit({ email: 'demo@devfetch.io', password: 'a' });
+    const state = await submit({ email: 'demo@devfetch.site', password: 'a' });
 
     expect(state.fieldErrors?.password).toBeUndefined();
     expect(signIn).toHaveBeenCalled();
@@ -135,15 +135,15 @@ describe('signInWithCredentials', () => {
     // echoed unnormalized so the field does not rewrite itself under the user.
     vi.mocked(signIn).mockRejectedValue(await credentialsError());
 
-    const state = await submit({ email: '  DEMO@DevFetch.io ', password: 'wrong-password' });
+    const state = await submit({ email: '  DEMO@DevFetch.site ', password: 'wrong-password' });
 
-    expect(state.email).toBe('  DEMO@DevFetch.io ');
+    expect(state.email).toBe('  DEMO@DevFetch.site ');
   });
 
   it('never carries the password back', async () => {
     vi.mocked(signIn).mockRejectedValue(await credentialsError());
 
-    const state = await submit({ email: 'demo@devfetch.io', password: 'hunter22' });
+    const state = await submit({ email: 'demo@devfetch.site', password: 'hunter22' });
 
     expect(JSON.stringify(state)).not.toContain('hunter22');
   });
@@ -151,7 +151,7 @@ describe('signInWithCredentials', () => {
   it('gives one generic message to a wrong password, offering no resend', async () => {
     vi.mocked(signIn).mockRejectedValue(await credentialsError());
 
-    const state = await submit({ email: 'demo@devfetch.io', password: 'wrong-password' });
+    const state = await submit({ email: 'demo@devfetch.site', password: 'wrong-password' });
 
     expect(state.error).toBe(INVALID_CREDENTIALS);
     expect(state.canResend).toBeUndefined();
@@ -162,7 +162,7 @@ describe('signInWithCredentials', () => {
     // reaching here already proves the account is the caller s.
     vi.mocked(signIn).mockRejectedValue(await credentialsError(EMAIL_NOT_VERIFIED_CODE));
 
-    const state = await submit({ email: 'demo@devfetch.io', password: '12345678' });
+    const state = await submit({ email: 'demo@devfetch.site', password: '12345678' });
 
     expect(state.error).toBe(EMAIL_NOT_VERIFIED_MESSAGE);
     expect(state.canResend).toBe(true);
@@ -173,7 +173,7 @@ describe('signInWithCredentials', () => {
 
     vi.mocked(signIn).mockRejectedValue(new RateLimitedError(reset));
 
-    const state = await submit({ email: 'demo@devfetch.io', password: '12345678' });
+    const state = await submit({ email: 'demo@devfetch.site', password: '12345678' });
 
     expect(state.error).toBe('Too many attempts. Please try again in 15 minutes.');
     expect(state.canResend).toBeUndefined();
@@ -186,7 +186,7 @@ describe('signInWithCredentials', () => {
 
     vi.mocked(signIn).mockRejectedValue(redirectError);
 
-    await expect(submit({ email: 'demo@devfetch.io', password: '12345678' })).rejects.toThrow(
+    await expect(submit({ email: 'demo@devfetch.site', password: '12345678' })).rejects.toThrow(
       'NEXT_REDIRECT',
     );
   });

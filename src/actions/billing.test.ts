@@ -63,7 +63,7 @@ const stripeClient = {
 beforeEach(() => {
   vi.clearAllMocks();
   session.mockResolvedValue({
-    user: { id: USER_ID, email: 'demo@devfetch.io' },
+    user: { id: USER_ID, email: 'demo@devfetch.site' },
   } as unknown as never);
   billing.mockResolvedValue({
     isPro: false,

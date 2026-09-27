@@ -14,7 +14,7 @@ import bcrypt from 'bcryptjs';
 loadEnv({ path: '.env.local', quiet: true });
 loadEnv({ quiet: true });
 
-const DEMO_EMAIL = 'demo@devfetch.io';
+const DEMO_EMAIL = 'demo@devfetch.site';
 const DEMO_PASSWORD = '12345678';
 const BCRYPT_ROUNDS = 12;
 

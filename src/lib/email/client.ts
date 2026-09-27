@@ -5,7 +5,7 @@ import { Resend } from 'resend';
 /**
  * Resend rejects any recipient other than the address on the account until a
  * domain is verified, so this stays the testing sender. Swapping to
- * `noreply@devfetch.io` once the domain is verified is an env change only.
+ * `noreply@devfetch.site` once the domain is verified is an env change only.
  */
 const DEFAULT_FROM = 'DevFetch <onboarding@resend.dev>';
 

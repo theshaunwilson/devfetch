@@ -15,7 +15,7 @@ loadEnv({ path: '.env.local', quiet: true });
 loadEnv({ quiet: true });
 
 // Kept local rather than imported from prisma/seed.ts, which runs on import.
-const DEMO_EMAIL = 'demo@devfetch.io';
+const DEMO_EMAIL = 'demo@devfetch.site';
 
 type Prisma = Awaited<typeof import('../src/lib/prisma')>['prisma'];
 

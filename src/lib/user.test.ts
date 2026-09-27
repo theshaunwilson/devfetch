@@ -7,7 +7,7 @@ import { getDisplayName, getInitials } from './user';
 const user = (overrides: Partial<CurrentUser> = {}): CurrentUser => ({
   id: 'user_1',
   name: 'Demo User',
-  email: 'demo@devfetch.io',
+  email: 'demo@devfetch.site',
   image: null,
   ...overrides,
 });
@@ -18,7 +18,7 @@ describe('getDisplayName', () => {
   });
 
   it('falls back to the email, since User.name is nullable', () => {
-    expect(getDisplayName(user({ name: null }))).toBe('demo@devfetch.io');
+    expect(getDisplayName(user({ name: null }))).toBe('demo@devfetch.site');
   });
 });
 
