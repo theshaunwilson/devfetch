@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 
 import { auth, signOut } from '@/auth';
+import { SESSION_EXPIRED } from '@/lib/action-messages';
 import { hashPassword } from '@/lib/auth/password';
 import { allScopedIdentifiers } from '@/lib/auth/token-scopes';
 import { SIGN_IN_PATH } from '@/lib/auth-redirect';
@@ -63,7 +64,7 @@ export async function changePassword(
     const user = await getSessionAccount();
 
     if (!user) {
-      return { error: 'Your session has expired. Sign in again.' };
+      return { error: SESSION_EXPIRED };
     }
 
     // Null for accounts created through GitHub. The form is not rendered for
@@ -127,7 +128,7 @@ export async function deleteAccount(
     const user = await getSessionAccount();
 
     if (!user) {
-      return { error: 'Your session has expired. Sign in again.' };
+      return { error: SESSION_EXPIRED };
     }
 
     // The address is checked against the session's own account, never used to

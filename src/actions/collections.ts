@@ -1,8 +1,7 @@
 'use server';
 
-import { z } from 'zod';
-
 import { auth } from '@/auth';
+import { SESSION_EXPIRED, fieldError, invalidFields } from '@/lib/action-messages';
 import { isProUser } from '@/lib/db/billing';
 import {
   createCollection as createCollectionRow,
@@ -10,6 +9,7 @@ import {
   setCollectionFavorite as setCollectionFavoriteRow,
   updateCollection as updateCollectionRow,
 } from '@/lib/db/collections';
+import { setFlag } from '@/lib/set-flag';
 import { limitMessage } from '@/lib/usage-limits';
 import { createCollectionSchema, updateCollectionSchema } from '@/lib/validation/collections';
 import type {
@@ -23,7 +23,11 @@ import type {
   UpdateCollectionResult,
 } from '@/types/collection';
 
-const CHECK_FIELDS = 'Check the highlighted fields and try again.';
+/**
+ * The one failure the user can fix by editing what they typed, so it comes back
+ * on the field rather than as a banner alone — for a create and a rename alike.
+ */
+const DUPLICATE_NAME = fieldError('name', 'You already have a collection with that name');
 
 /**
  * Creates one collection for the signed-in user and returns it in full.
@@ -31,9 +35,6 @@ const CHECK_FIELDS = 'Check the highlighted fields and try again.';
  * A server action is a public endpoint, so nothing in the payload is trusted:
  * the session decides who is asking and the owner is taken from it, never from
  * the data. See `createCollection` in `@/lib/db/collections`.
- *
- * A duplicate name comes back on the field rather than as a banner alone,
- * because it is the one failure the user can fix by editing what they typed.
  */
 export async function createCollection(
   data: CreateCollectionInput
@@ -41,17 +42,13 @@ export async function createCollection(
   const session = await auth();
 
   if (!session?.user?.id) {
-    return { success: false, error: 'Your session has expired. Sign in again.' };
+    return { success: false, error: SESSION_EXPIRED };
   }
 
   const parsed = createCollectionSchema.safeParse(data);
 
   if (!parsed.success) {
-    return {
-      success: false,
-      error: CHECK_FIELDS,
-      fieldErrors: z.flattenError(parsed.error).fieldErrors,
-    };
+    return invalidFields(parsed.error);
   }
 
   try {
@@ -62,11 +59,7 @@ export async function createCollection(
     }
 
     if (outcome.reason === 'duplicate-name') {
-      return {
-        success: false,
-        error: CHECK_FIELDS,
-        fieldErrors: { name: ['You already have a collection with that name'] },
-      };
+      return DUPLICATE_NAME;
     }
 
     // Not a field error: nothing the user typed is wrong, and the dialog keeps
@@ -75,7 +68,7 @@ export async function createCollection(
       return { success: false, error: limitMessage('collections'), upgradeRequired: true };
     }
 
-    return { success: false, error: 'Your session has expired. Sign in again.' };
+    return { success: false, error: SESSION_EXPIRED };
   } catch (error) {
     console.error('Could not create the collection:', error);
 
@@ -97,17 +90,13 @@ export async function updateCollection(
   const session = await auth();
 
   if (!session?.user?.id) {
-    return { success: false, error: 'Your session has expired. Sign in again.' };
+    return { success: false, error: SESSION_EXPIRED };
   }
 
   const parsed = updateCollectionSchema.safeParse(data);
 
   if (!parsed.success) {
-    return {
-      success: false,
-      error: CHECK_FIELDS,
-      fieldErrors: z.flattenError(parsed.error).fieldErrors,
-    };
+    return invalidFields(parsed.error);
   }
 
   try {
@@ -118,18 +107,14 @@ export async function updateCollection(
     }
 
     if (outcome.reason === 'duplicate-name') {
-      return {
-        success: false,
-        error: CHECK_FIELDS,
-        fieldErrors: { name: ['You already have a collection with that name'] },
-      };
+      return DUPLICATE_NAME;
     }
 
     if (outcome.reason === 'not-found') {
       return { success: false, error: 'That collection could not be found.' };
     }
 
-    return { success: false, error: 'Your session has expired. Sign in again.' };
+    return { success: false, error: SESSION_EXPIRED };
   } catch (error) {
     console.error('Could not update the collection:', error);
 
@@ -149,7 +134,7 @@ export async function deleteCollection(collectionId: string): Promise<DeleteColl
   const session = await auth();
 
   if (!session?.user?.id) {
-    return { success: false, error: 'Your session has expired. Sign in again.' };
+    return { success: false, error: SESSION_EXPIRED };
   }
 
   try {
@@ -169,41 +154,16 @@ export async function deleteCollection(collectionId: string): Promise<DeleteColl
 }
 
 /**
- * Favorites or unfavorites one collection belonging to the signed-in user.
- *
- * Takes the value to store rather than flipping whatever is in the row, for the
- * same reasons `setItemFavorite` does, and parses the flag rather than trusting
- * its type — a server action is a public endpoint and the argument is whatever
- * the caller posted.
+ * Favorites or unfavorites one collection belonging to the signed-in user,
+ * through the same `setFlag` as `setItemFavorite` and for the same reasons.
  */
 export async function setCollectionFavorite(
   collectionId: string,
   isFavorite: boolean,
 ): Promise<SetCollectionFavoriteResult> {
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    return { success: false, error: 'Your session has expired. Sign in again.' };
-  }
-
-  const parsed = z.boolean().safeParse(isFavorite);
-
-  if (!parsed.success) {
-    return { success: false, error: 'Could not update that collection. Please try again.' };
-  }
-
-  try {
-    const updated = await setCollectionFavoriteRow(collectionId, parsed.data);
-
-    if (!updated) {
-      // Somebody else's collection reads exactly like one that does not exist.
-      return { success: false, error: 'That collection could not be found.' };
-    }
-
-    return { success: true };
-  } catch (error) {
-    console.error('Could not update the collection favorite:', error);
-
-    return { success: false, error: 'Could not update that collection. Please try again.' };
-  }
+  return setFlag(collectionId, isFavorite, {
+    noun: 'collection',
+    label: 'favorite',
+    write: setCollectionFavoriteRow,
+  });
 }

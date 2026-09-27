@@ -1,3 +1,4 @@
+import type { ActionResult } from '@/types/action';
 import type { Pagination } from '@/types/pagination';
 
 /** Item type present in a collection, rendered as a small icon on its card. */
@@ -151,11 +152,11 @@ export type UpdateCollectionResult =
  * What `deleteCollection` returns. Nothing on success — the row is gone, and
  * the caller either navigates away or refreshes.
  */
-export type DeleteCollectionResult = { success: true } | { success: false; error: string };
+export type DeleteCollectionResult = ActionResult;
 
 /**
  * What `setCollectionFavorite` returns. Nothing on success, for the same reason
  * `setItemFavorite` reports nothing: the caller asked for a specific value and
  * already knows what it was.
  */
-export type SetCollectionFavoriteResult = { success: true } | { success: false; error: string };
+export type SetCollectionFavoriteResult = ActionResult;

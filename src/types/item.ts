@@ -1,3 +1,4 @@
+import type { ActionResult } from '@/types/action';
 import type { Pagination } from '@/types/pagination';
 
 /** Item type an item belongs to, drawn as its icon tile and left border. */
@@ -149,22 +150,19 @@ export type UpdateItemResult =
  * What `deleteItem` returns. Nothing comes back on success — the row is gone,
  * and the drawer closes rather than redrawing anything.
  */
-export type DeleteItemResult = { success: true } | { success: false; error: string };
+export type DeleteItemResult = ActionResult;
 
 /**
  * What `setItemFavorite` returns. Nothing on success: the caller asked for a
  * specific value, so there is nothing to report back that it does not already
- * know — only whether the write happened. Shaped per domain rather than shared
- * with the collection one, as the delete results above already are.
+ * know — only whether the write happened. Its own name rather than
+ * `ActionResult` directly, so it can diverge from the collection one by
+ * redefining this alias rather than renaming every call site.
  */
-export type SetItemFavoriteResult = { success: true } | { success: false; error: string };
+export type SetItemFavoriteResult = ActionResult;
 
-/**
- * What `setItemPinned` returns — the same shape as the favorite result above,
- * and kept as its own name rather than aliased so the two can diverge without a
- * rename.
- */
-export type SetItemPinnedResult = { success: true } | { success: false; error: string };
+/** What `setItemPinned` returns — the same shape as the favorite result above. */
+export type SetItemPinnedResult = ActionResult;
 
 /**
  * An item type reduced to what a create needs: the id to file the item under,

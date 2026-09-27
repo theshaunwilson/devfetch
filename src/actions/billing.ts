@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
 import { auth } from '@/auth';
+import { SESSION_EXPIRED } from '@/lib/action-messages';
 import { absoluteUrl } from '@/lib/app-url';
 import { getBillingStatus, linkStripeCustomer } from '@/lib/db/billing';
 import { getPriceId, getStripe } from '@/lib/stripe';
@@ -100,7 +101,7 @@ export async function startCheckout(interval: BillingInterval): Promise<StartChe
   const session = await auth();
 
   if (!session?.user?.id) {
-    return { success: false, error: 'Your session has expired. Sign in again.' };
+    return { success: false, error: SESSION_EXPIRED };
   }
 
   const parsed = intervalSchema.safeParse(interval);
@@ -112,7 +113,7 @@ export async function startCheckout(interval: BillingInterval): Promise<StartChe
   const billing = await getBillingStatus();
 
   if (!billing) {
-    return { success: false, error: 'Your session has expired. Sign in again.' };
+    return { success: false, error: SESSION_EXPIRED };
   }
 
   // Already paying. A second checkout would open a second subscription against
@@ -204,7 +205,7 @@ export async function openBillingPortal(): Promise<OpenBillingPortalResult> {
   const session = await auth();
 
   if (!session?.user?.id) {
-    return { success: false, error: 'Your session has expired. Sign in again.' };
+    return { success: false, error: SESSION_EXPIRED };
   }
 
   const billing = await getBillingStatus();

@@ -2,6 +2,7 @@
 
 import { z } from 'zod';
 
+import { SESSION_EXPIRED } from '@/lib/action-messages';
 import { saveEditorPreferences } from '@/lib/db/user';
 import { editorPreferencesSchema } from '@/lib/validation/editor-preferences';
 import type { EditorPreferences } from '@/types/editor';
@@ -48,7 +49,7 @@ export async function updateEditorPreferences(
     const saved = await saveEditorPreferences(parsed.data);
 
     if (!saved) {
-      return { success: false, error: 'Your session has expired. Sign in again.' };
+      return { success: false, error: SESSION_EXPIRED };
     }
   } catch (error) {
     console.error('Could not save the editor preferences:', error);
