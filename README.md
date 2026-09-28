@@ -3,20 +3,54 @@
 A developer knowledge hub for snippets, commands, prompts, notes, files, images
 and links — one searchable place instead of a dozen scattered ones.
 
-## Stack
+It is a full-stack SaaS app: collections, ⌘K search, a Monaco code editor,
+private file uploads, a Stripe-billed Pro plan and four AI features (tagging,
+summaries, code explanation, prompt optimization).
+
+## Technical Skills
 
 | | |
 | --- | --- |
-| Framework | Next.js 16 (App Router, React 19) |
-| Language | TypeScript, strict |
-| Database | Neon PostgreSQL + Prisma 7 |
-| Auth | NextAuth v5 — credentials and GitHub |
-| Storage | Cloudflare R2 (private; served through an app route) |
-| Rate limiting | Upstash Redis |
-| Email | Resend |
-| UI | Tailwind CSS v4 + shadcn/ui, dark mode first |
-| Editors | Monaco for code, a Write/Preview markdown editor for prose |
-| Tests | Vitest (`environment: 'node'`) |
+| **Languages** | TypeScript (strict, no `any`), SQL (PostgreSQL), JavaScript, HTML, CSS |
+| **Frameworks & libraries** | Next.js 16 (App Router, server components, server actions, route handlers), React 19, NextAuth v5, Zod 4, Tailwind CSS v4, shadcn/ui + Radix, Monaco Editor, react-markdown, cmdk |
+| **Databases & data** | PostgreSQL on Neon, Prisma 7 (migrations, interactive transactions, raw SQL where needed), Upstash Redis |
+| **Cloud & infrastructure** | Vercel, Cloudflare R2 through the AWS S3 SDK, Neon dev and production branches, Resend email |
+| **Payments** | Stripe Checkout, Billing Portal and signature-verified webhooks |
+| **AI** | OpenAI Responses API (gpt-5-nano): JSON output, prompt-injection delimiting, per-user rate limits |
+| **Testing** | Vitest, mocking at module boundaries, v8 coverage, mutation checks, browser verification with Playwright |
+| **Tools** | Git, ESLint, Prisma Studio, Stripe CLI, `tsx` scripts, Claude Code |
+
+### Engineering highlights
+
+- **Authentication** — credentials and GitHub OAuth, email verification and
+  password reset with hashed, scoped, single-use tokens. Rate limits cover every
+  auth entry point, and sign-in takes the same bcrypt time whether or not the
+  email exists.
+- **Authorization** — every query is scoped to the session user, and ownership
+  is checked in the `WHERE` of the write itself, so there is no gap between the
+  check and the write.
+- **Billing** — the Stripe webhook verifies signatures and re-reads the
+  subscription from Stripe instead of trusting event order. Its writes are
+  idempotent, and free-tier limits are enforced on the server inside
+  transactions.
+- **File storage** — R2 objects are private and served only through an
+  ownership-checked route. The content type comes from the file extension,
+  with `nosniff` and a sandboxing CSP on every response.
+- **AI** — the four AI features are Pro-gated and validated with Zod, and their
+  rate limit fails closed so an outage cannot mean unlimited paid calls.
+- **Quality** — 1,100+ unit tests covering server actions and utilities, with
+  no database or network access. Each new test is checked by breaking the
+  source and confirming it fails.
+- **UI** — responsive from 320px up, keyboard-operable, with focus returned
+  after dialogs and drawers close.
+
+## Stack notes
+
+- Storage is private: `Item.fileUrl` holds an R2 key, never a public URL.
+- Monaco is self-hosted from `public/monaco`, so the editor makes no CDN
+  requests.
+- Dark mode first; Monaco for code, a Write/Preview markdown editor for prose.
+- Tests run in Vitest with `environment: 'node'`.
 
 ## Getting started
 
@@ -24,7 +58,7 @@ and links — one searchable place instead of a dozen scattered ones.
 npm install                 # also runs prisma generate and copies the Monaco bundle
 cp .env.example .env        # then fill it in — see below
 npm run db:migrate          # apply migrations
-npm run db:seed             # demo user, 7 item types, 5 collections, 18 items
+npm run db:seed             # demo user, 7 item types, 3 collections, 17 items
 npm run dev                 # http://localhost:3000
 ```
 
@@ -42,9 +76,13 @@ not start or a feature will not work:
 - `RESEND_API_KEY`, `EMAIL_FROM`, `APP_URL` — verification and password-reset
   email. `APP_URL` supplies the absolute link base rather than the request's
   `Host` header, which a caller controls.
-- `UPSTASH_REDIS_REST_URL` / `_TOKEN` — auth rate limiting. Absent, limiting is
-  skipped and logged once rather than per request.
+- `UPSTASH_REDIS_REST_URL` / `_TOKEN` — rate limiting. Absent, auth limiting
+  is skipped and logged once, while AI requests are refused (they fail closed).
 - `R2_*` — uploads.
+- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID_MONTHLY`,
+  `STRIPE_PRICE_ID_YEARLY` — Pro billing. The client is built lazily, so the
+  app builds without them.
+- `OPENAI_API_KEY` — the AI features.
 - `EMAIL_VERIFICATION` — only the literal `off` disables verification on
   register. Unset or misspelled leaves it **on**, so a deploy that forgets the
   variable fails secure.
@@ -70,7 +108,8 @@ src/actions      server actions        src/lib/db      Prisma queries (server-on
 src/app          routes and pages      src/lib/auth    tokens, password hashing
 src/components   UI, feature-grouped   src/lib/email   Resend senders
 src/hooks        shared React hooks    src/types       shared types
-src/lib          utilities             prisma/         schema, migrations, seed
+src/lib          utilities             src/lib/ai      OpenAI prompts and parsing
+prisma/          schema, migrations, seed
 context/         project docs Claude reads — see CLAUDE.md
 ```
 
