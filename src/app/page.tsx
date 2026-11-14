@@ -10,12 +10,12 @@ import { Toaster } from '@/components/ui/sonner';
 import { MAIN_CONTENT_ID } from '@/lib/constants';
 import { isProUser } from '@/lib/db/billing';
 import { getCurrentUser } from '@/lib/db/user';
+import { SITE_DESCRIPTION, SITE_TITLE } from '@/lib/site';
 
 export const metadata: Metadata = {
   // The homepage leads with the brand, so it opts out of the template.
-  title: { absolute: 'DevFetch — One place for everything you keep' },
-  description:
-    'DevFetch is a searchable hub for the snippets, prompts, commands, notes, files and links developers scatter across a dozen tools.',
+  title: { absolute: SITE_TITLE },
+  description: SITE_DESCRIPTION,
 };
 
 /*
