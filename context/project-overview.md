@@ -300,14 +300,15 @@ flowchart TD
 ## 🗂️ Development Workflow
 
 - **One branch per feature or fix**, merged to `main` once tests, lint and build pass
-- Use **Cursor / Claude Code / ChatGPT** for assistance
-- Sentry for runtime monitoring & error tracking
+- **Claude Code** for assistance, working to the rules in `CLAUDE.md` and `context/`
+- Sentry for runtime monitoring & error tracking (later)
 - GitHub Actions (optional for CI)
 
 **Branch examples**:
 
 ```
 git switch -c feature/item-drawer
+git switch -c fix/drawer-focus
 ```
 
 ---
