@@ -50,8 +50,7 @@ export function DashboardPreview() {
                 'flex min-w-0 flex-col justify-center gap-0.5 rounded-lg border border-l-2 border-border bg-muted px-2.5 py-2',
                 // The real ItemCard carries its accent on the left edge, and
                 // `borderColorClass` returns exactly that class — so the
-                // preview shows the border the product actually draws rather
-                // than the prototype's top edge.
+                // preview shows the border the product actually draws.
                 borderColorClass(item.accent)
               )}
             >

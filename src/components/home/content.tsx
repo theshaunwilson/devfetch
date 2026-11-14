@@ -20,7 +20,7 @@ export const REGISTER_PATH = '/register';
 export { DEFAULT_SIGNED_IN_PATH as DASHBOARD_PATH, SIGN_IN_PATH };
 
 /**
- * The page's content column: 1120px, with the gutter the prototype used.
+ * The page's content column: 1120px wide, with a responsive side gutter.
  * A shared class string rather than a wrapper component — every section needs
  * its own outer element for full-bleed borders and backgrounds anyway.
  */
