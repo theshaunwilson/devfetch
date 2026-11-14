@@ -111,10 +111,10 @@ describe('buildItemKeywords', () => {
 
   it('matches on the uploaded filename, which a file item has instead of a body', () => {
     const keywords = buildItemKeywords(
-      item({ contentPreview: null, description: null, fileName: 'Airbnb-Resume.pdf' }),
+      item({ contentPreview: null, description: null, fileName: 'quarterly-report.pdf' }),
     );
 
-    expect(keywords).toContain('Airbnb-Resume.pdf');
+    expect(keywords).toContain('quarterly-report.pdf');
   });
 
   /** An empty keyword would score against every query and rank noise. */
