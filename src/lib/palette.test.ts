@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { THEME_INLINE, contrast, over, token, type Theme } from '../../test/palette';
 import { ITEM_TYPE_ACCENTS } from './colors';
+import { SHARE_IMAGE_COLORS } from './share-image-colors';
 
 const THEMES: Theme[] = ['light', 'dark'];
 const TYPES = Object.keys(ITEM_TYPE_ACCENTS);
@@ -80,5 +81,25 @@ describe('the favicon', () => {
   // tokens. An SVG file cannot read them, so it holds copies.
   it('copies the brand mark gradient from the dark theme', () => {
     expect(stops).toEqual([token('dark', '--primary'), token('dark', '--brand-alt')]);
+  });
+});
+
+describe('the share image', () => {
+  // next/og cannot read CSS variables, so the card holds copies of the dark
+  // tokens. A palette change that missed them would share the old colours.
+  it('copies the dark-theme tokens exactly', () => {
+    const { types, ...surfaces } = SHARE_IMAGE_COLORS;
+    expect(surfaces).toEqual({
+      background: token('dark', '--background'),
+      card: token('dark', '--card'),
+      border: token('dark', '--border'),
+      foreground: token('dark', '--foreground'),
+      muted: token('dark', '--muted-foreground'),
+      primary: token('dark', '--primary'),
+      brandAlt: token('dark', '--brand-alt'),
+    });
+    for (const slug of TYPES) {
+      expect(types[slug as keyof typeof types]).toBe(token('dark', `--type-${slug}`));
+    }
   });
 });
