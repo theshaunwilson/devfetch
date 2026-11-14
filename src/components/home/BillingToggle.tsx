@@ -83,7 +83,7 @@ export function BillingToggle({ isSignedIn, isPro }: PlanViewer) {
         <PeriodLabel active={yearly} onSelect={() => setYearly(true)}>
           Yearly
         </PeriodLabel>
-        <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs text-emerald-500">
+        <span className="rounded-full bg-brand-alt/10 px-2.5 py-0.5 text-xs text-brand-alt">
           Save 25%
         </span>
       </div>

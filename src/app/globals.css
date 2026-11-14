@@ -7,6 +7,24 @@
 @theme inline {
     --font-heading: var(--font-sans);
     --font-sans: var(--font-sans);
+    --color-type-snippet: var(--type-snippet);
+    --color-type-prompt: var(--type-prompt);
+    --color-type-command: var(--type-command);
+    --color-type-note: var(--type-note);
+    --color-type-file: var(--type-file);
+    --color-type-image: var(--type-image);
+    --color-type-link: var(--type-link);
+    --color-brand-alt: var(--brand-alt);
+    --color-pro: var(--pro);
+    --color-success: var(--success);
+    --color-favorite: var(--favorite);
+    --color-link: var(--link);
+    --color-syntax-keyword: var(--syntax-keyword);
+    --color-syntax-function: var(--syntax-function);
+    --color-syntax-number: var(--syntax-number);
+    --color-window-close: var(--window-close);
+    --color-window-minimize: var(--window-minimize);
+    --color-window-maximize: var(--window-maximize);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -47,74 +65,124 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/*
+ * The Phosphor palette: green-tinged charcoal with a lime accent.
+ *
+ * Every colour in the app resolves to one of these variables. Written as hex
+ * rather than oklch so the three places that cannot read CSS — Monaco's theme,
+ * the favicon and the email templates — can copy them exactly; tests compare
+ * those copies against this file, so they cannot drift.
+ *
+ * The app always renders `.dark`; `:root` holds the light values so the
+ * palette is complete, with every text colour checked against AA.
+ */
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
+    --background: #fafcfb;
+    --foreground: #101715;
+    --card: #ffffff;
+    --card-foreground: #101715;
+    --popover: #ffffff;
+    --popover-foreground: #101715;
+    --primary: #3d7a0a;
+    --primary-foreground: #ffffff;
+    --secondary: #eff4f1;
+    --secondary-foreground: #101715;
+    --muted: #eff4f1;
+    --muted-foreground: #58675f;
+    --accent: #eff4f1;
+    --accent-foreground: #101715;
+    --destructive: #c62828;
+    --border: #dfe8e3;
+    --input: #d3ddd8;
+    --ring: #3d7a0a;
+    --chart-1: #3d7a0a;
+    --chart-2: #0a6f94;
+    --chart-3: #9a49ae;
+    --chart-4: #a35600;
+    --chart-5: #4467bf;
     --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+    --sidebar: #f4f8f6;
+    --sidebar-foreground: #101715;
+    --sidebar-primary: #3d7a0a;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #e6eee9;
+    --sidebar-accent-foreground: #101715;
+    --sidebar-border: #dfe8e3;
+    --sidebar-ring: #3d7a0a;
+
+    /* The second accent: the brand mark's tail, Pro, success and AI. */
+    --brand-alt: #08658a;
+    --pro: var(--brand-alt);
+    --success: var(--brand-alt);
+    --favorite: #ac8000;
+    --link: var(--primary);
+
+    /*
+     * Item types. Light values are darkened until each clears 4.5:1 as text on
+     * a 10% tint of its own colour, which is how the badges draw them.
+     */
+    --type-snippet: #4467bf;
+    --type-prompt: #9a49ae;
+    --type-command: #a35600;
+    --type-note: #786b3e;
+    --type-file: #616f68;
+    --type-image: #b93f60;
+    --type-link: #007967;
+
+    --syntax-keyword: var(--type-prompt);
+    --syntax-function: var(--type-snippet);
+    --syntax-number: var(--type-command);
+
+    /* macOS window controls, drawn on the editor chrome. Not palette colours. */
+    --window-close: #ff5f57;
+    --window-minimize: #febc2e;
+    --window-maximize: #28c840;
 }
 
 .dark {
     color-scheme: dark;
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+    --background: #090e0c;
+    --foreground: #e5eee9;
+    --card: #101715;
+    --card-foreground: #e5eee9;
+    --popover: #101715;
+    --popover-foreground: #e5eee9;
+    --primary: #b6ee5c;
+    --primary-foreground: #0c1405;
+    --secondary: #1c2622;
+    --secondary-foreground: #e5eee9;
+    --muted: #1c2622;
+    --muted-foreground: #8ea198;
+    --accent: #1c2622;
+    --accent-foreground: #e5eee9;
+    --destructive: #ff6b6b;
+    --border: #24302b;
+    --input: #2e3c36;
+    --ring: #b6ee5c;
+    --chart-1: #b6ee5c;
+    --chart-2: #7fdcff;
+    --chart-3: #e08cf5;
+    --chart-4: #ffab5c;
+    --chart-5: #7aa2ff;
+    --sidebar: #101715;
+    --sidebar-foreground: #e5eee9;
+    --sidebar-primary: #b6ee5c;
+    --sidebar-primary-foreground: #0c1405;
+    --sidebar-accent: #1c2622;
+    --sidebar-accent-foreground: #e5eee9;
+    --sidebar-border: #24302b;
+    --sidebar-ring: #b6ee5c;
+
+    --brand-alt: #7fdcff;
+    --favorite: #f7c948;
+
+    --type-snippet: #7aa2ff;
+    --type-prompt: #e08cf5;
+    --type-command: #ffab5c;
+    --type-note: #efe1b0;
+    --type-file: #97a69f;
+    --type-image: #ff7e9b;
+    --type-link: #4fd8c2;
 }
 
 @layer base {
@@ -178,23 +246,16 @@
  *
  * A custom class rather than utility classes on a `components` map: markdown
  * produces elements this app never writes by hand, and every one of them needs
- * a rule. Written against the theme's own variables so both themes work, with
- * links the one exception — `--primary` is grayscale in this theme, and a link
- * has to read as a link.
+ * a rule. Written against the theme's own variables so both themes work.
  */
 @layer components {
   .markdown-preview {
-    --markdown-link: oklch(0.55 0.19 255);
-
     font-size: 0.8125rem;
     line-height: 1.7;
     color: var(--foreground);
     overflow-wrap: anywhere;
   }
 
-  .dark .markdown-preview {
-    --markdown-link: oklch(0.75 0.14 245);
-  }
 
   .markdown-preview > :first-child {
     margin-top: 0;
@@ -257,7 +318,7 @@
   }
 
   .markdown-preview a {
-    color: var(--markdown-link);
+    color: var(--link);
     text-decoration: underline;
     text-underline-offset: 2px;
   }
@@ -326,7 +387,7 @@
 
   .markdown-preview input[type='checkbox'] {
     margin-inline-end: 0.5em;
-    accent-color: var(--markdown-link);
+    accent-color: var(--link);
   }
 
   .markdown-preview blockquote {
@@ -406,15 +467,15 @@
  */
 @layer components {
   .editor-scrollbars {
-    --scrollbar-thumb: oklch(0.145 0 0 / 0.22);
-    --scrollbar-thumb-hover: oklch(0.145 0 0 / 0.34);
-    --scrollbar-thumb-active: oklch(0.145 0 0 / 0.46);
+    --scrollbar-thumb: color-mix(in oklab, var(--foreground) 22%, transparent);
+    --scrollbar-thumb-hover: color-mix(in oklab, var(--foreground) 34%, transparent);
+    --scrollbar-thumb-active: color-mix(in oklab, var(--foreground) 46%, transparent);
   }
 
   .dark .editor-scrollbars {
-    --scrollbar-thumb: oklch(1 0 0 / 0.1);
-    --scrollbar-thumb-hover: oklch(1 0 0 / 0.18);
-    --scrollbar-thumb-active: oklch(1 0 0 / 0.25);
+    --scrollbar-thumb: color-mix(in oklab, var(--foreground) 10%, transparent);
+    --scrollbar-thumb-hover: color-mix(in oklab, var(--foreground) 18%, transparent);
+    --scrollbar-thumb-active: color-mix(in oklab, var(--foreground) 25%, transparent);
   }
 
   .editor-scrollbars::-webkit-scrollbar,
@@ -469,10 +530,9 @@
   .toast-upgrade {
     /*
      * A deepened `--destructive` rather than the token itself: the dark
-     * theme's destructive is a light red — rgb(255, 100, 103) — and white on
-     * it measures 2.89:1, under AA for the 13px sonner draws a toast at.
-     * Mixed 70% with black it measures 6.63:1 and still reads unmistakably
-     * red. Derived from the token rather than written as a literal, so a
+     * theme's destructive is a light red — #ff6b6b — and white on it
+     * measures 2.78:1, under AA for the 13px sonner draws a toast at. Mixed
+     * 70% with black it measures 6.46:1 and still reads unmistakably red. Derived from the token rather than written as a literal, so a
      * change to the theme's red carries through. The rim keeps the brighter
      * token, which is decoration rather than text.
      */

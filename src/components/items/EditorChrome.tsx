@@ -12,9 +12,9 @@ const COPIED_FEEDBACK_MS = 2000;
 export function WindowDots() {
   return (
     <div className="flex items-center gap-1.5" aria-hidden="true">
-      <span className="size-2.5 rounded-full bg-[#ff5f57]" />
-      <span className="size-2.5 rounded-full bg-[#febc2e]" />
-      <span className="size-2.5 rounded-full bg-[#28c840]" />
+      <span className="size-2.5 rounded-full bg-window-close" />
+      <span className="size-2.5 rounded-full bg-window-minimize" />
+      <span className="size-2.5 rounded-full bg-window-maximize" />
     </div>
   );
 }
@@ -69,7 +69,7 @@ export function CopyButton({ value, label }: CopyButtonProps) {
       // screen reader hears the confirmation the icon shows.
       aria-label={copied ? 'Copied' : label}
     >
-      {copied ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
+      {copied ? <Check className="size-3.5 text-success" /> : <Copy className="size-3.5" />}
     </Button>
   );
 }

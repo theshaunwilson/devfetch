@@ -47,7 +47,7 @@ export function PlanCard({
     <Card
       className={cn(
         'h-full gap-0 px-7 py-7.5',
-        featured && 'ring-2 ring-blue-500/40'
+        featured && 'ring-2 ring-primary/40'
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -76,7 +76,7 @@ export function PlanCard({
             <span
               className={cn(
                 'absolute top-2.5 left-1 size-2 rounded-full',
-                featured ? 'bg-blue-500' : 'bg-border'
+                featured ? 'bg-primary' : 'bg-border'
               )}
               aria-hidden="true"
             />

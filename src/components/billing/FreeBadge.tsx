@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
  *
  * The counterpart to `ProBadge`, and deliberately the quieter of the two: it
  * states a fact rather than celebrating one, so it is drawn in the muted
- * tokens the rest of the app uses for secondary text. Pro keeps the emerald
+ * tokens the rest of the app uses for secondary text. Pro keeps the `--pro`
  * tint, which is what makes the two distinguishable at a glance.
  *
  * `variant="outline"` gives it the same height and padding as `ProBadge`, so

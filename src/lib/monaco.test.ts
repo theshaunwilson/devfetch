@@ -11,6 +11,8 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 
+import { token } from '../../test/palette';
+
 const config = vi.fn();
 
 vi.mock('@monaco-editor/react', () => ({ loader: { config } }));
@@ -72,7 +74,7 @@ describe('configureMonaco', () => {
     expect(monaco.editor.defineTheme).toHaveBeenCalledWith(EDITOR_THEME, expect.any(Object));
   });
 
-  it('inherits vs-dark, so only the surfaces are overridden', () => {
+  it('inherits vs-dark, so a token it does not name still colours', () => {
     const monaco = fakeMonaco();
     configure(monaco);
 
@@ -202,7 +204,7 @@ describe('the offered themes', () => {
     }
   });
 
-  it('gives the two hand-written themes real token rules', () => {
+  it('gives every theme real token rules', () => {
     const monaco = fakeMonaco();
     configure(monaco);
 
@@ -210,8 +212,7 @@ describe('the offered themes', () => {
       ([, theme]) => (theme as { rules: unknown[] }).rules.length > 0,
     );
 
-    // Every theme but the default, which inherits vs-dark's tokens unchanged.
-    expect(withRules).toHaveLength(EDITOR_THEMES.length - 1);
+    expect(withRules).toHaveLength(EDITOR_THEMES.length);
   });
 
   it('writes every token colour as a hex value without its hash, as Monaco wants', () => {
@@ -244,5 +245,39 @@ describe('monacoThemeId', () => {
     ['nothing at all', undefined],
   ])('falls back to the default for %s', (_label, value) => {
     expect(monacoThemeId(value as never)).toBe(EDITOR_THEME);
+  });
+});
+
+describe('the default theme against the stylesheet', () => {
+  // Monaco takes only hex, so the default theme holds copies of the app's
+  // tokens. A palette change that missed them would leave the editor in the
+  // old colours while everything around it moved.
+  const monaco = fakeMonaco();
+  configure(monaco);
+  const [, theme] = monaco.editor.defineTheme.mock.calls[0] as [
+    string,
+    { colors: Record<string, string>; rules: { token: string; foreground: string }[] },
+  ];
+  const rule = (name: string) => `#${theme.rules.find((r) => r.token === name)?.foreground}`;
+
+  it('paints the editor in --card and --foreground, with a --primary caret', () => {
+    expect(theme.colors['editor.background']).toBe(token('dark', '--card'));
+    expect(theme.colors['editor.foreground']).toBe(token('dark', '--foreground'));
+    expect(theme.colors['editorCursor.foreground']).toBe(token('dark', '--primary'));
+    expect(theme.colors['editorLineNumber.activeForeground']).toBe(token('dark', '--muted-foreground'));
+  });
+
+  it('highlights in the same tokens the homepage mockup uses', () => {
+    expect(rule('keyword')).toBe(token('dark', '--syntax-keyword'));
+    expect(rule('function')).toBe(token('dark', '--syntax-function'));
+    expect(rule('number')).toBe(token('dark', '--syntax-number'));
+    expect(rule('string')).toBe(token('dark', '--primary'));
+    expect(rule('comment')).toBe(token('dark', '--muted-foreground'));
+  });
+
+  it('colours bracket pairs from the palette rather than Monaco defaults', () => {
+    expect(theme.colors['editorBracketHighlight.foreground1']).toBe(token('dark', '--favorite'));
+    expect(theme.colors['editorBracketHighlight.foreground2']).toBe(token('dark', '--type-prompt'));
+    expect(theme.colors['editorBracketHighlight.foreground3']).toBe(token('dark', '--type-snippet'));
   });
 });

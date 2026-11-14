@@ -56,7 +56,7 @@ export default async function CollectionPage({
           <h1 className="flex min-w-0 items-center gap-2 text-3xl font-semibold tracking-tight">
             <span className="truncate">{collection.name}</span>
             {collection.isFavorite && (
-              <Star className="size-5 shrink-0 fill-yellow-500 text-yellow-500" />
+              <Star className="size-5 shrink-0 fill-favorite text-favorite" />
             )}
           </h1>
           {/* The total rather than this page's length, which is what it was

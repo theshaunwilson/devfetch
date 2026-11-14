@@ -19,12 +19,12 @@ export function ProfileStats({ items, collections, itemTypes }: ProfileStatsProp
   return (
     <div className="flex flex-col gap-4">
       <div className="grid gap-4 sm:grid-cols-2">
-        <StatCard label="Items" value={items.total} icon={Layers} iconClassName="text-blue-500" />
+        <StatCard label="Items" value={items.total} icon={Layers} iconClassName="text-primary" />
         <StatCard
           label="Collections"
           value={collections.total}
           icon={Folder}
-          iconClassName="text-purple-500"
+          iconClassName="text-brand-alt"
         />
       </div>
 

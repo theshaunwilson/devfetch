@@ -17,7 +17,7 @@ export function Hero({ signedIn }: { signedIn: boolean }) {
     <section id="top" className="pt-[calc(64px+clamp(40px,6vw,76px))] pb-[clamp(64px,9vw,104px)]">
       <div className={SHELL}>
         <div className="mx-auto max-w-[44rem] text-center">
-          <h1 className="bg-linear-to-r from-foreground from-38% via-blue-500 via-68% to-emerald-500 bg-clip-text font-heading text-[clamp(2.3rem,5.6vw,3.75rem)] leading-[1.04] font-semibold tracking-[-0.035em] text-transparent">
+          <h1 className="bg-linear-to-r from-foreground from-38% via-primary via-68% to-brand-alt bg-clip-text font-heading text-[clamp(2.3rem,5.6vw,3.75rem)] leading-[1.04] font-semibold tracking-[-0.035em] text-transparent">
             Stop Losing Your Developer Knowledge
           </h1>
           <p className="mt-5.5 text-[clamp(1rem,1.6vw,1.1875rem)] text-pretty text-muted-foreground">

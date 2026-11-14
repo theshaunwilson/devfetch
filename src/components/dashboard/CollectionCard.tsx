@@ -48,7 +48,7 @@ export function CollectionCard({ collection }: CollectionCardProps) {
         <CardTitle className="flex min-w-0 items-center gap-2">
           <span className="truncate">{collection.name}</span>
           {collection.isFavorite && (
-            <Star className="size-4 shrink-0 fill-yellow-500 text-yellow-500" />
+            <Star className="size-4 shrink-0 fill-favorite text-favorite" />
           )}
         </CardTitle>
         <CardDescription>

@@ -21,7 +21,7 @@ export const EDITOR_TAB_SIZES = [2, 4, 8] as const satisfies readonly EditorPref
 
 /** The themes the dropdown offers, with the labels it shows for them. */
 export const EDITOR_THEMES = [
-  { id: 'vs-dark', label: 'VS Dark' },
+  { id: 'vs-dark', label: 'DevFetch Dark' },
   { id: 'monokai', label: 'Monokai' },
   { id: 'github-dark', label: 'GitHub Dark' },
 ] as const satisfies readonly { id: EditorThemeId; label: string }[];

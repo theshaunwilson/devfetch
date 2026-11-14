@@ -3,7 +3,7 @@ import { Reveal } from '@/components/home/Reveal';
 import { AI_CHECKLIST, AI_TAGS, SHELL } from '@/components/home/content';
 import { WindowDots } from '@/components/items/EditorChrome';
 import { Badge } from '@/components/ui/badge';
-import { brightTextColorClass, softBgColorClass } from '@/lib/colors';
+import { softBgColorClass, textColorClass } from '@/lib/colors';
 import { cn } from '@/lib/utils';
 
 /**
@@ -35,10 +35,10 @@ export function AiSection() {
           'grid grid-cols-1 items-center gap-9 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.08fr)] lg:gap-16'
         )}>
         <Reveal>
-          {/* The prototype's purple Pro pill, in the blue the dashboard uses. */}
+          {/* Drawn in the `--pro` token, like the Pro badge in the app. */}
           <Badge
             variant="outline"
-            className="border-blue-500/45 bg-blue-500/10 text-[0.6875rem] tracking-[0.12em] text-blue-500 uppercase"
+            className="border-pro/45 bg-pro/10 text-[0.6875rem] tracking-[0.12em] text-pro uppercase"
           >
             Pro
           </Badge>
@@ -53,7 +53,7 @@ export function AiSection() {
             {AI_CHECKLIST.map((line) => (
               <li key={line} className="flex items-start gap-3">
                 <span
-                  className="mt-0.75 grid size-5 flex-none place-items-center rounded-full bg-emerald-500/10 text-emerald-500"
+                  className="mt-0.75 grid size-5 flex-none place-items-center rounded-full bg-success/10 text-success"
                   aria-hidden="true"
                 >
                   <Check className="size-3" strokeWidth={3} />
@@ -75,38 +75,37 @@ export function AiSection() {
             </div>
 
             {/*
-              The sample is highlighted in three item-type accents rather than
-              an editor theme's own hexes: keyword blue, function yellow and
-              number emerald, which are the hues the prototype used and which
-              keep purple out of the page's chrome.
+              The sample is highlighted through the `--syntax-*` tokens, which
+              point at item-type accents, so the mockup uses the same palette
+              as the rest of the page rather than an editor theme's own hexes.
             */}
             <pre className="m-0 overflow-x-auto px-4.5 py-4 font-mono text-[0.78rem] leading-[1.85]">
               <code>
                 <CodeLine n={1}>
-                  <span className="text-blue-500">export function</span>{' '}
-                  <span className="text-yellow-300">useDebounce</span>&lt;T&gt;(value: T, delay ={' '}
-                  <span className="text-emerald-500">300</span>) {'{'}
+                  <span className="text-syntax-keyword">export function</span>{' '}
+                  <span className="text-syntax-function">useDebounce</span>&lt;T&gt;(value: T, delay ={' '}
+                  <span className="text-syntax-number">300</span>) {'{'}
                 </CodeLine>
                 <CodeLine n={2}>
                   {'  '}
-                  <span className="text-blue-500">const</span> [debounced, setDebounced] ={' '}
-                  <span className="text-yellow-300">useState</span>(value);
+                  <span className="text-syntax-keyword">const</span> [debounced, setDebounced] ={' '}
+                  <span className="text-syntax-function">useState</span>(value);
                 </CodeLine>
                 <CodeLine n={3}>{''}</CodeLine>
                 <CodeLine n={4}>
                   {'  '}
-                  <span className="text-yellow-300">useEffect</span>(() =&gt; {'{'}
+                  <span className="text-syntax-function">useEffect</span>(() =&gt; {'{'}
                 </CodeLine>
                 <CodeLine n={5}>
                   {'    '}
-                  <span className="text-blue-500">const</span> id ={' '}
-                  <span className="text-yellow-300">setTimeout</span>(() =&gt;{' '}
-                  <span className="text-yellow-300">setDebounced</span>(value), delay);
+                  <span className="text-syntax-keyword">const</span> id ={' '}
+                  <span className="text-syntax-function">setTimeout</span>(() =&gt;{' '}
+                  <span className="text-syntax-function">setDebounced</span>(value), delay);
                 </CodeLine>
                 <CodeLine n={6}>
                   {'    '}
-                  <span className="text-blue-500">return</span> () =&gt;{' '}
-                  <span className="text-yellow-300">clearTimeout</span>(id);
+                  <span className="text-syntax-keyword">return</span> () =&gt;{' '}
+                  <span className="text-syntax-function">clearTimeout</span>(id);
                 </CodeLine>
                 <CodeLine n={7}>
                   {'  '}
@@ -115,7 +114,7 @@ export function AiSection() {
                 <CodeLine n={8}>{''}</CodeLine>
                 <CodeLine n={9}>
                   {'  '}
-                  <span className="text-blue-500">return</span> debounced;
+                  <span className="text-syntax-keyword">return</span> debounced;
                 </CodeLine>
                 <CodeLine n={10}>{'}'}</CodeLine>
               </code>
@@ -130,7 +129,7 @@ export function AiSection() {
                   className={cn(
                     'font-mono text-[0.6875rem]',
                     softBgColorClass(accent),
-                    brightTextColorClass(accent)
+                    textColorClass(accent)
                   )}
                 >
                   {label}

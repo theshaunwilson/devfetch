@@ -70,7 +70,7 @@ export function CollectionCardMenu({ collection, isFavorite }: CollectionCardMen
         <DropdownMenuContent align="end">
           <DropdownMenuItem onSelect={favorite.toggle}>
             <Star
-              className={cn('size-4', favorite.value && 'fill-yellow-500 text-yellow-500')}
+              className={cn('size-4', favorite.value && 'fill-favorite text-favorite')}
             />
             {favorite.value ? 'Unfavorite' : 'Favorite'}
           </DropdownMenuItem>

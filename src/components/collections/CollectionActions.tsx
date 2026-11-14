@@ -55,7 +55,7 @@ export function CollectionActions({ collection, isFavorite }: CollectionActionsP
         onClick={favorite.toggle}
         aria-pressed={favorite.value}
       >
-        <Star className={cn('size-4', favorite.value && 'fill-yellow-500 text-yellow-500')} />
+        <Star className={cn('size-4', favorite.value && 'fill-favorite text-favorite')} />
         Favorite
       </Button>
 
