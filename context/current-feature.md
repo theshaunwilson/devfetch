@@ -2,11 +2,25 @@
 
 ## Status
 
-Not Started
+In Progress — implemented on `feature/phosphor-palette`, awaiting visual review and commit approval.
 
 ## Goals
 
+Rebrand the colour scheme to the **Phosphor** palette (green-tinged charcoal, lime primary, cyan second accent) so DevFetch no longer looks like the course project it started from. Keep the layout, spacing, typography, components and dark-first feel unchanged.
+
+- Every colour lives in a semantic token in `src/app/globals.css` (shadcn variables plus Tailwind v4 `@theme inline`), with light and dark values
+- Item-type tokens `--type-snippet` … `--type-link`, plus `--brand-alt`, `--pro`, `--success`, `--favorite`, `--link`, `--syntax-*` and `--window-*`
+- Hardcoded Tailwind palette classes and hex values in components replaced with those tokens
+- Favicon (`icon.svg` and `favicon.ico`) recoloured to the new brand gradient
+- Every text colour clears WCAG AA in both themes
+
 ## Notes
+
+- **Item-type colours stay keyed by the hex stored in `ItemType.color`.** That hex is now only an identifier: `src/lib/colors.ts` maps it to the type's token class, and the colour lives in the stylesheet. So neither the development nor the production database needs a write, and the seed keeps its values. Keying by slug instead would mean threading the slug through the collection queries and types.
+- Monaco's default theme, the favicon and the email templates cannot read CSS variables, so they hold hex copies of tokens. `test/palette.ts` reads `globals.css`, and `src/lib/palette.test.ts`, `monaco.test.ts` and `email/colors.test.ts` fail if a copy drifts or a text colour drops under AA.
+- The default editor theme now highlights code in the palette, so its label changed from "VS Dark" to "DevFetch Dark". The stored id stays `vs-dark`, so no saved preference changes.
+- The light theme is complete but unreachable: `<html>` always carries `dark`.
+- Left as is: the `bg-black/10` dialog overlays (shadcn defaults), Monokai and GitHub Dark (named third-party themes), and `prototypes/homepage/` (a reference prototype, not shipped).
 
 ## History
 

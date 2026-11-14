@@ -15,25 +15,25 @@ export function DashboardStats({ items, collections }: DashboardStatsProps) {
       label: 'Items',
       value: items.total,
       icon: Layers,
-      iconClassName: 'text-blue-500',
+      iconClassName: 'text-primary',
     },
     {
       label: 'Collections',
       value: collections.total,
       icon: Folder,
-      iconClassName: 'text-purple-500',
+      iconClassName: 'text-brand-alt',
     },
     {
       label: 'Favorite Items',
       value: items.favorites,
       icon: Star,
-      iconClassName: 'text-yellow-500',
+      iconClassName: 'text-favorite',
     },
     {
       label: 'Favorite Collections',
       value: collections.favorites,
       icon: FolderHeart,
-      iconClassName: 'text-pink-500',
+      iconClassName: 'text-favorite',
     },
   ];
 

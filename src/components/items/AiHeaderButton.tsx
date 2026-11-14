@@ -58,7 +58,7 @@ export function AiHeaderButton({
           disabled={isPro && isPending}
         >
           {!isPro ? (
-            <Crown className="size-3 text-emerald-400" aria-hidden="true" />
+            <Crown className="size-3 text-pro" aria-hidden="true" />
           ) : isPending ? (
             <Loader2 className="size-3 animate-spin" aria-hidden="true" />
           ) : (

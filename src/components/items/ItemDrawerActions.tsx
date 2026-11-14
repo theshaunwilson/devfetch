@@ -74,7 +74,7 @@ export function ItemDrawerActions({
     // screen the bar would otherwise run past the drawer's edge.
     <div className="flex flex-wrap items-center gap-1">
       <Button variant="ghost" size="sm" onClick={favorite.toggle} aria-pressed={favorite.value}>
-        <Star className={cn('size-4', favorite.value && 'fill-yellow-500 text-yellow-500')} />
+        <Star className={cn('size-4', favorite.value && 'fill-favorite text-favorite')} />
         Favorite
       </Button>
 

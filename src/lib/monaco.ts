@@ -33,7 +33,8 @@ loader.config({ paths: { vs: '/monaco/vs' } });
  *
  * The prefix matters for `vs-dark` in particular: defining a theme under a
  * built-in's own name would replace it globally, and this one is not VS
- * Code's vs-dark — it is vs-dark's token colours over the app's surfaces.
+ * Code's vs-dark — it is the app's own palette. The preference keeps the
+ * stored id `vs-dark` so no saved setting has to change.
  */
 const MONACO_THEME_IDS = {
   'vs-dark': 'devfetch-dark',
@@ -100,27 +101,53 @@ function surfaceColors(surfaces: EditorSurfaces): Record<string, string> {
 }
 
 /**
- * The app's own dark theme: vs-dark's tokens over the app's palette, so the
- * editor reads as part of the UI rather than an embedded VS Code.
+ * The app's own dark theme: the Phosphor palette's surfaces and syntax
+ * colours, so the editor reads as part of the UI rather than an embedded
+ * VS Code.
  *
- * Hex rather than the `oklch()` in globals.css because Monaco's theme parser
- * takes only hex; these are the same greys, converted. `#171717` is `--card`,
- * which is what the drawer's old `<pre>` already resolved to over the sheet
- * background, so code keeps the shade it has always had here.
+ * Hex because Monaco's theme parser takes nothing else, so these are copies of
+ * tokens in `src/app/globals.css` (`.dark`) rather than references to them.
+ * `monaco.test.ts` reads the stylesheet and fails if a copy drifts.
  */
 const DEVFETCH_DARK_SURFACES: EditorSurfaces = {
-  background: '#171717',
-  foreground: '#fafafa',
-  lineNumber: '#525252',
-  lineNumberActive: '#a1a1a1',
-  cursor: '#fafafa',
+  // --card and --foreground.
+  background: '#101715',
+  foreground: '#e5eee9',
+  // A step between --border and --muted-foreground for the quiet line numbers,
+  // so they recede, and --muted-foreground for the active one.
+  lineNumber: '#3f5149',
+  lineNumberActive: '#8ea198',
+  // --primary, so the caret is the one lime mark in the editor.
+  cursor: '#b6ee5c',
   lineHighlight: '#ffffff0a',
   indentGuide: '#ffffff14',
   indentGuideActive: '#ffffff2e',
-  // Matches --border (white at 10%) and steps up on hover, so the scrollbar
-  // reads like the app's own dividers rather than VS Code's grey slab.
+  // White at 10% and stepping up on hover, so the scrollbar reads like the
+  // app's own dividers rather than VS Code's grey slab.
   slider: ['#ffffff1a', '#ffffff2e', '#ffffff40'],
 };
+
+/**
+ * Syntax colours for the default theme, taken from the item-type tokens so
+ * code is highlighted in the same palette as the rest of the app. Every one
+ * clears 6.5:1 on the editor background.
+ */
+const DEVFETCH_DARK_RULES = [
+  { token: 'comment', foreground: '8ea198' }, // --muted-foreground
+  { token: 'string', foreground: 'b6ee5c' }, // --primary
+  { token: 'number', foreground: 'ffab5c' }, // --type-command
+  { token: 'constant', foreground: 'ffab5c' },
+  { token: 'keyword', foreground: 'e08cf5' }, // --type-prompt
+  { token: 'operator', foreground: 'e5eee9' }, // --foreground
+  { token: 'delimiter', foreground: 'e5eee9' },
+  { token: 'type', foreground: '4fd8c2' }, // --type-link
+  { token: 'type.identifier', foreground: '4fd8c2' },
+  { token: 'function', foreground: '7aa2ff' }, // --type-snippet
+  { token: 'tag', foreground: '7aa2ff' },
+  { token: 'attribute.name', foreground: '4fd8c2' },
+  { token: 'attribute.value', foreground: 'b6ee5c' },
+  { token: 'regexp', foreground: 'ffab5c' },
+];
 
 /**
  * Monokai, written out by hand.
@@ -154,7 +181,7 @@ const GITHUB_DARK_SURFACES: EditorSurfaces = {
 };
 
 /**
- * Token colours for the two hand-written themes.
+ * Token colours for Monokai and GitHub Dark, which keep their own palettes.
  *
  * Monaco's tokenizer produces a much smaller set of scopes than the TextMate
  * grammars these palettes come from, so this is the subset that actually
@@ -214,12 +241,17 @@ const GITHUB_DARK_RULES = [
  */
 export function configureMonaco(monaco: Monaco) {
   monaco.editor.defineTheme(MONACO_THEME_IDS['vs-dark'], {
-    // Inherits vs-dark's token colours, so highlighting stays the one people
-    // already know; only the surfaces above are ours.
     base: 'vs-dark',
     inherit: true,
-    rules: [],
-    colors: surfaceColors(DEVFETCH_DARK_SURFACES),
+    rules: DEVFETCH_DARK_RULES,
+    colors: {
+      ...surfaceColors(DEVFETCH_DARK_SURFACES),
+      // Bracket-pair colours, which would otherwise be Monaco's own gold,
+      // orchid and blue: --favorite, --type-prompt and --type-snippet.
+      'editorBracketHighlight.foreground1': '#f7c948',
+      'editorBracketHighlight.foreground2': '#e08cf5',
+      'editorBracketHighlight.foreground3': '#7aa2ff',
+    },
   });
 
   monaco.editor.defineTheme(MONACO_THEME_IDS.monokai, {

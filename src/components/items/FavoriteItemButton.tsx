@@ -64,7 +64,7 @@ export function FavoriteItemButton({
         className
       )}
     >
-      <Star className={cn('size-3.5', isFavorite && 'fill-yellow-500 text-yellow-500')} />
+      <Star className={cn('size-3.5', isFavorite && 'fill-favorite text-favorite')} />
     </Button>
   );
 }

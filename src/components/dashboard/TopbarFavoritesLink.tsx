@@ -25,7 +25,7 @@ export function TopbarFavoritesLink() {
       className={cn('size-10', isActive && 'bg-accent text-accent-foreground')}
     >
       <Link href={FAVORITES_PATH} aria-current={isActive ? 'page' : undefined}>
-        <Star className={cn('size-4', isActive && 'fill-yellow-500 text-yellow-500')} />
+        <Star className={cn('size-4', isActive && 'fill-favorite text-favorite')} />
         <span className="sr-only">Favorites</span>
       </Link>
     </Button>

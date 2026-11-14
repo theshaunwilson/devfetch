@@ -137,7 +137,7 @@ export function ItemTagsField({ id, value, onChange, messages, suggestFrom }: It
                   size="icon-xs"
                   onClick={() => accept(tag)}
                   aria-label={`Accept tag ${tag}`}
-                  className="text-emerald-400 hover:text-emerald-300"
+                  className="text-success hover:text-success/80"
                 >
                   <Check aria-hidden="true" />
                 </Button>

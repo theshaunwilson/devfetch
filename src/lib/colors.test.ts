@@ -3,17 +3,16 @@ import { describe, expect, it } from 'vitest';
 import {
   ITEM_TYPE_ACCENTS,
   borderColorClass,
-  brightTextColorClass,
   softBgColorClass,
   textColorClass,
 } from './colors';
 
 describe('textColorClass', () => {
-  it('maps a known hex to its Tailwind class', () => {
-    expect(textColorClass('#8b5cf6')).toBe('text-violet-500');
+  it('maps a stored type key to its token utility', () => {
+    expect(textColorClass(ITEM_TYPE_ACCENTS.prompt)).toBe('text-type-prompt');
   });
 
-  it('falls back for a hex it does not know', () => {
+  it('falls back for a key it does not know', () => {
     expect(textColorClass('#123456')).toBe('text-muted-foreground');
   });
 
@@ -23,66 +22,40 @@ describe('textColorClass', () => {
   });
 });
 
-describe('brightTextColorClass', () => {
-  it('maps a known hex to the brighter tier, not the base one', () => {
-    expect(brightTextColorClass('#8b5cf6')).toBe('text-violet-400');
-    expect(textColorClass('#8b5cf6')).toBe('text-violet-500');
-  });
-
-  it('leaves the two already-light accents where they are', () => {
-    // Stepping these to a 400 would make them darker, not brighter.
-    expect(brightTextColorClass('#fde047')).toBe('text-yellow-300');
-    expect(brightTextColorClass('#e2e8f0')).toBe('text-slate-200');
-  });
-
-  it('falls back for an unknown hex and for null', () => {
-    expect(brightTextColorClass('#123456')).toBe('text-muted-foreground');
-    expect(brightTextColorClass(null)).toBe('text-muted-foreground');
-    expect(brightTextColorClass(undefined)).toBe('text-muted-foreground');
-  });
-});
-
 describe('borderColorClass', () => {
-  it('maps a known hex to its left-border class', () => {
-    expect(borderColorClass('#10b981')).toBe('border-l-emerald-500');
+  it('maps a stored type key to its left-border utility', () => {
+    expect(borderColorClass(ITEM_TYPE_ACCENTS.link)).toBe('border-l-type-link');
   });
 
-  it('falls back for an unknown hex and for null', () => {
+  it('falls back for an unknown key and for null', () => {
     expect(borderColorClass('#000000')).toBe('border-l-border');
     expect(borderColorClass(null)).toBe('border-l-border');
   });
 });
 
 describe('softBgColorClass', () => {
-  it('maps a known hex to its tinted background class', () => {
-    expect(softBgColorClass('#f97316')).toBe('bg-orange-500/10');
+  it('maps a stored type key to its tinted background utility', () => {
+    expect(softBgColorClass(ITEM_TYPE_ACCENTS.command)).toBe('bg-type-command/10');
   });
 
-  it('falls back for an unknown hex and for null', () => {
+  it('falls back for an unknown key and for null', () => {
     expect(softBgColorClass('#ffffff')).toBe('bg-muted');
     expect(softBgColorClass(null)).toBe('bg-muted');
   });
 });
 
-describe('the four maps', () => {
-  // A type whose colour resolves in one map and falls back in another would
-  // render a tinted icon inside a default-bordered card. The accents are read
-  // out of ITEM_TYPE_ACCENTS rather than repeated, so a system type added
-  // there and forgotten in a map fails here instead of silently going muted.
-  const ACCENTS = Object.values(ITEM_TYPE_ACCENTS);
-
-  it.each(ACCENTS)('resolves %s in all four, never a fallback', (hex) => {
-    expect(textColorClass(hex)).not.toBe('text-muted-foreground');
-    expect(brightTextColorClass(hex)).not.toBe('text-muted-foreground');
-    expect(borderColorClass(hex)).not.toBe('border-l-border');
-    expect(softBgColorClass(hex)).not.toBe('bg-muted');
+describe('the three maps', () => {
+  // A type that resolved in one map and fell back in another would render a
+  // tinted icon inside a default-bordered card. Each type also has to land on
+  // its own token, or two types would share a colour.
+  it.each(Object.entries(ITEM_TYPE_ACCENTS))('resolves %s to its own token in all three', (slug, key) => {
+    expect(textColorClass(key)).toBe(`text-type-${slug}`);
+    expect(borderColorClass(key)).toBe(`border-l-type-${slug}`);
+    expect(softBgColorClass(key)).toBe(`bg-type-${slug}/10`);
   });
 
-  it.each(ACCENTS)('gives %s a bright tier at least as light as its base', (hex) => {
-    // Not an equality check: the two already-light accents share a class with
-    // the base map, and the rest must differ, but neither may go darker.
-    const base = Number(textColorClass(hex).match(/-(\d+)$/)?.[1]);
-    const bright = Number(brightTextColorClass(hex).match(/-(\d+)$/)?.[1]);
-    expect(bright).toBeLessThanOrEqual(base);
+  it('gives every type a distinct stored key', () => {
+    const keys = Object.values(ITEM_TYPE_ACCENTS);
+    expect(new Set(keys).size).toBe(keys.length);
   });
 });

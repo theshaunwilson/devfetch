@@ -11,14 +11,11 @@ import { cn } from '@/lib/utils';
  *
  * Tinted rather than filled: every accent in this app is drawn as a soft
  * background with brighter text (`softBgColorClass` + `textColorClass`), so a
- * solid badge would be the only one of its kind in the UI. `emerald-400`
- * rather than `-500` for the text is the tier `brightTextColorClass` added
- * when the homepage review measured `-500` against these tints at 4.47:1,
- * under AA — the same reasoning, applied by hand here because the colour is
- * fixed rather than derived from an item type's hex.
+ * solid badge would be the only one of its kind in the UI. The colour is the
+ * `--pro` token, which clears AA as text on its own tint in both themes.
  *
  * `border-transparent` overrides the `outline` variant's default border so the
- * emerald one below actually shows; `variant="outline"` is still what gives it
+ * ring below actually shows; `variant="outline"` is still what gives it
  * the same height and padding as the Email/GitHub badge it sits beside.
  */
 export function ProBadge({ className }: { className?: string }) {
@@ -26,7 +23,7 @@ export function ProBadge({ className }: { className?: string }) {
     <Badge
       variant="outline"
       className={cn(
-        'border-transparent bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30',
+        'border-transparent bg-pro/15 text-pro ring-1 ring-pro/30',
         className,
       )}
     >

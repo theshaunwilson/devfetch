@@ -67,9 +67,8 @@ export function Topbar({
             beside, since the default size is 32px and would sit short.
 
             The bolt carries the emphasis instead of the button's fill, and it
-            is emerald because that is already what Pro looks like in this app
-            — `ProBadge` is the same tier, `emerald-400`, chosen when the
-            homepage review measured `-500` against these surfaces under AA.
+            is the `--pro` token because that is already what Pro looks like in
+            this app — `ProBadge` uses the same one.
             `Zap` rather than `Sparkles`, which is the Prompt item type's own
             icon and renders in the sidebar a few pixels from here.
 
@@ -84,7 +83,7 @@ export function Topbar({
           {!isPro && (
             <Button asChild variant="ghost" className="h-10 px-2.5 sm:px-3">
               <Link href={UPGRADE_PATH}>
-                <Zap className="size-4 text-emerald-400" />
+                <Zap className="size-4 text-pro" />
                 <span className="sr-only sm:not-sr-only">Upgrade</span>
               </Link>
             </Button>

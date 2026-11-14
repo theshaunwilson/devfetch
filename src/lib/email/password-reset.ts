@@ -5,6 +5,7 @@ import { absoluteUrl } from '@/lib/app-url';
 import { RESET_PASSWORD_PATH } from '@/lib/auth-redirect';
 
 import { EMAIL_FROM, getResend } from './client';
+import { EMAIL_COLORS } from './colors';
 import { sentAtNote } from './sent-at';
 
 const SUBJECT = 'Reset your DevFetch password';
@@ -23,22 +24,22 @@ function resetHtml(resetUrl: string, sentAt: Date): string {
   // Inlined styles and a table-free single column: every rule below is one an
   // email client can be relied on to honour.
   return `
-    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;color:#0f172a;">
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;color:${EMAIL_COLORS.text};">
       <h1 style="margin:0 0 16px;font-size:20px;font-weight:600;">Reset your password</h1>
-      <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#475569;">
+      <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:${EMAIL_COLORS.muted};">
         Choose a new password for your DevFetch account.
       </p>
-      <a href="${resetUrl}" style="display:inline-block;padding:10px 20px;border-radius:8px;background:#0f172a;color:#ffffff;font-size:15px;font-weight:500;text-decoration:none;">
+      <a href="${resetUrl}" style="display:inline-block;padding:10px 20px;border-radius:8px;background:${EMAIL_COLORS.button};color:${EMAIL_COLORS.buttonText};font-size:15px;font-weight:500;text-decoration:none;">
         Reset password
       </a>
-      <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#64748b;">
+      <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:${EMAIL_COLORS.muted};">
         Or paste this link into your browser:<br />
         <span style="word-break:break-all;">${resetUrl}</span>
       </p>
-      <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#64748b;">
+      <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:${EMAIL_COLORS.muted};">
         ${sentAtNote(sentAt, RESET_EMAIL)}
       </p>
-      <p style="margin:12px 0 0;font-size:13px;line-height:1.6;color:#64748b;">
+      <p style="margin:12px 0 0;font-size:13px;line-height:1.6;color:${EMAIL_COLORS.muted};">
         This link expires in 1 hour. ${IGNORE_NOTE}
       </p>
     </div>

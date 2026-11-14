@@ -118,7 +118,7 @@ export function SidebarContent({ itemTypes, collections, user, isPro }: SidebarC
                     href={`/collections/${collection.id}`}
                     label={collection.name}
                     icon={Folder}
-                    trailing={<Star className="size-3.5 fill-yellow-500 text-yellow-500" />}
+                    trailing={<Star className="size-3.5 fill-favorite text-favorite" />}
                   />
                 ))}
               </>
